@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.env.*
+
+# Logs
+logs/*
+!logs/.gitkeep
+*.log
+
+# Local media/archive data
+data/*
+!data/.gitkeep
+!data/incoming/
+!data/incoming/.gitkeep
+!data/captures/
+!data/captures/.gitkeep
+!data/rips/
+!data/rips/.gitkeep
+!data/library/
+!data/library/.gitkeep
+!data/review/
+!data/review/.gitkeep
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Secrets
+secrets/
+*.key
+*.pem
+
+# Claude/local scratch
+.claude/local/

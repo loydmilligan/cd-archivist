@@ -1,0 +1,31 @@
+[project]
+name = "cd-archivist"
+version = "0.1.0"
+description = "Automated CD ripping, visual capture, metadata enrichment, and Raspberry Pi music archival pipeline."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7",
+  "pyyaml>=6.0",
+  "watchdog>=4.0",
+  "pillow>=10.0",
+  "opencv-python>=4.9",
+  "requests>=2.31",
+  "fastapi>=0.111",
+  "uvicorn>=0.30",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.5",
+  "mypy>=1.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

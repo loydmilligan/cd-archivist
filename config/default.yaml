@@ -1,0 +1,28 @@
+paths:
+  root: /srv/cd-archivist
+  captures: /srv/cd-archivist/captures
+  incoming_rips: /srv/cd-archivist/incoming-rips
+  discs: /srv/cd-archivist/discs
+  review: /srv/cd-archivist/review
+  logs: /srv/cd-archivist/logs
+  library: /srv/music
+
+disc_ids:
+  prefix: CD
+  width: 4
+
+camera:
+  device: auto
+  burst_count: 5
+  burst_interval_seconds: 0.5
+
+pairing:
+  max_time_delta_minutes: 20
+  ambiguous_time_delta_minutes: 5
+
+metadata:
+  ai_provider: none
+  require_ai: false
+
+review:
+  default_status: needs_review
