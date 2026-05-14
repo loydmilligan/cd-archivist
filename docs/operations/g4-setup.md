@@ -1,50 +1,18 @@
-# Power Mac G4 Setup Notes
+# Power Mac G4 Setup Notes (DEPRECATED)
 
-## Responsibilities
+> **Status: deprecated 2026-05-14.** The two-machine design (G4 ripper + Pi brain) was retired before any code shipped. The CD-ROM moved to a USB drive directly attached to the Raspberry Pi CM4. See `cm4-setup.md` for the current setup.
 
-The G4 should:
+This file is retained for historical context only. The original concept was:
 
-- Read CDs
-- Rip audio
-- Eject discs
-- Sync completed rips to the Raspberry Pi
+- G4 acts as the optical drive host and CDDA ripper (iTunes or XLD).
+- G4 syncs ripped audio to the Pi over rsync.
+- Pi handles camera, metadata, review, and library publication.
 
-The G4 should not:
+The pivot to a single-CM4 architecture eliminated:
 
-- Run AI/OCR
-- Own the camera
-- Be the main metadata database
-- Host the final music library
+- The G4 itself (and its OS/iTunes/rsync setup work).
+- Network sync between machines and its failure modes.
+- The HTTP capture contract that was going to coordinate the two.
+- The two-agent split in `sprint-1.md`.
 
-## iTunes baseline
-
-Configure iTunes to:
-
-- Import CD automatically
-- Eject CD after import
-- Use error correction if available
-- Import to a predictable folder
-
-Example rip folder:
-
-```text
-/Users/grandpa/Music/Ripped CDs/
-```
-
-## Sync to Pi
-
-Example rsync:
-
-```bash
-rsync -av --ignore-existing "/Users/grandpa/Music/Ripped CDs/" pi@raspberrypi.local:/srv/cd-archivist/incoming-rips/
-```
-
-## Future improvement
-
-The G4 may send simple event triggers to the Pi:
-
-```bash
-ssh pi@raspberrypi.local "cd-archivist capture start"
-```
-
-Avoid requiring this for the base system.
+The pieces that survived the pivot: the manifest schema, the disc-folder layout, the Pydantic models, the disc-id allocator, the timestamp-pairing primitive, and the capture-ambient/lit convention.

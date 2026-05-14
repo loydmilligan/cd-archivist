@@ -10,161 +10,174 @@ Manual metadata entry would be tedious and would slow the ripping process.
 
 Create a semi-automated archival station that:
 
-- Rips CDs using an old Power Mac G4.
-- Captures photos of each physical disc using a Raspberry Pi camera.
-- Extracts visible text and physical descriptions.
+- Rips CDs using a USB optical drive on a Raspberry Pi CM4.
+- Captures photos of each physical disc using a USB webcam.
+- Extracts visible text and physical descriptions (later phase).
 - Pairs image metadata with ripped audio.
-- Preserves each disc as an archival object.
-- Makes the resulting library usable through a music server.
+- Preserves each disc as a durable archival object.
+- Exposes the resulting library through a music server.
 
 ## Non-goals
 
 - Perfect automatic metadata for every disc.
-- Electrical modification of the G4.
 - Blocking rips until metadata is corrected.
 - Replacing human review entirely.
 - Deleting source files after processing.
+- Real-time playback of unripped discs (see "Player split" below).
+
+## Architecture summary
+
+A single Raspberry Pi CM4 owns the entire pipeline:
+
+- USB CD-ROM drive (`/dev/sr0`)
+- USB webcam (`/dev/video0`)
+- LED panel (white, paper-diffused) controlled via Tasmota smart plug over HTTP
+- Local storage on NVMe
+- FastAPI service for status + future review UI
+- Music library directory served by a separate music server (e.g. Navidrome)
+
+The earlier two-machine design (Power Mac G4 ripper + Pi brain) has been retired. See `docs/operations/g4-setup.md` (deprecated) for historical context.
+
+## Player split (Option C)
+
+The CD player and the archivist are intentionally separated:
+
+- **Archivist owns the optical drive.** It detects discs, captures photos, rips audio, ejects.
+- **The player only plays already-ripped files** from the music library. It never reads `/dev/sr0`.
+
+This eliminates drive contention (no fight between mpv and the ripper) and matches the project's archival mission: the disc is the source artifact, the library is the listening surface.
+
+Tradeoff: a freshly inserted disc cannot be played until it has been ripped (~5–8 min for a 50-minute CD).
+
+A standalone proof-of-concept CD player (`cdweb` + `mpv`) currently runs on the CM4 on port 8090. It will keep running independently for now and will eventually be replaced or retrofitted to play from ripped files.
 
 ## System components
 
-### Power Mac G4
+### Raspberry Pi CM4
 
 Role:
-
-- Optical drive host
-- CD ripper
-- Auto-eject machine
-- Audio sync source
-
-The G4 should run the simplest reliable ripping setup available, such as iTunes or XLD.
-
-### Raspberry Pi
-
-Role:
-
-- Camera host
-- Capture controller
-- Metadata processor
-- Pairing engine
-- Review queue
+- Camera host, capture controller
+- LED orchestrator (Tasmota HTTP)
+- Drive state poller
+- Ripper host (`cdparanoia` + `flac` for v1)
+- Manifest writer
+- Pairing engine (trivial: single-process timestamps)
+- Review queue host (later phase)
 - Music library host
-- Optional Navidrome host
 
-### Camera
+### USB CD-ROM drive
 
-Role:
+Role: read CDs (and DVDs — see "Future: DVD support"), report state via `CDROM_DRIVE_STATUS` ioctl, accept software eject.
 
-- Capture label-side images of naked discs while they sit in the tray.
+### USB webcam
 
-Could be:
+Currently a Microdia "Vitade AF" UVC camera at `/dev/video0`. Notable traits:
+- 1280×720 MJPEG at 30 fps
+- Fixed-firmware autofocus (no V4L2 focus controls)
+- VIDIOC_STREAMON occasionally errors after long idle periods; recoverable by USB unbind/rebind.
 
-- Pi Camera Module
-- USB webcam
+### LED panel + Tasmota
+
+A bright white LED panel powered through a Tasmota-flashed smart plug at `192.168.5.186`. Paper diffuser on the panel. Controlled via simple HTTP:
+
+```
+curl http://192.168.5.186/cm?cmnd=Power%20On
+curl http://192.168.5.186/cm?cmnd=Power%20Off
+curl http://192.168.5.186/cm?cmnd=Power
+```
+
+The LED makes captures **consistent across ambient lighting**, not dramatically brighter — auto-exposure compensates for ambient. With LED-on, disc surface white-balances to neutral and contrast against the marker text is reliable regardless of room conditions.
 
 ### Storage
 
-The Pi should maintain durable archival storage.
-
-Recommended structure:
-
 ```text
 /srv/cd-archivist/
-  captures/
-  incoming-rips/
-  discs/
-  review/
-  logs/
+  discs/                CD_NNNN/ archival objects (canonical)
+  incoming-rips/        scratch space during rip (moved to discs/ on success)
+  review/               manifests flagged for human review
+  logs/                 service logs
 
-/srv/music/
-  Albums/
-  Mix CDs/
-  Unknown/
+/srv/music/             library — published reviewed/accepted discs
 ```
 
 ## Pipeline
 
-### 1. Disc capture
+### 1. Drive state polling loop
 
-Trigger options:
+Poll `/dev/sr0` via `CDROM_DRIVE_STATUS` ioctl every ~2 s. State machine:
 
-- Camera-based tray detection
-- Limit switch
-- Magnetic reed switch
-- Manual capture button
-- G4 sends SSH trigger
+```
+IDLE
+  └── tray opened or no disc        → WAITING
+WAITING
+  ├── DISC_OK                       → STABILIZE (~2s)
+  └── (no transition)               → keep polling
+STABILIZE
+  └── timer                         → CAPTURE → RIP → EJECT → IDLE
+```
 
-Initial recommendation:
+No udev events, no physical button, no external triggers needed. Software eject after rip; user inserts the next disc when ready.
 
-Start with a manual Pi-side capture command or button, then add tray detection later.
+### 2. Capture
 
-### 2. Rip
+For each disc, two bursts are captured under different lighting:
 
-The G4 imports the CD and ejects it.
+```
+LED off  → wait 500ms (AE/AWB settle)  → ambient burst → captures/disc_front_ambient_NNN.jpg
+LED on   → wait 500ms (AE/AWB settle)  → lit burst     → captures/disc_front_lit_NNN.jpg
+LED off
+```
 
-The ripper should prefer:
+Both sets are preserved. Downstream OCR/AI defaults to the lit set (better contrast); the ambient set is archival reference and OCR fallback.
 
-- ALAC or FLAC for archival quality
-- Error correction enabled if using iTunes
-- Rip logs if using XLD
+Camera convention: webcam is positioned so that **a disc placed label-side up with text reading toward the back of the tray comes out upright in the frame**. No software rotation. Frames are center-cropped to a 720×720 square in the pipeline (disc is round; tall portrait wastes pixels).
 
-### 3. Sync
+Capture is best-effort. Tasmota unreachable → log warning, capture proceeds with whatever ambient light exists. Camera errored → log error, but rip still proceeds (disc audio is the irreplaceable part).
 
-The G4 copies completed rips to the Pi.
+### 3. Rip
 
-Possible mechanisms:
+`cdparanoia` reads CDDA tracks; output piped through `flac` for archival encoding.
 
-- `rsync` from G4 to Pi
-- Pi pulls from G4
-- Shared network folder
+```text
+cdparanoia -B -d /dev/sr0 -- "1-" /tmp/rip-NNNN/
+flac --best /tmp/rip-NNNN/track*.wav
+```
+
+Rip failure modes (read errors, scratched discs, mixed-mode discs) are logged and the disc lands in review with whatever audio was successfully extracted. **Source media is never re-ejected on failure** — the user decides whether to retry.
 
 ### 4. Pairing
 
-The Pi pairs the newest capture session with the newest completed rip session.
+Trivially a no-op in v1 — capture and rip happen in the same process for the same disc. The `PairingRecord` is still written to the manifest with `method: "single_session"` so the schema is forward-compatible with future detached-capture workflows.
 
-Primary pairing method:
+### 5. Metadata (later phase)
 
-- Timestamp proximity
+OCR + AI metadata extraction is deferred. The manifest schema reserves fields for it.
 
-Other possible signals:
+### 6. Review (later phase)
 
-- G4 event messages
-- Track count
-- Rip duration
-- User button/session ID
+Discs flagged uncertain land in `/srv/cd-archivist/review/`. The FastAPI service will expose a UI later.
 
-### 5. Metadata
+### 7. Library publication (later phase)
 
-The metadata process should create structured fields:
+Reviewed/accepted discs are copied to `/srv/music/` in a structure compatible with Navidrome.
 
-- Visible text
-- OCR confidence
-- Physical description
-- Disc type
-- Marker color
-- Brand markings
-- Condition
-- Human-readable title guess
-- Review needed flag
+## Pluggable ripper interface
 
-### 6. Review
+To leave the door open for DVD ingest and other media types, the ripping step is mediated by a small interface:
 
-Uncertain discs go to a review queue.
+```python
+class Ripper(Protocol):
+    media_types: set[str]              # e.g. {"audio_cd"}
+    def detect(self, device: Path) -> str | None  # returns media_type or None
+    def rip(self, device: Path, out_dir: Path) -> RipResult
+```
 
-Review should show:
+v1 ships one implementation: `CDAudioRipper`. Future implementations:
 
-- Disc photos
-- AI/OCR guess
-- Track list
-- Audio preview links if available
-- Edit controls
+- `DataDiscRipper` — `dd` / `genisoimage --image` for data CDs/DVDs
+- `DVDVideoRipper` — `HandBrake` or `MakeMKV` for video DVDs (CSS-encrypted ones need `libdvdcss`)
 
-### 7. Library publication
-
-Reviewed or accepted discs are moved/copied into a music library.
-
-Commercial albums may be organized by artist/album.
-
-Mix CDs should preserve disc identity and track order.
+Disc detection picks the right backend based on `CDROM_DISC_STATUS`. Manifest gains a `media_type` field.
 
 ## Disc folder layout
 
@@ -172,14 +185,17 @@ Mix CDs should preserve disc identity and track order.
 CD_0001/
   manifest.json
   captures/
-    disc_front_001.jpg
-    disc_front_002.jpg
+    disc_front_ambient_001.jpg
+    disc_front_ambient_002.jpg
+    disc_front_lit_001.jpg
+    disc_front_lit_002.jpg
   audio/
-    01 Track 01.m4a
+    01 Track 01.flac
+    02 Track 02.flac
+    ...
   logs/
     capture.log
     rip.log
-    metadata.log
   review/
     notes.md
 ```
@@ -188,18 +204,18 @@ CD_0001/
 
 ```json
 {
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "disc_id": "CD_0001",
-  "created_at": "2026-05-12T12:00:00-07:00",
-  "status": "needs_review",
-  "captures": [],
+  "media_type": "audio_cd",
+  "created_at": "2026-05-14T12:00:00-07:00",
+  "status": "ripped",
+  "captures": [
+    {"capture_id": "...", "lighting": "ambient", "image_paths": ["..."]},
+    {"capture_id": "...", "lighting": "lit",     "image_paths": ["..."]}
+  ],
   "rips": [],
-  "metadata": {
-    "visible_text": [],
-    "physical_description": "",
-    "probable_title": "",
-    "confidence": "low"
-  },
+  "pairings": [{"method": "single_session", "confidence": "high"}],
+  "metadata": {},
   "errors": []
 }
 ```
@@ -208,16 +224,26 @@ CD_0001/
 
 The system must handle:
 
-- Capture but no rip
-- Rip but no capture
-- Multiple captures before one rip
-- Multiple rips near one capture
-- Failed AI/OCR
-- Partial file sync
-- Duplicate disc IDs
-- User restarts
+- Capture but no rip (camera worked, drive failed)
+- Rip but no capture (cam unplugged, rip succeeded)
+- LED unreachable (Tasmota offline)
+- Camera unreachable (USB hung)
+- Drive read errors mid-rip
+- User pulls disc during rip (drive door sense changes)
+- Process restart mid-pipeline
 
-All such cases should land in review rather than being discarded.
+All such cases land in review rather than being discarded. Source media (raw captures + raw audio that *was* extracted) is never automatically deleted.
+
+## Future: DVD support
+
+DVDs are deliberately out of scope for v1 but designed-for. Adding DVD support means:
+
+1. New `Ripper` implementations (`DataDiscRipper`, `DVDVideoRipper`).
+2. Disc detection extended to `CDS_DATA_*` and DVD types.
+3. `media_type` enum extended.
+4. Library publishing learns about non-audio outputs.
+
+The capture/manifest/library/review halves of the system already work identically for any disc.
 
 ## Guiding principle
 
