@@ -39,3 +39,6 @@ secrets/
 
 # Claude/local scratch
 .claude/local/
+
+# orc-tower channel directory (adoption flow, B3) — keep untracked.
+.orc-tower/
