@@ -1384,6 +1384,44 @@ _No ratifications yet._
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-15 — drivers — Wave 1 failing tests landed (2 tasks, 2 commits)
+
+All drivers-owned Wave 1 tasks closed.
+
+- **test-rip-log-writer** (`d1c9a40`) — new file
+  `tests/drivers/test_rip_log.py` with 6 failing tests for the
+  not-yet-implemented `archivist.drivers.rip_log.RipLogWriter`
+  (context-manager + `event(message)`). Covers: instantiation creates
+  the file; line shape is `[<ISO-8601-local-with-offset>] <message>\n`
+  with the timestamp regex-locked; multiple events preserve order;
+  `__exit__` flushes; re-open appends rather than truncates;
+  integration with `CDAudioRipper.rip(progress_callback=writer.event)`
+  captures every cdparanoia stderr line as a `rip.log` entry (uses a
+  small `_FakePopen` + flac monkeypatch from the sprint-3 pattern).
+  Lazy import via `_RipLogWriter()` keeps the module collection
+  clean — 6/6 fail as `ModuleNotFoundError`.
+- **test-eject-reliability** (`352e878`) — D-eject-via-shell.
+  Real-rig finding from CD_0018: `fcntl.ioctl(fd, CDROMEJECT)`
+  returns success on the dogfood USB drive but the tray never
+  physically opens — a drive-firmware quirk where `CDROMEJECT` is
+  silently ignored. Replaced the four sprint-2 ioctl-based eject
+  tests in `tests/drivers/test_drive.py` with five new shell-based
+  ones: argv-is-`["eject", str(device)]`-on-success;
+  non-zero-rc-False-+-stderr-logged; FileNotFoundError-False (eject
+  binary missing); TimeoutExpired-False (10s ceiling); never-raises
+  invariant against PermissionError / BrokenPipeError /
+  OSError(ENOSPC). Function signature unchanged
+  (`eject(device: Path) -> bool`) so callers don't need to adapt.
+  Lazy-import `_eject()` shim is gone; `eject()` is back at module-top
+  import. Today: 2 genuinely fail (success-path argv inspection +
+  timeout log message); 3 coincidentally pass against the ioctl impl
+  because `/dev/sr0` doesn't exist on the test machine and the current
+  impl returns `False` via `os.open`'s FileNotFoundError. Post-impl-
+  eject-reliability all 5 will pass for the right reason.
+
+Existing 51 sprint-1/2/3 driver tests still PASS. `ruff check
+tests/drivers/` clean.
+
 ### 2026-05-15 — planner — sprint-4 mid-sprint addition: Bucket C (real-rig fixes from post-Wave-0 smoke)
 
 Three issues surfaced by the operator during the post-Wave-0 smoke on
