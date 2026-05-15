@@ -159,7 +159,7 @@ updated: 2026-05-14T00:00:00.000Z
     breaking rename of `LoopState.last_updated → state_entered_at`;
     captured under Contract Changes.
 
-- [ ] {agent: drivers, id: test-systemctl-scope} Failing tests for the
+- [x] {agent: drivers, id: test-systemctl-scope} Failing tests for the
   scope-aware refactor of `archivist/drivers/systemctl.py`. Per
   `D-cdplay-scope` (Decision Log below), the chosen approach is
   **option (a)**: `stop_unit(name, *, scope: Literal["system","user"]

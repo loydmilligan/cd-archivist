@@ -15,6 +15,17 @@ import pytest
 
 from archivist.drivers.systemctl import start_unit, stop_unit
 
+
+def _find_unit_scope():
+    """Lazy import of the not-yet-implemented find_unit_scope.
+
+    Kept lazy so this test module still collects (and the existing 6
+    cases still run) before impl-systemctl-scope lands.
+    """
+    from archivist.drivers.systemctl import find_unit_scope  # noqa: PLC0415
+
+    return find_unit_scope
+
 UNIT = "cdplay.service"
 
 
@@ -83,3 +94,82 @@ def _flat(call) -> list[str]:
 
 
 _ = subprocess  # keep import; impl will use it via the fake fixture
+
+
+# ---------------------- scope= refactor (D-cdplay-scope) -------------
+
+def test_stop_unit_system_scope_explicit(fake_subprocess) -> None:
+    """scope="system" (the default) keeps argv = ["sudo", "systemctl", ...]."""
+    fake_subprocess.set_result(returncode=0)
+    assert stop_unit(UNIT, scope="system") is True
+    argv = _flat(fake_subprocess.calls[0])
+    assert argv == ["sudo", "systemctl", "stop", UNIT]
+
+
+def test_stop_unit_user_scope_skips_sudo(fake_subprocess) -> None:
+    """scope="user" → argv = ["systemctl", "--user", ...]; no sudo."""
+    fake_subprocess.set_result(returncode=0)
+    assert stop_unit(UNIT, scope="user") is True
+    argv = _flat(fake_subprocess.calls[0])
+    assert argv == ["systemctl", "--user", "stop", UNIT]
+    assert "sudo" not in argv
+
+
+def test_start_unit_user_scope_skips_sudo(fake_subprocess) -> None:
+    """scope="user" on start → argv = ["systemctl", "--user", "start", ...]; no sudo."""
+    fake_subprocess.set_result(returncode=0)
+    assert start_unit(UNIT, scope="user") is True
+    argv = _flat(fake_subprocess.calls[0])
+    assert argv == ["systemctl", "--user", "start", UNIT]
+    assert "sudo" not in argv
+
+
+def test_find_unit_scope_user_only(fake_subprocess) -> None:
+    """find_unit_scope: system is-active fails, user is-active succeeds → "user"."""
+    from tests.conftest import FakeCompletedProcess  # noqa: PLC0415
+
+    # Order matches the spec: system first, then user.
+    fake_subprocess.queue(FakeCompletedProcess([], returncode=3, stdout="inactive\n"))
+    fake_subprocess.queue(FakeCompletedProcess([], returncode=0, stdout="active\n"))
+
+    assert _find_unit_scope()(UNIT) == "user"
+    # System call uses no --user; user call includes --user.
+    system_call = _flat(fake_subprocess.calls[0])
+    user_call = _flat(fake_subprocess.calls[1])
+    assert "--user" not in system_call
+    assert "--user" in user_call
+
+
+def test_find_unit_scope_system_wins_on_tie(fake_subprocess) -> None:
+    """Both report active → "system" wins."""
+    from tests.conftest import FakeCompletedProcess  # noqa: PLC0415
+
+    fake_subprocess.queue(FakeCompletedProcess([], returncode=0, stdout="active\n"))
+    fake_subprocess.queue(FakeCompletedProcess([], returncode=0, stdout="active\n"))
+
+    assert _find_unit_scope()(UNIT) == "system"
+
+
+def test_find_unit_scope_system_only(fake_subprocess) -> None:
+    """Only system reports active → "system"."""
+    from tests.conftest import FakeCompletedProcess  # noqa: PLC0415
+
+    fake_subprocess.queue(FakeCompletedProcess([], returncode=0, stdout="active\n"))
+    fake_subprocess.queue(FakeCompletedProcess([], returncode=3, stdout="inactive\n"))
+
+    assert _find_unit_scope()(UNIT) == "system"
+
+
+def test_find_unit_scope_neither(fake_subprocess) -> None:
+    """Neither reports active → None, never raises."""
+    fake_subprocess.set_result(returncode=3, stdout="inactive\n")
+    assert _find_unit_scope()(UNIT) is None
+
+
+def test_find_unit_scope_filenotfound_returns_none(
+    fake_subprocess, caplog: pytest.LogCaptureFixture
+) -> None:
+    """systemctl missing entirely → None, logged, never raises."""
+    fake_subprocess.set_exception(FileNotFoundError("systemctl"))
+    with caplog.at_level(logging.WARNING):
+        assert _find_unit_scope()(UNIT) is None
