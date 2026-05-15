@@ -37,6 +37,7 @@ from archivist.pipeline.disc_id import next_disc_id
 from archivist.pipeline.folder import prepare_disc_folder
 from archivist.pipeline.pairing import attach_pairing, make_pairing
 from archivist.pipeline.rip import rip_disc
+from archivist.pipeline.rip_progress import parse_cdparanoia_progress
 
 logger = logging.getLogger(__name__)
 
@@ -196,11 +197,27 @@ class ArchivistLoop:
 
         rip_record = None
         rip_error: str | None = None
+
+        def _on_progress(line: str) -> None:
+            label = parse_cdparanoia_progress(line)
+            if label is not None and self._loop_state is not None:
+                self._loop_state.rip_progress = label
+
         try:
-            rip_record = rip_disc(self._cycle.disc_dir, self._device, ripper=self._ripper)
+            rip_record = rip_disc(
+                self._cycle.disc_dir,
+                self._device,
+                ripper=self._ripper,
+                progress_callback=_on_progress,
+            )
         except Exception as exc:
             rip_error = f"{type(exc).__name__}: {exc}"
             logger.exception("rip_disc raised; transitioning to ERROR")
+        finally:
+            # Clear the live progress label regardless of outcome — the
+            # rip is over.
+            if self._loop_state is not None:
+                self._loop_state.rip_progress = None
 
         # First manifest write: rip outcome lands here. Captures stay
         # empty — they're added by the second write at end-of-CAPTURE

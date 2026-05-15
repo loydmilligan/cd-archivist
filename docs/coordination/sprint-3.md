@@ -401,7 +401,7 @@ updated: 2026-05-14T00:00:00.000Z
 
 #### Bucket A — sprint-2 polish
 
-- [ ] {agent: pipeline, depends: test-rip-progress, depends: test-rip-
+- [x] {agent: pipeline, depends: test-rip-progress, depends: test-rip-
   stderr-stream, id: impl-rip-progress} Implement the
   cdparanoia-progress parser, the live stderr-streaming refactor of
   the ripper, and wire both into `LoopState`. Add
