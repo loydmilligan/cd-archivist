@@ -132,7 +132,7 @@ updated: 2026-05-13T02:38:44.641Z
 - [ ] {agent: drivers, depends: test-manifest, id: impl-manifest} Implement `archivist/models/manifest.py` exposing `Manifest`, `CaptureRecord`, `RipRecord`, `PairingRecord`, `read_manifest`, `write_manifest`. Pydantic `BaseModel` with `model_config = ConfigDict(extra="forbid")`. `write_manifest` writes to `<path>.tmp` then `os.replace(tmp, path)` for atomicity. `read_manifest` raises `ValueError` if `schema_version != "0.2"`. JSON uses `model_dump_json(indent=2)` plus a trailing newline — that's what makes the idempotent-write test pass.
   - **Acceptance:** `pytest tests/drivers/test_manifest.py` — 5 PASS. `archivist/models/manifest.py` exists. Atomic-write invariant verified by the test.
 
-- [ ] {agent: pipeline, depends: test-disc-id, id: impl-disc-id} Implement `archivist/pipeline/disc_id.py` exposing `next_disc_id(discs_root: Path) -> str`. Acquire a `discs_root / .disc-id.lock` via `fcntl.flock(LOCK_EX)`, scan entries matching `CD_\d{4}`, compute `max + 1`, release lock. Pad with zero-fill to width 4 (`f"CD_{n:04d}"`). If no entries match, return `"CD_0001"`.
+- [x] {agent: pipeline, depends: test-disc-id, id: impl-disc-id} Implement `archivist/pipeline/disc_id.py` exposing `next_disc_id(discs_root: Path) -> str`. Acquire a `discs_root / .disc-id.lock` via `fcntl.flock(LOCK_EX)`, scan entries matching `CD_\d{4}`, compute `max + 1`, release lock. Pad with zero-fill to width 4 (`f"CD_{n:04d}"`). If no entries match, return `"CD_0001"`.
   - **Acceptance:** `pytest tests/pipeline/test_disc_id.py` — 4 PASS, including the concurrency test. `archivist/pipeline/disc_id.py` exists.
 
 - [ ] {agent: pipeline, depends: test-folder, depends: impl-manifest, id: impl-folder} Implement `archivist/pipeline/folder.py` exposing `prepare_disc_folder(disc_id: str, discs_root: Path) -> Path`. Compute target = `discs_root / disc_id`. If `target / "manifest.json"` already exists, return `target` unchanged (idempotent guard). Otherwise `mkdir(parents=True, exist_ok=True)` for the subdirs `captures/`, `audio/`, `logs/`, `review/`, then call `write_manifest(target / "manifest.json", initial_manifest)` with the documented initial shape.
@@ -212,6 +212,13 @@ _No contract changes yet._
 - Verified: all five fail at collection as expected — `ModuleNotFoundError` on `archivist.drivers.{drive,led,camera,ripper}` and `archivist.models.manifest`. `ruff check tests/drivers/` clean.
 - Commit: `61d04e2 test(sprint-1): wave 1 driver failing tests — drive, led, camera, ripper, manifest`.
 - Next: `impl-manifest` (Wave 2) — unblocks pipeline's `impl-folder` + `impl-pairing`.
+
+### 2026-05-14 — pipeline — impl-disc-id landed
+
+- `archivist/pipeline/disc_id.py`: `next_disc_id(discs_root)` acquires `fcntl.LOCK_EX` on `<discs_root>/.disc-id.lock`, scans for `CD_\d{4}` directories, computes `max + 1` (or 1 if empty), and **reserves the id by mkdir-ing the target directory before releasing the lock** — this is what makes the concurrency test pass; without in-lock reservation two threads would see the same `max` and return duplicates.
+- `tests/pipeline/test_disc_id.py` — 4/4 PASS including `test_atomic_under_concurrent_invocation`.
+- Started before drivers' impl-manifest because impl-disc-id has no manifest dependency. impl-folder and impl-pairing wait for impl-manifest.
+- ruff clean.
 
 ### 2026-05-14 — pipeline — Wave 1 failing tests landed (test-disc-id, test-folder, test-pairing)
 
