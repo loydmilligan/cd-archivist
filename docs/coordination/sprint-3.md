@@ -1153,6 +1153,54 @@ agents.
 
 User reviews this draft before commit + agent kickoff.
 
+### 2026-05-15 — drivers — Wave 2 impls landed (3 tasks, 3 commits)
+
+All drivers-owned Wave 2 tasks closed. Full repo 150/150 PASS;
+drivers suite 65/65 PASS; `ruff check archivist/ tests/drivers/`
+clean.
+
+- **impl-systemctl-scope** (`1064267`) — D-cdplay-scope option (a).
+  `stop_unit(name, *, scope="system")` / `start_unit(name, *,
+  scope="system")` gain a keyword-only Scope literal. `scope="system"`
+  keeps the existing `["sudo", "systemctl", action, name]` argv;
+  `scope="user"` switches to `["systemctl", "--user", action, name]`
+  (no sudo, the user manager is per-uid). New
+  `find_unit_scope(name) -> "system" | "user" | None` probes both
+  managers via `is-active`; system wins on a tie, `FileNotFoundError`
+  on a dev box returns `None` with a warning. The matching entrypoint
+  wiring (`_Services` cache at startup) and the `cm4-setup.md`
+  user-scope-no-sudo note are pipeline-owned per the agent roster —
+  leaving for them.
+- **impl-drive-missing** (`6209a5e`) — `DriveStatus` extended with
+  the `"device-missing"` literal. `read_drive_status` wraps `os.open`
+  in a narrow try/except that catches only `FileNotFoundError` and
+  returns `"device-missing"`; every other `OSError` (PermissionError,
+  EIO, …) still bubbles. Contract change: the sprint-1
+  `test_missing_device_raises` test (which asserted `OSError` must
+  bubble) was renamed to `test_missing_device_returns_device_missing`
+  and updated to the new contract — the `PermissionError`-still-raises
+  invariant is covered by a separate case added in `test-drive-missing`.
+  Unblocks `impl-loop-device-missing` (pipeline).
+- **impl-rip-stderr-stream** (`22d46bb`) — completes the driver-side
+  half of `impl-rip-progress` (pipeline already shipped the parser,
+  `LoopState.rip_progress`, and forward-compat
+  `inspect.signature`-based callback forwarding from `rip_disc`).
+  `CDAudioRipper.rip` gains an optional `progress_callback`. Factored
+  out `_run_cdparanoia_streaming(argv, progress_callback)` that uses
+  `subprocess.Popen(..., stdout=PIPE, stderr=PIPE, bufsize=1, text=
+  True)` and iterates `proc.stderr` line-by-line: each line is
+  appended to captured-stderr (so failure exit codes still surface
+  diagnostic context — the 2026-05-14 silent-failure root cause),
+  logged at INFO via `archivist.drivers.ripper`, and passed to
+  `progress_callback` if set (broad-except guarded so a bad callback
+  doesn't kill the rip). Sprint-1 test fixtures that patched
+  `subprocess.run` for cdparanoia were migrated to two small helpers
+  (`_install_cdparanoia_popen`, `_install_flac_run`) — behavior
+  unchanged. **Pipeline's live RIP-progress UI is no longer a fiction:
+  `LoopState.rip_progress` will tick per stderr line during real rips.**
+  No checkbox to flip — `impl-rip-progress` was already `[x]`
+  pipeline-side; this commit completes its driver-side scope.
+
 ### 2026-05-14 — drivers — Wave 1 failing tests landed (3 tasks, 3 commits)
 
 All drivers-owned Wave 1 tasks closed. Loop-side assertions for
