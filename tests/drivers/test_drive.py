@@ -8,21 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from archivist.drivers.drive import read_drive_status
-
-# Linux CDROM eject ioctl.
-CDROMEJECT = 0x5309
-
-
-def _eject():
-    """Lazy import of archivist.drivers.drive.eject.
-
-    Kept lazy so this test module still collects (and the existing 5
-    read_drive_status tests still run) before `eject` lands in Wave 2.
-    """
-    from archivist.drivers.drive import eject  # noqa: PLC0415
-
-    return eject
+from archivist.drivers.drive import eject, read_drive_status
 
 # Linux CDROM ioctl return codes (include/uapi/linux/cdrom.h).
 CDS_NO_INFO = 0
@@ -87,66 +73,78 @@ def test_missing_device_returns_device_missing(tmp_path: Path) -> None:
     assert read_drive_status(missing) == "device-missing"
 
 
-# -------------------------- eject() ---------------------------------
+# -------------------- eject() — shell-out (sprint-4, D-eject-via-shell) ----
 
-def test_eject_issues_cdromeject(
-    monkeypatch: pytest.MonkeyPatch, fake_device: Path
+# The sprint-2 ioctl-based eject contract is retired here. Real-rig
+# finding from 2026-05-15 CD_0018 smoke: the CM4's USB CD drive accepts
+# CDROMEJECT (fcntl.ioctl(fd, 0x5309)) and returns success, but the tray
+# never physically opens. The shell `eject` binary uses ATAPI
+# START STOP UNIT with LoEj+Start bits, which the same drive honors.
+# The Python signature is unchanged: eject(device: Path) -> bool.
+
+DEVICE = Path("/dev/sr0")
+
+
+def test_eject_shell_success_returns_true(fake_subprocess) -> None:
+    """eject binary exits 0 → returns True; argv is ["eject", <device>]."""
+    fake_subprocess.set_result(returncode=0)
+    assert eject(DEVICE) is True
+    argv = fake_subprocess.calls[0].args
+    flat = list(argv) if isinstance(argv, (list, tuple)) else [argv]
+    assert [str(x) for x in flat] == ["eject", str(DEVICE)]
+
+
+def test_eject_shell_nonzero_returns_false_and_logs(
+    fake_subprocess, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """eject() must issue the CDROMEJECT ioctl (0x5309)."""
-    calls = _patch_ioctl(monkeypatch, 0)  # ioctl returns 0 on success
-    assert _eject()(fake_device) is True
-    assert calls, "expected fcntl.ioctl to be invoked"
-    _, request, _ = calls[0]
-    assert request == CDROMEJECT
-
-
-def test_eject_returns_false_on_oserror(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_device: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """eject() returns False when the drive is busy / ioctl raises OSError."""
+    """Non-zero returncode → False; stderr surfaced in logs."""
     import logging as _logging
 
-    import archivist.drivers.drive as drive_mod
-
-    def boom(*_a: object, **_k: object) -> int:
-        raise OSError("drive busy")
-
-    monkeypatch.setattr(drive_mod.fcntl, "ioctl", boom)
+    fake_subprocess.set_result(returncode=1, stderr="eject: unable to open /dev/sr0")
     with caplog.at_level(_logging.WARNING):
-        assert _eject()(fake_device) is False
-    assert any("eject" in r.message.lower() for r in caplog.records)
+        assert eject(DEVICE) is False
+    messages = " ".join(r.message for r in caplog.records)
+    assert "unable to open" in messages or "eject" in messages.lower()
 
 
-def test_eject_opens_device_nonblocking(
-    monkeypatch: pytest.MonkeyPatch, fake_device: Path
+def test_eject_shell_filenotfound_returns_false(
+    fake_subprocess, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """eject() must os.open with O_RDONLY|O_NONBLOCK, matching read_drive_status."""
-    import os as _os
+    """`eject` binary missing on PATH → False, clear log message."""
+    import logging as _logging
 
-    import archivist.drivers.drive as drive_mod
-
-    captured: dict[str, int] = {}
-    real_open = _os.open
-
-    def spy_open(path: object, flags: int, *args: int) -> int:
-        captured["flags"] = flags
-        return real_open(path, flags, *args)
-
-    monkeypatch.setattr(drive_mod.os, "open", spy_open)
-    monkeypatch.setattr(drive_mod.fcntl, "ioctl", lambda *a, **k: 0)
-    _eject()(fake_device)
-    assert captured["flags"] & _os.O_NONBLOCK
-    assert captured["flags"] & _os.O_RDONLY == _os.O_RDONLY
+    fake_subprocess.set_exception(FileNotFoundError("eject"))
+    with caplog.at_level(_logging.WARNING):
+        assert eject(DEVICE) is False
+    assert any("eject" in r.message.lower() for r in caplog.records), (
+        f"expected log to name the missing binary; got "
+        f"{[r.message for r in caplog.records]!r}"
+    )
 
 
-def test_eject_returns_true_on_zero_ioctl(
-    monkeypatch: pytest.MonkeyPatch, fake_device: Path
+def test_eject_shell_timeout_returns_false(
+    fake_subprocess, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """ioctl returning 0 → eject returns True."""
-    _patch_ioctl(monkeypatch, 0)
-    assert _eject()(fake_device) is True
+    """subprocess.TimeoutExpired → False, logged, never raises."""
+    import logging as _logging
+    import subprocess as _subprocess
+
+    fake_subprocess.set_exception(
+        _subprocess.TimeoutExpired(cmd="eject", timeout=10)
+    )
+    with caplog.at_level(_logging.WARNING):
+        assert eject(DEVICE) is False
+    assert any("timeout" in r.message.lower() or "timed out" in r.message.lower()
+               for r in caplog.records)
+
+
+def test_eject_never_raises_on_exotic_errors(fake_subprocess) -> None:
+    """Documented invariant: no input/subprocess outcome causes a raise."""
+    # PermissionError, BrokenPipeError, OSError — anything the runtime
+    # might surface. The state machine depends on never-raises.
+    for exc in (PermissionError("denied"), BrokenPipeError(), OSError(28, "ENOSPC")):
+        fake_subprocess.set_exception(exc)
+        assert eject(DEVICE) is False
 
 
 # ---------------- "device-missing" literal (sprint-3) ----------------

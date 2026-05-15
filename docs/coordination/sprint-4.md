@@ -437,7 +437,7 @@ updated: 2026-05-15T00:00:00.000Z
 > the same sprint because the underlying state-machine restructure
 > in `impl-working-dir-handoff` is the natural integration point.
 
-- [ ] {agent: drivers, id: test-eject-reliability} Failing tests for
+- [x] {agent: drivers, id: test-eject-reliability} Failing tests for
   the new shell-based `eject(device: Path) -> bool` in
   `archivist/drivers/drive.py`. The current ioctl impl
   (`fcntl.ioctl(fd, CDROMEJECT)`) returns success on the dogfood
