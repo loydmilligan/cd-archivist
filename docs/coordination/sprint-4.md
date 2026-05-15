@@ -1297,7 +1297,15 @@ cost is effectively zero. Function signature stays
 `eject(device: Path) -> bool` so neither the state machine nor
 existing tests need to change. Module docstring documents the
 ioctl-was-tried-first history so future maintainers don't repeat
-the exploration.
+the exploration. The `eject` binary (shipped by `util-linux` on the
+CM4; `apt install eject` also works on bullseye/bookworm) is listed
+alongside the other runtime binaries in `docs/operations/cm4-setup.md`
+§ "Runtime apt dependencies".
+
+**Real-rig validation (2026-05-15):** post-`impl-eject-reliability`,
+ran `eject(Path("/dev/sr0"))` on the dogfood CM4 — function returned
+`True` AND the tray physically opened. The ioctl regression is
+fixed.
 
 ### 2026-05-15 — D-waiting-remove-state — new `WAITING_REMOVE` state gates re-rip on physical disc removal, not on EJECT phase completion
 
@@ -1830,6 +1838,41 @@ in the test assertions (chip group on /library uses --accent for
 active, sentence-case copy, anchor-link filters). No drivers code
 touched; no `archivist/drivers/` or `tests/drivers/` paths modified
 per the agent-roster boundary. Wave 2 (impls) waits for go-ahead.
+
+### 2026-05-15 — drivers — Wave 2 follow-ups: real-rig eject validation + runtime apt-deps subsection
+
+Two small follow-ups while pipeline finishes Wave 2.
+
+- **Real-rig validated `impl-eject-reliability` on the dogfood CM4.**
+  After `ssh cm4 && git pull && .venv/bin/pip install -e .`, ran
+  `python -c 'from archivist.drivers.drive import eject; from pathlib
+  import Path; print(eject(Path("/dev/sr0")))'`. Output: `True`.
+  Operator confirmed the tray physically opened — the
+  CDROMEJECT-silently-ignored regression (`D-eject-via-shell`) is
+  fixed. The Decision Log entry now carries a "Real-rig validation
+  (2026-05-15)" paragraph documenting the round-trip.
+- **`docs/operations/cm4-setup.md` — runtime apt dependencies
+  audit.** Replaced the existing `## Required system packages`
+  section with a clearer `## Runtime apt dependencies` subsection
+  that (a) keeps the single copy-pasteable
+  `sudo apt install -y …` command and (b) adds a per-binary
+  breakdown table mapping each shell-out in `archivist/drivers/*`
+  to its apt package — `eject` (`util-linux`), `cdparanoia`,
+  `flac`, `ffmpeg`, `systemctl` (`systemd`), `sudo`, `sh`/`tee`
+  (`dash`/`coreutils`). The "not installed by default" cases
+  (`cdparanoia`, `flac` — operator hit these manually pre-CD_0017)
+  and the sprint-4 dep (`eject` per `D-eject-via-shell`) are
+  called out explicitly. `D-eject-via-shell` now cross-references
+  the new subsection.
+- Audit method: `grep -h '"[a-z]+"' archivist/drivers/*.py` to
+  enumerate argv constants; `dpkg-query -W -f` on the CM4 confirmed
+  every package is currently installed (`install ok installed`).
+- Crossed the agent boundary on `docs/operations/cm4-setup.md`
+  (pipeline-owned) — explicit operator follow-up request, not drift.
+
+Commits: `355d48f` (`docs(sprint-4): cm4-setup.md — runtime apt
+dependencies subsection`), and this commit (sprint-4.md
+D-eject-via-shell validation paragraph + Activity Log entry).
 
 ### 2026-05-15 — drivers — Wave 2 impls landed (2 tasks, 2 commits)
 
