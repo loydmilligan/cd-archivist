@@ -256,7 +256,7 @@ updated: 2026-05-14T00:00:00.000Z
   - **Acceptance:** Test added to `tests/service/test_app.py`. Fails
     until `app.py` HTML/JS is updated.
 
-- [ ] {agent: pipeline, id: test-rip-progress-ui} Failing UI test for
+- [x] {agent: pipeline, id: test-rip-progress-ui} Failing UI test for
   the RIP progress bar. Asserts: (a) the page contains an element with
   `id="rip-progress"` (or class `progress-bar`); (b) the JS reads
   `s.rip_progress` from `/api/status` and updates that element; (c)

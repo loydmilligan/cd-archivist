@@ -265,3 +265,19 @@ def test_root_page_log_follow_toggle(loop_state: LoopState, log_path: Path) -> N
     assert 'id="log-follow-toggle"' in body
     # JS contains the scroll-to-bottom line gated on follow.
     assert "scrollTop" in body and "scrollHeight" in body
+
+
+# -------- rip-progress UI (sprint-3 / test-rip-progress-ui) ----------
+
+
+def test_root_page_has_rip_progress_bar(loop_state: LoopState, log_path: Path) -> None:
+    """Status page contains a progress bar wired to s.rip_progress."""
+    client = TestClient(create_app(loop_state, log_path))
+    body = client.get("/").text
+    # Bar element exists.
+    assert 'id="rip-progress' in body  # rip-progress-wrap / -track / -fill
+    # JS reads the rip_progress field from /api/status.
+    assert "rip_progress" in body
+    # Colors: --sky for the fill, --ink-2 for the track.
+    assert "--sky" in body
+    assert "--ink-2" in body
