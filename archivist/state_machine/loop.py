@@ -41,6 +41,7 @@ from archivist.pipeline.rip import rip_disc
 logger = logging.getLogger(__name__)
 
 _STABILIZE_SECONDS = 2.0
+_EJECT_SETTLE_SECONDS = 3.0
 _CDPLAY = "cdplay.service"
 
 
@@ -129,11 +130,10 @@ class ArchivistLoop:
             self._from_rip()
         elif self.state == State.EJECT:
             self._from_eject()
+        elif self.state == State.CAPTURE:
+            self._from_capture()
         elif self.state == State.ERROR:
             self._from_error()
-        # CAPTURE is folded into the STABILIZE→RIP tick; it never sits
-        # as a stable state between ticks (changes in impl-capture-after-
-        # eject — captures move post-eject).
 
     def _from_idle(self) -> None:
         status = self._drive()
@@ -155,7 +155,9 @@ class ArchivistLoop:
         if elapsed < _STABILIZE_SECONDS:
             return
 
-        # 2s elapsed — claim the drive, do the capture, then move to RIP.
+        # 2s elapsed — claim the drive, then move to RIP. Capture runs
+        # post-eject now (D-eject-time-capture) so the camera sees the
+        # open tray instead of the closed-tray side of the rig.
         if not self._services.stop_unit(_CDPLAY):
             logger.warning("stop_unit(%s) returned False — proceeding with rip", _CDPLAY)
         self._cdplay_stopped = True
@@ -163,13 +165,6 @@ class ArchivistLoop:
         disc_id = next_disc_id(self._discs_root)
         disc_dir = prepare_disc_folder(disc_id, self._discs_root)
         self._cycle = _Cycle(disc_id=disc_id, disc_dir=disc_dir)
-
-        # CAPTURE runs synchronously here. LED dance + camera bursts.
-        self._cycle.captures = capture_disc(
-            disc_dir,
-            camera=self._camera,
-            led=self._led,
-        )
 
         self._set_state(State.RIP, disc_id=disc_id)
 
@@ -183,10 +178,6 @@ class ArchivistLoop:
         exit is to eject the disc (ERROR + tray-open → IDLE).
         """
         assert self._cycle.disc_dir is not None
-        # NOTE (sprint-2): self._cycle.captures was set in STABILIZE→RIP.
-        # impl-capture-after-eject (next commit) flips this so captures
-        # are collected post-eject; until then this still expects them.
-        captures_now = list(self._cycle.captures or [])
 
         rip_record = None
         rip_error: str | None = None
@@ -196,7 +187,9 @@ class ArchivistLoop:
             rip_error = f"{type(exc).__name__}: {exc}"
             logger.exception("rip_disc raised; transitioning to ERROR")
 
-        # Either path writes a manifest reflecting what we know.
+        # First manifest write: rip outcome lands here. Captures stay
+        # empty — they're added by the second write at end-of-CAPTURE
+        # (D-eject-time-capture).
         manifest_path = self._cycle.disc_dir / "manifest.json"
         manifest = read_manifest(manifest_path)
 
@@ -214,7 +207,6 @@ class ArchivistLoop:
         manifest = manifest.model_copy(
             update={
                 "status": new_status,
-                "captures": [*manifest.captures, *captures_now],
                 "rips": rips_update,
                 "errors": errors_update,
             }
@@ -222,23 +214,65 @@ class ArchivistLoop:
         manifest = attach_pairing(manifest, make_pairing("single_session"))
         write_manifest(manifest_path, manifest)
 
-        # Restart cdplay regardless of outcome (paired invariant).
-        if self._cdplay_stopped:
-            self._services.start_unit(_CDPLAY)
-            self._cdplay_stopped = False
-
+        # Failure path restarts cdplay and parks in ERROR — no eject
+        # (operator must manually eject the bad disc).
         if new_status == "rip_failed":
+            if self._cdplay_stopped:
+                self._services.start_unit(_CDPLAY)
+                self._cdplay_stopped = False
             self._set_state(State.ERROR, last_rip_status=last_rip)
-        else:
-            self._set_state(State.EJECT, last_rip_status=last_rip)
+            return
+
+        self._set_state(State.EJECT, last_rip_status=last_rip)
 
     def _from_eject(self) -> None:
+        """Eject the disc, restart cdplay (paired invariant), then settle.
+
+        Sprint-3: eject + cdplay-restart happen here; then a settle sleep
+        (EJECT_SETTLE_SECONDS) covers the 2–4s the tray takes to physically
+        open before CAPTURE fires next tick.
+        """
         try:
             self._drive.eject(self._device)
         finally:
             if self._cdplay_stopped:
                 self._services.start_unit(_CDPLAY)
                 self._cdplay_stopped = False
+        # Let the tray actually open before the camera fires.
+        self._sleeper(_EJECT_SETTLE_SECONDS)
+        self._set_state(State.CAPTURE)
+
+    def _from_capture(self) -> None:
+        """Run capture_disc against the now-open tray; write second manifest.
+
+        Capture is best-effort: a successful rip already lives in the
+        manifest from _from_rip. If capture_disc raises, log the error
+        into manifest.errors and proceed to IDLE without disturbing
+        the rip record.
+        """
+        assert self._cycle.disc_dir is not None
+        captures: list[Any] = []
+        capture_error: str | None = None
+        try:
+            captures = capture_disc(
+                self._cycle.disc_dir,
+                camera=self._camera,
+                led=self._led,
+            )
+        except Exception as exc:
+            capture_error = f"capture failed: {type(exc).__name__}: {exc}"
+            logger.exception("capture_disc raised; preserving rip record")
+
+        manifest_path = self._cycle.disc_dir / "manifest.json"
+        manifest = read_manifest(manifest_path)
+        updates: dict[str, Any] = {
+            "captures": [*manifest.captures, *captures],
+        }
+        if capture_error is not None:
+            updates["errors"] = [*manifest.errors, capture_error]
+        manifest = manifest.model_copy(update=updates)
+        write_manifest(manifest_path, manifest)
+
         self._cycle = _Cycle()
         self._stabilize_since = None
         self._set_state(State.IDLE, disc_id=None)

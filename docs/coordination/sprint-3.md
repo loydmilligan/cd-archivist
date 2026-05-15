@@ -564,7 +564,7 @@ updated: 2026-05-14T00:00:00.000Z
 
 #### Bucket B — capture-timing redesign
 
-- [ ] {agent: pipeline, depends: test-capture-after-eject, depends: impl-
+- [x] {agent: pipeline, depends: test-capture-after-eject, depends: impl-
   rip-error-recovery, id: impl-capture-after-eject} Restructure
   `archivist/state_machine/loop.py` per `D-eject-time-capture`:
   1. Remove the `capture_disc` call from `_from_stabilize`. STABILIZE
