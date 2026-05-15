@@ -58,7 +58,7 @@ class LoopState:
     Sprint-3 / test-last-tick: `last_updated` was renamed to
     `state_entered_at` (advances on transitions only) and a separate
     `last_tick_at` heartbeat field was added (advances every tick).
-    See Contract Changes in docs/coordination/sprint-3.md.
+    Sprint-4 / D-manual-mode: `mode` field controls auto-advance gating.
     """
 
     state: str = "IDLE"
@@ -68,6 +68,9 @@ class LoopState:
     last_tick_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     # Sprint-3 / test-rip-progress: live cdparanoia progress label.
     rip_progress: str | None = None
+    # Sprint-4 / D-manual-mode: "auto" (default, unchanged behaviour) or
+    # "manual" (state-machine waits for /api/control/* triggers).
+    mode: str = "auto"
 
 
 def _tail_log(path: Path, lines: int) -> str:
@@ -80,6 +83,13 @@ def _tail_log(path: Path, lines: int) -> str:
         return "".join(deque(f, maxlen=n))
 
 
+_MANUAL_TRIGGERS: dict[str, set[str]] = {
+    "start-rip": {"STABILIZE"},
+    "eject": {"RIP"},
+    "capture": {"EJECT"},
+}
+
+
 def create_app(
     loop_state: LoopState,
     log_path: Path,
@@ -87,6 +97,7 @@ def create_app(
     discs_root: Path | None = None,
     recapture_camera: Callable[..., Any] | None = None,
     recapture_led: Any | None = None,
+    loop: Any | None = None,
 ) -> FastAPI:
     app = FastAPI(title="cd-archivist", docs_url=None, redoc_url=None)
 
@@ -103,6 +114,7 @@ def create_app(
                 "state_entered_at": loop_state.state_entered_at.isoformat(),
                 "last_tick_at": loop_state.last_tick_at.isoformat(),
                 "rip_progress": loop_state.rip_progress,
+                "mode": loop_state.mode,
             }
         )
 
@@ -124,7 +136,73 @@ def create_app(
             recapture_led=recapture_led,
         )
 
+    _mount_control_routes(app, loop_state=loop_state, loop=loop)
     return app
+
+
+def _mount_control_routes(
+    app: FastAPI,
+    *,
+    loop_state: "LoopState",
+    loop: Any | None,
+) -> None:
+    """Sprint-4 / impl-manual-mode: /api/control/* surface."""
+
+    def _check_state_trigger(trigger: str, endpoint_name: str) -> None:
+        """Enforce: auto-mode rejects (403); state mismatch yields 409."""
+        if loop_state.mode == "auto":
+            raise HTTPException(
+                status_code=403,
+                detail=f"{endpoint_name} is a manual-only trigger",
+            )
+        valid_states = _MANUAL_TRIGGERS[trigger]
+        if loop_state.state not in valid_states:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{endpoint_name} requires state in {sorted(valid_states)}; "
+                    f"current state is {loop_state.state}"
+                ),
+            )
+
+    @app.post("/api/control/mode")
+    def control_mode(mode: str) -> JSONResponse:
+        if mode not in ("auto", "manual"):
+            raise HTTPException(status_code=400, detail="mode must be 'auto' or 'manual'")
+        loop_state.mode = mode
+        return JSONResponse({"mode": mode})
+
+    @app.post("/api/control/start-rip")
+    def control_start_rip() -> JSONResponse:
+        _check_state_trigger("start-rip", "start-rip")
+        if loop is not None:
+            loop.advance("rip")
+        return JSONResponse({"ok": True, "state": loop_state.state})
+
+    @app.post("/api/control/eject")
+    def control_eject() -> JSONResponse:
+        _check_state_trigger("eject", "eject")
+        if loop is not None:
+            loop.advance("eject")
+        return JSONResponse({"ok": True, "state": loop_state.state})
+
+    @app.post("/api/control/capture")
+    def control_capture() -> JSONResponse:
+        _check_state_trigger("capture", "capture")
+        if loop is not None:
+            loop.advance("capture")
+        return JSONResponse({"ok": True, "state": loop_state.state})
+
+    @app.post("/api/control/reset")
+    def control_reset() -> JSONResponse:
+        """Always allowed — operator escape hatch."""
+        if loop is not None:
+            loop.advance("reset")
+        else:
+            # No loop attached (test client): mimic the state-machine
+            # reset by stamping IDLE so callers can observe the effect.
+            loop_state.state = "IDLE"
+        return JSONResponse({"ok": True, "state": loop_state.state})
 
 
 # ============== library browser helpers ==============================

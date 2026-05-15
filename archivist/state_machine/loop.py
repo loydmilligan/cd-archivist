@@ -190,22 +190,27 @@ class ArchivistLoop:
 
     # ----- sprint-4: manual-mode public trigger API -------------------
 
+    # Trigger → state in which the trigger is meaningful. Anything else
+    # is a no-op (the HTTP layer surfaces 409; the state-machine just
+    # ignores).
+    _TRIGGER_STATES: dict[str, "State"] = {}  # populated below via class init
+
     def advance(self, trigger: str) -> None:
-        """Operator-driven trigger consumed on the next tick().
+        """Operator-driven trigger.
 
         Triggers: "rip" | "eject" | "capture" | "reset".
 
-        `reset` is the always-allowed escape hatch — runs immediately,
-        not deferred to the next tick.
+        `reset` is the always-allowed escape hatch — runs immediately.
+        Other triggers run synchronously when the current state matches
+        the trigger's gate, and are no-ops otherwise.
         """
         if trigger == "reset":
             self._do_reset()
             return
+        expected = ArchivistLoop._TRIGGER_STATES.get(trigger)
+        if expected is None or self.state != expected:
+            return  # no-op
         self._pending_trigger = trigger
-        # Manual-mode triggers should fire as a deferred-but-immediate
-        # transition. Walk through _advance() once so STABILIZE→RIP etc.
-        # picks up the trigger right now without waiting for the next
-        # poll cycle.
         try:
             self._advance()
         except Exception:
@@ -329,8 +334,15 @@ class ArchivistLoop:
         """
         assert self._cycle.disc_dir is not None
 
-        # Wait for explicit advance("rip") only if STABILIZE→RIP requires
-        # gating; once in RIP, the rip itself fires synchronously.
+        # If the rip has already run this cycle, we're holding in RIP
+        # waiting for advance("eject") (manual mode only).
+        if self._cycle.rip_record is not None and self._cycle.rip_error is None:
+            if self._is_manual() and not self._consume_trigger("eject"):
+                return
+            last_rip = self._cycle.rip_record.status
+            self._set_state(State.EJECT, last_rip_status=last_rip)
+            return
+
         rip_record = None
         rip_error: str | None = None
 
@@ -433,6 +445,10 @@ class ArchivistLoop:
             self._set_state(State.ERROR, last_rip_status=last_rip)
             return
 
+        # Manual mode: hold in RIP unless advance("eject") is pending
+        # (operator's stated intent: "rip then advance to eject").
+        if self._is_manual() and not self._consume_trigger("eject"):
+            return
         self._set_state(State.EJECT, last_rip_status=last_rip)
 
     def _write_failed_marker(self, disc_dir: Path, rip_error: str | None) -> None:
@@ -475,16 +491,19 @@ class ArchivistLoop:
         (EJECT_SETTLE_SECONDS) covers the 2–4s the tray takes to physically
         open before CAPTURE fires next tick.
         """
-        if self._is_manual() and not self._consume_trigger("eject"):
+        if self._cycle.timestamps.ejected_at is None:
+            try:
+                self._drive.eject(self._device)
+            finally:
+                if self._cdplay_stopped:
+                    self._services.start_unit(_CDPLAY)
+                    self._cdplay_stopped = False
+            self._cycle.timestamps.ejected_at = datetime.now().astimezone()
+            self._sleeper(_EJECT_SETTLE_SECONDS)
+
+        # Manual mode: advance to CAPTURE only when "capture" trigger fires.
+        if self._is_manual() and not self._consume_trigger("capture"):
             return
-        try:
-            self._drive.eject(self._device)
-        finally:
-            if self._cdplay_stopped:
-                self._services.start_unit(_CDPLAY)
-                self._cdplay_stopped = False
-        self._cycle.timestamps.ejected_at = datetime.now().astimezone()
-        self._sleeper(_EJECT_SETTLE_SECONDS)
         self._set_state(State.CAPTURE)
 
     def _from_capture(self) -> None:
@@ -615,6 +634,13 @@ class ArchivistLoop:
         for k, v in patch.items():
             if hasattr(self._loop_state, k):
                 setattr(self._loop_state, k, v)
+
+
+ArchivistLoop._TRIGGER_STATES = {
+    "rip": State.STABILIZE,
+    "eject": State.RIP,
+    "capture": State.EJECT,
+}
 
 
 def run(loop: ArchivistLoop, *, poll_interval: float = 2.0) -> None:
