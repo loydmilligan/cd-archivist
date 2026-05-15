@@ -24,20 +24,25 @@ from __future__ import annotations
 
 import enum
 import logging
+import os
+import socket
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from archivist.models.manifest import read_manifest, write_manifest
-from archivist.pipeline.capture import capture_disc
+from archivist.models.source import write_source_json
+from archivist.pipeline.capture import capture_disc, copy_canonical_photo
 from archivist.pipeline.disc_id import next_disc_id
 from archivist.pipeline.folder import prepare_disc_folder
+from archivist.pipeline.folder_name import next_disc_folder_name
 from archivist.pipeline.pairing import attach_pairing, make_pairing
 from archivist.pipeline.rip import rip_disc
 from archivist.pipeline.rip_progress import parse_cdparanoia_progress
+from archivist.pipeline.source_json import build_source_json
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +61,32 @@ class State(enum.Enum):
     # Sprint-3 / D-rip-failure-error: terminal state on rip failure.
     # Exits only on tray-open → IDLE.
     ERROR = "ERROR"
+    # Sprint-4 / D-waiting-remove-state: post-EJECT gate on physical removal.
+    WAITING_REMOVE = "WAITING_REMOVE"
+
+
+@dataclass
+class _Timestamps:
+    inserted_at: datetime | None = None
+    rip_started_at: datetime | None = None
+    rip_finished_at: datetime | None = None
+    ejected_at: datetime | None = None
+    photo_captured_at: datetime | None = None
+
+
+@dataclass
+class _CaptureResult:
+    photo_path: Path | None = None
+    photo_device: str | None = None
+    error: str | None = None
+
+
+@dataclass
+class _DriveInfo:
+    device: str = "/dev/sr0"
+    model: str | None = None
+    serial: str | None = None
+    read_offset: int | None = None
 
 
 @dataclass
@@ -65,6 +96,11 @@ class _Cycle:
     disc_id: str | None = None
     disc_dir: Path | None = None
     captures: list[Any] | None = None
+    # Sprint-4: timestamps + capture result tracked for source.json build.
+    timestamps: _Timestamps = field(default_factory=_Timestamps)
+    capture_result: _CaptureResult = field(default_factory=_CaptureResult)
+    rip_error: str | None = None
+    rip_record: Any = None
 
 
 class ArchivistLoop:
@@ -73,18 +109,44 @@ class ArchivistLoop:
     def __init__(
         self,
         *,
-        discs_root: Path,
         device: Path,
         drive: Any,              # callable returning DriveStatus, plus .eject(device)
         ripper: Any,
         camera: Callable[..., Path | None],
         led: Any,
         services: Any,           # .stop_unit(name), .start_unit(name)
+        # Path config — either pass legacy single-root `discs_root` (sprint-3
+        # tests) OR the sprint-4 triple `working_dir`/`inbox_dir`/`failed_dir`
+        # (new flow per D-music-pipeline-paths + working-dir-handoff).
+        discs_root: Path | None = None,
+        working_dir: Path | None = None,
+        inbox_dir: Path | None = None,
+        failed_dir: Path | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
         loop_state: Any | None = None,
     ) -> None:
-        self._discs_root = discs_root
+        # Dual-mode path config: sprint-3 (single root) vs sprint-4 (triple).
+        if working_dir is not None and inbox_dir is not None:
+            self._working_dir = working_dir
+            self._inbox_dir = inbox_dir
+            self._failed_dir = failed_dir or (inbox_dir.parent / "failed")
+            self._sprint4_mode = True
+            # Convenience alias so legacy code paths can still reach a
+            # single root if needed.
+            self._discs_root = working_dir
+        elif discs_root is not None:
+            self._discs_root = discs_root
+            self._working_dir = discs_root
+            self._inbox_dir = discs_root
+            self._failed_dir = discs_root
+            self._sprint4_mode = False
+        else:
+            raise TypeError(
+                "ArchivistLoop requires either `discs_root` (legacy) or the "
+                "`working_dir`+`inbox_dir` pair (sprint-4)."
+            )
+
         self._device = device
         self._drive = drive
         self._ripper = ripper
@@ -103,6 +165,8 @@ class ArchivistLoop:
         # per disconnect; reset when the device comes back so the next
         # disconnect is re-logged.
         self._device_missing_logged: bool = False
+        # Sprint-4 / manual-mode: queued advance trigger consumed at tick().
+        self._pending_trigger: str | None = None
 
     # ------------------------- public API -----------------------------
 
@@ -124,6 +188,56 @@ class ArchivistLoop:
 
     # ------------------------- transitions ----------------------------
 
+    # ----- sprint-4: manual-mode public trigger API -------------------
+
+    def advance(self, trigger: str) -> None:
+        """Operator-driven trigger consumed on the next tick().
+
+        Triggers: "rip" | "eject" | "capture" | "reset".
+
+        `reset` is the always-allowed escape hatch — runs immediately,
+        not deferred to the next tick.
+        """
+        if trigger == "reset":
+            self._do_reset()
+            return
+        self._pending_trigger = trigger
+        # Manual-mode triggers should fire as a deferred-but-immediate
+        # transition. Walk through _advance() once so STABILIZE→RIP etc.
+        # picks up the trigger right now without waiting for the next
+        # poll cycle.
+        try:
+            self._advance()
+        except Exception:
+            if self._cdplay_stopped:
+                try:
+                    self._services.start_unit(_CDPLAY)
+                finally:
+                    self._cdplay_stopped = False
+            raise
+
+    def _do_reset(self) -> None:
+        if self._cdplay_stopped:
+            try:
+                self._services.start_unit(_CDPLAY)
+            finally:
+                self._cdplay_stopped = False
+        self._cycle = _Cycle()
+        self._stabilize_since = None
+        self._pending_trigger = None
+        self._set_state(State.IDLE, disc_id=None)
+
+    def _is_manual(self) -> bool:
+        return getattr(self._loop_state, "mode", "auto") == "manual"
+
+    def _consume_trigger(self, name: str) -> bool:
+        if self._pending_trigger == name:
+            self._pending_trigger = None
+            return True
+        return False
+
+    # ------------------------------------------------------------------
+
     def _advance(self) -> None:
         if self.state == State.IDLE:
             self._from_idle()
@@ -139,6 +253,8 @@ class ArchivistLoop:
             self._from_capture()
         elif self.state == State.ERROR:
             self._from_error()
+        elif self.state == State.WAITING_REMOVE:
+            self._from_waiting_remove()
 
     def _from_idle(self) -> None:
         status = self._drive()
@@ -167,34 +283,54 @@ class ArchivistLoop:
 
     def _from_stabilize(self) -> None:
         assert self._stabilize_since is not None
-        elapsed = self._clock() - self._stabilize_since
-        if elapsed < _STABILIZE_SECONDS:
-            return
 
-        # 2s elapsed — claim the drive, then move to RIP. Capture runs
-        # post-eject now (D-eject-time-capture) so the camera sees the
-        # open tray instead of the closed-tray side of the rig.
+        if self._is_manual():
+            # In manual mode, hold here until advance("rip") fires.
+            if not self._consume_trigger("rip"):
+                return
+        else:
+            elapsed = self._clock() - self._stabilize_since
+            if elapsed < _STABILIZE_SECONDS:
+                return
+
+        # Claim the drive, then move to RIP. Capture runs post-eject now
+        # (D-eject-time-capture).
         if not self._services.stop_unit(_CDPLAY):
             logger.warning("stop_unit(%s) returned False — proceeding with rip", _CDPLAY)
         self._cdplay_stopped = True
 
+        if self._sprint4_mode:
+            folder_name = next_disc_folder_name(self._inbox_dir)
+            disc_dir = self._working_dir / folder_name
+            disc_dir.mkdir(parents=True, exist_ok=False)
+            for sub in ("captures", "audio", "logs", "review"):
+                (disc_dir / sub).mkdir(parents=True, exist_ok=True)
+            ts = _Timestamps(inserted_at=datetime.now().astimezone())
+            self._cycle = _Cycle(
+                disc_id=folder_name, disc_dir=disc_dir, timestamps=ts,
+            )
+            self._set_state(State.RIP, disc_id=folder_name)
+            return
+
         disc_id = next_disc_id(self._discs_root)
         disc_dir = prepare_disc_folder(disc_id, self._discs_root)
         self._cycle = _Cycle(disc_id=disc_id, disc_dir=disc_dir)
-
         self._set_state(State.RIP, disc_id=disc_id)
 
     def _from_rip(self) -> None:
         """Run the rip; on failure (raise OR status=fail) park in ERROR.
 
-        Sprint-3 / impl-rip-error-recovery: rip failures land the loop in
-        a terminal ERROR state instead of propagating the exception (which
-        used to stop the loop entirely). cdplay is restarted, the
-        manifest records status="rip_failed", and the operator's only
-        exit is to eject the disc (ERROR + tray-open → IDLE).
+        Sprint-3 / impl-rip-error-recovery preserved. Sprint-4 / impl-
+        working-dir-handoff + impl-failed-marker fork: when the loop is
+        configured with the new path triple, the failure path writes
+        FAILED + source.json + rip.log under working_dir then moves the
+        folder to failed_dir; otherwise the legacy manifest.json write
+        runs.
         """
         assert self._cycle.disc_dir is not None
 
+        # Wait for explicit advance("rip") only if STABILIZE→RIP requires
+        # gating; once in RIP, the rip itself fires synchronously.
         rip_record = None
         rip_error: str | None = None
 
@@ -203,6 +339,7 @@ class ArchivistLoop:
             if label is not None and self._loop_state is not None:
                 self._loop_state.rip_progress = label
 
+        self._cycle.timestamps.rip_started_at = datetime.now().astimezone()
         try:
             rip_record = rip_disc(
                 self._cycle.disc_dir,
@@ -214,14 +351,18 @@ class ArchivistLoop:
             rip_error = f"{type(exc).__name__}: {exc}"
             logger.exception("rip_disc raised; transitioning to ERROR")
         finally:
-            # Clear the live progress label regardless of outcome — the
-            # rip is over.
             if self._loop_state is not None:
                 self._loop_state.rip_progress = None
+            self._cycle.timestamps.rip_finished_at = datetime.now().astimezone()
 
-        # First manifest write: rip outcome lands here. Captures stay
-        # empty — they're added by the second write at end-of-CAPTURE
-        # (D-eject-time-capture).
+        self._cycle.rip_record = rip_record
+        self._cycle.rip_error = rip_error
+
+        if self._sprint4_mode:
+            self._from_rip_sprint4(rip_record, rip_error)
+            return
+
+        # Legacy path (sprint-3) — manifest.json.
         manifest_path = self._cycle.disc_dir / "manifest.json"
         manifest = read_manifest(manifest_path)
 
@@ -246,8 +387,6 @@ class ArchivistLoop:
         manifest = attach_pairing(manifest, make_pairing("single_session"))
         write_manifest(manifest_path, manifest)
 
-        # Failure path restarts cdplay and parks in ERROR — no eject
-        # (operator must manually eject the bad disc).
         if new_status == "rip_failed":
             if self._cdplay_stopped:
                 self._services.start_unit(_CDPLAY)
@@ -257,6 +396,78 @@ class ArchivistLoop:
 
         self._set_state(State.EJECT, last_rip_status=last_rip)
 
+    def _from_rip_sprint4(self, rip_record: Any, rip_error: str | None) -> None:
+        """Sprint-4 RIP path: writes per-disc rip.log; routes success/fail."""
+        assert self._cycle.disc_dir is not None
+        disc_dir = self._cycle.disc_dir
+
+        # Append to the per-disc rip.log (cdparanoia stderr already routed
+        # to it via the progress callback in production; in tests, the
+        # FakeRipper writes a minimal rip.log alongside the audio).
+        rip_log = disc_dir / "rip.log"
+        if not rip_log.exists():
+            rip_log.write_text(
+                f"[{datetime.now().astimezone().isoformat()}] "
+                f"rip completed status={getattr(rip_record, 'status', 'unknown')}\n",
+                encoding="utf-8",
+            )
+
+        failed = (rip_record is None) or (rip_record.status == "fail")
+        last_rip = "fail" if failed else rip_record.status
+
+        if failed:
+            # Write FAILED marker, source.json (failure shape), then move
+            # folder to failed_dir.
+            self._write_failed_marker(disc_dir, rip_error)
+            self._write_source_json_for_cycle(disc_dir)
+            try:
+                target = self._failed_dir / disc_dir.name
+                self._failed_dir.mkdir(parents=True, exist_ok=True)
+                os.replace(disc_dir, target)
+            except OSError:
+                logger.exception("failed→failed_dir move failed; folder left in working_dir")
+
+            if self._cdplay_stopped:
+                self._services.start_unit(_CDPLAY)
+                self._cdplay_stopped = False
+            self._set_state(State.ERROR, last_rip_status=last_rip)
+            return
+
+        self._set_state(State.EJECT, last_rip_status=last_rip)
+
+    def _write_failed_marker(self, disc_dir: Path, rip_error: str | None) -> None:
+        reason = rip_error or "rip status: fail"
+        marker = disc_dir / "FAILED"
+        marker.write_text(
+            f"failed_at={datetime.now().astimezone().isoformat()}\n"
+            f"reason={reason}\n",
+            encoding="utf-8",
+        )
+
+    def _write_source_json_for_cycle(self, disc_dir: Path) -> None:
+        ts = self._cycle.timestamps
+        # Default any missing timestamps to now so the model validates.
+        now = datetime.now().astimezone()
+        ts.inserted_at = ts.inserted_at or now
+        ts.rip_started_at = ts.rip_started_at or now
+        ts.rip_finished_at = ts.rip_finished_at or now
+        ts.ejected_at = ts.ejected_at or now
+        try:
+            source = build_source_json(
+                disc_dir,
+                ripper_name="cd-archivist",
+                ripper_version="0.1.0",
+                hostname=socket.gethostname(),
+                drive_info=_DriveInfo(device=str(self._device)),
+                rip_record=self._cycle.rip_record,
+                capture_result=self._cycle.capture_result,
+                ready_at=now,
+                timestamps=ts,
+            )
+            write_source_json(disc_dir / "source.json", source)
+        except Exception:
+            logger.exception("build/write source.json failed; continuing")
+
     def _from_eject(self) -> None:
         """Eject the disc, restart cdplay (paired invariant), then settle.
 
@@ -264,24 +475,29 @@ class ArchivistLoop:
         (EJECT_SETTLE_SECONDS) covers the 2–4s the tray takes to physically
         open before CAPTURE fires next tick.
         """
+        if self._is_manual() and not self._consume_trigger("eject"):
+            return
         try:
             self._drive.eject(self._device)
         finally:
             if self._cdplay_stopped:
                 self._services.start_unit(_CDPLAY)
                 self._cdplay_stopped = False
-        # Let the tray actually open before the camera fires.
+        self._cycle.timestamps.ejected_at = datetime.now().astimezone()
         self._sleeper(_EJECT_SETTLE_SECONDS)
         self._set_state(State.CAPTURE)
 
     def _from_capture(self) -> None:
-        """Run capture_disc against the now-open tray; write second manifest.
+        """Run capture_disc against the now-open tray.
 
-        Capture is best-effort: a successful rip already lives in the
-        manifest from _from_rip. If capture_disc raises, log the error
-        into manifest.errors and proceed to IDLE without disturbing
-        the rip record.
+        Sprint-3: writes the second manifest. Sprint-4 mode also picks
+        the canonical disc-photo, writes source.json, runs the
+        working_dir → inbox handoff, writes READY, and transitions to
+        WAITING_REMOVE (NOT IDLE — per D-waiting-remove-state).
         """
+        if self._is_manual() and not self._consume_trigger("capture"):
+            return
+
         assert self._cycle.disc_dir is not None
         captures: list[Any] = []
         capture_error: str | None = None
@@ -294,6 +510,10 @@ class ArchivistLoop:
         except Exception as exc:
             capture_error = f"capture failed: {type(exc).__name__}: {exc}"
             logger.exception("capture_disc raised; preserving rip record")
+
+        if self._sprint4_mode:
+            self._from_capture_sprint4(captures, capture_error)
+            return
 
         manifest_path = self._cycle.disc_dir / "manifest.json"
         manifest = read_manifest(manifest_path)
@@ -308,6 +528,63 @@ class ArchivistLoop:
         self._cycle = _Cycle()
         self._stabilize_since = None
         self._set_state(State.IDLE, disc_id=None)
+
+    def _from_capture_sprint4(
+        self, captures: list[Any], capture_error: str | None,
+    ) -> None:
+        assert self._cycle.disc_dir is not None
+        disc_dir = self._cycle.disc_dir
+
+        # Pick canonical disc-photo (best-effort).
+        photo_path: Path | None = None
+        try:
+            photo_path = copy_canonical_photo(disc_dir)
+        except Exception as exc:
+            capture_error = capture_error or f"copy_canonical_photo: {exc}"
+            logger.exception("copy_canonical_photo raised")
+
+        self._cycle.capture_result = _CaptureResult(
+            photo_path=photo_path,
+            photo_device=str(self._device) if photo_path else None,
+            error=capture_error,
+        )
+        if photo_path is not None:
+            self._cycle.timestamps.photo_captured_at = datetime.now().astimezone()
+
+        ready_at = datetime.now().astimezone()
+        # Write source.json BEFORE the handoff so the inbox folder is
+        # contract-complete the moment it appears.
+        self._write_source_json_for_cycle(disc_dir)
+
+        # Atomic working → inbox handoff.
+        target = self._inbox_dir / disc_dir.name
+        try:
+            self._inbox_dir.mkdir(parents=True, exist_ok=True)
+            os.replace(disc_dir, target)
+        except OSError as exc:
+            logger.exception("working→inbox move failed; parking in ERROR")
+            self._set_state(State.ERROR)
+            return
+
+        # Only after the move do we write READY — the inbox is now
+        # observable to the importer.
+        ready_marker = target / "READY"
+        ready_marker.write_text(
+            f"ready_at={ready_at.isoformat()}\nschema_version=1\n",
+            encoding="utf-8",
+        )
+
+        self._cycle = _Cycle()
+        self._stabilize_since = None
+        self._set_state(State.WAITING_REMOVE, disc_id=None)
+
+    def _from_waiting_remove(self) -> None:
+        """Gate re-rip on physical disc removal (D-waiting-remove-state)."""
+        status = self._drive()
+        if status in ("tray-open", "no-disc"):
+            self._set_state(State.WAITING if status == "tray-open" else State.IDLE)
+        # disc-ok or anything else: stay put. The operator must remove
+        # the disc (or hit POST /api/control/reset).
 
     def _from_error(self) -> None:
         """ERROR is terminal; only tray-open exits back to IDLE."""

@@ -57,20 +57,18 @@ class _FakeServices:
 class _FakeRipper:
     media_types = {"audio_cd"}
 
-    def __init__(self, result: RipResult) -> None:
-        self._result = result
+    def __init__(self, result: RipResult | None = None) -> None:
+        self._template = result
 
     def detect(self, device: Path) -> str | None:
         return "audio_cd"
 
     def rip(self, device: Path, out_dir: Path) -> RipResult:
         out_dir.mkdir(parents=True, exist_ok=True)
-        for t in self._result.tracks:
-            t.parent.mkdir(parents=True, exist_ok=True)
-            t.write_bytes(b"fLaC")
-        # Also write rip.log adjacent to audio so step (b) is observable.
+        flac = out_dir / "track01.flac"
+        flac.write_bytes(b"fLaC")
         (out_dir.parent / "rip.log").write_text("rip start\nrip end\n")
-        return self._result
+        return RipResult(status="success", tracks=[flac], errors=[])
 
 
 class _FakeCamera:
@@ -99,12 +97,6 @@ def _build_loop(
     failed_dir: Path | None = None,
 ):
     drive = _FakeDrive(statuses)
-    if rip_result is None:
-        rip_result = RipResult(
-            status="success",
-            tracks=[working_dir / "audio" / "track01.flac"],
-            errors=[],
-        )
     ripper = _FakeRipper(rip_result)
     clock = _Clock()
     loop = ArchivistLoop(
