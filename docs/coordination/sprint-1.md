@@ -117,7 +117,7 @@ updated: 2026-05-13T02:38:44.641Z
 
 ### Wave 2 — Implementations
 
-- [ ] {agent: drivers, depends: test-drive-status, id: impl-drive} Implement `archivist/drivers/drive.py` exposing `read_drive_status(device: Path)`. Use `fcntl.ioctl` with `CDROM_DRIVE_STATUS` constant (`0x5326` on Linux) and the documented return values (`CDS_NO_INFO=0`, `CDS_NO_DISC=1`, `CDS_TRAY_OPEN=2`, `CDS_DRIVE_NOT_READY=3`, `CDS_DISC_OK=4`); map to the four-state literal. Open the device with `os.open(device, os.O_RDONLY | os.O_NONBLOCK)`, close in a `finally`. The `OSError` path bubbles up from `os.open`.
+- [x] {agent: drivers, depends: test-drive-status, id: impl-drive} Implement `archivist/drivers/drive.py` exposing `read_drive_status(device: Path)`. Use `fcntl.ioctl` with `CDROM_DRIVE_STATUS` constant (`0x5326` on Linux) and the documented return values (`CDS_NO_INFO=0`, `CDS_NO_DISC=1`, `CDS_TRAY_OPEN=2`, `CDS_DRIVE_NOT_READY=3`, `CDS_DISC_OK=4`); map to the four-state literal. Open the device with `os.open(device, os.O_RDONLY | os.O_NONBLOCK)`, close in a `finally`. The `OSError` path bubbles up from `os.open`.
   - **Acceptance:** `pytest tests/drivers/test_drive.py` — 5 PASS. `archivist/drivers/drive.py` exists, ≤60 lines, typed throughout.
 
 - [ ] {agent: drivers, depends: test-led, id: impl-led} Implement `archivist/drivers/led.py` exposing `LEDPanel`. Use `requests` (sync, ~5s timeout) against the three Tasmota URLs from `docs/operations/cm4-setup.md`. Wrap each call in try/except for `requests.exceptions.RequestException`; on failure log via `logging.warning("LED %s failed: %s", action, exc)` and return the documented sentinel. Parse `{"POWER":"ON"|"OFF"}` for `status()`; any other shape returns `"unknown"`.
@@ -129,7 +129,7 @@ updated: 2026-05-13T02:38:44.641Z
 - [ ] {agent: drivers, depends: test-ripper, id: impl-ripper} Implement `archivist/drivers/ripper.py` exposing `Ripper` Protocol and `CDAudioRipper` class. `media_types = {"audio_cd"}`. `detect` uses `fcntl.ioctl` with `CDROM_DISC_STATUS` (`0x5327`) — `CDS_AUDIO` returns `"audio_cd"`, anything else returns `None`. `rip` spawns `cdparanoia -B -d <device> -- "1-" <out_dir>` via `subprocess.run`, then walks `out_dir/track*.wav` and pipes each through `flac --best`; collects resulting `.flac` paths into `RipResult.tracks`. Cdparanoia non-zero exit with some WAVs produced → `"partial"`. No WAVs at all → `"fail"`. All succeed → `"success"`.
   - **Acceptance:** `pytest tests/drivers/test_ripper.py` — 4 PASS. `archivist/drivers/ripper.py` exists. `RipResult` is exported and reusable from the pipeline package.
 
-- [ ] {agent: drivers, depends: test-manifest, id: impl-manifest} Implement `archivist/models/manifest.py` exposing `Manifest`, `CaptureRecord`, `RipRecord`, `PairingRecord`, `read_manifest`, `write_manifest`. Pydantic `BaseModel` with `model_config = ConfigDict(extra="forbid")`. `write_manifest` writes to `<path>.tmp` then `os.replace(tmp, path)` for atomicity. `read_manifest` raises `ValueError` if `schema_version != "0.2"`. JSON uses `model_dump_json(indent=2)` plus a trailing newline — that's what makes the idempotent-write test pass.
+- [x] {agent: drivers, depends: test-manifest, id: impl-manifest} Implement `archivist/models/manifest.py` exposing `Manifest`, `CaptureRecord`, `RipRecord`, `PairingRecord`, `read_manifest`, `write_manifest`. Pydantic `BaseModel` with `model_config = ConfigDict(extra="forbid")`. `write_manifest` writes to `<path>.tmp` then `os.replace(tmp, path)` for atomicity. `read_manifest` raises `ValueError` if `schema_version != "0.2"`. JSON uses `model_dump_json(indent=2)` plus a trailing newline — that's what makes the idempotent-write test pass.
   - **Acceptance:** `pytest tests/drivers/test_manifest.py` — 5 PASS. `archivist/models/manifest.py` exists. Atomic-write invariant verified by the test.
 
 - [x] {agent: pipeline, depends: test-disc-id, id: impl-disc-id} Implement `archivist/pipeline/disc_id.py` exposing `next_disc_id(discs_root: Path) -> str`. Acquire a `discs_root / .disc-id.lock` via `fcntl.flock(LOCK_EX)`, scan entries matching `CD_\d{4}`, compute `max + 1`, release lock. Pad with zero-fill to width 4 (`f"CD_{n:04d}"`). If no entries match, return `"CD_0001"`.
@@ -201,6 +201,15 @@ _No contract changes yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-14 — drivers — Wave 2 impl-manifest + impl-drive landed
+
+- `archivist/models/manifest.py` — `Manifest`, `CaptureRecord`, `RipRecord`, `PairingRecord` as Pydantic v2 `BaseModel` with `model_config = ConfigDict(extra="forbid")` on each. Schema matches the §"Manifest sketch" (schema_version Literal `"0.2"`, `media_type` Literal `"audio_cd"`, captures/rips/pairings lists, metadata dict, errors list). `read_manifest` raises `ValueError` on schema_version mismatch *before* Pydantic validation; unknown fields are caught by `extra="forbid"` and surface as `ValidationError` (a `ValueError` subclass). `write_manifest` is atomic: writes to `<path>.tmp` via `model_dump_json(indent=2) + "\n"`, then `os.replace`. Idempotent because the JSON is deterministic for equal inputs.
+- `archivist/drivers/drive.py` — `read_drive_status(device: Path) -> DriveStatus`. Opens device with `os.open(device, os.O_RDONLY | os.O_NONBLOCK)` and closes in `finally`. Issues `fcntl.ioctl(fd, CDROM_DRIVE_STATUS)` (`0x5326`); maps `CDS_NO_DISC` / `CDS_TRAY_OPEN` / `CDS_DRIVE_NOT_READY` / `CDS_DISC_OK` to the four-state literal. `OSError` from `os.open` bubbles up unmodified — no swallowing.
+- Verified: `pytest tests/drivers/test_manifest.py tests/drivers/test_drive.py` — 10/10 PASS. `ruff check archivist/` clean.
+- Commits: `d3fead6 feat(sprint-1): impl-manifest — Pydantic v0.2 schema with atomic write` and the following `impl-drive` commit.
+- Unblocks: pipeline `impl-folder` + `impl-pairing` (both import from `archivist.models.manifest`).
+- Next: `impl-led`, `impl-camera`, `impl-ripper` remain in the drivers Wave 2 queue.
 
 ### 2026-05-14 — drivers — Wave 1 failing tests landed (test-drive-status, test-led, test-camera, test-ripper, test-manifest)
 
