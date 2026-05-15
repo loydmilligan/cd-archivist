@@ -15,6 +15,7 @@ are best-effort: a Tasmota timeout never blocks captures.
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -22,6 +23,10 @@ from pathlib import Path
 from typing import Protocol
 
 from archivist.models.manifest import CaptureRecord
+
+_CANONICAL_PHOTO_NAME = "disc-photo.jpg"
+_LIT_FRAME_GLOB = "disc_front_lit_*.jpg"
+_PREFERRED_LIT_FRAME = "disc_front_lit_002.jpg"
 
 logger = logging.getLogger(__name__)
 
@@ -91,3 +96,35 @@ def capture_disc(
         except Exception:
             logger.exception("LED power_off in finally raised — swallowing")
     return records
+
+
+def select_canonical_photo(captures_dir: Path) -> Path | None:
+    """Pick the canonical disc photo per D-canonical-disc-photo.
+
+    Prefers `disc_front_lit_002.jpg` (the middle of the 3 lit frames);
+    falls back to any `disc_front_lit_*.jpg`; returns `None` if no
+    lit captures exist (or the captures dir is missing).
+    """
+    if not captures_dir.is_dir():
+        return None
+    preferred = captures_dir / _PREFERRED_LIT_FRAME
+    if preferred.is_file():
+        return preferred
+    lits = sorted(captures_dir.glob(_LIT_FRAME_GLOB))
+    return lits[0] if lits else None
+
+
+def copy_canonical_photo(disc_dir: Path) -> Path | None:
+    """Copy the chosen lit frame to `<disc_dir>/disc-photo.jpg`.
+
+    Per D-canonical-disc-photo. Returns the new path on success, `None`
+    when no lit frame is available. Supplemental captures stay in
+    `captures/` for the operator. Idempotent — re-running produces an
+    identical byte-equal copy.
+    """
+    chosen = select_canonical_photo(disc_dir / "captures")
+    if chosen is None:
+        return None
+    target = disc_dir / _CANONICAL_PHOTO_NAME
+    shutil.copyfile(chosen, target)
+    return target
