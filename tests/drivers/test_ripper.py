@@ -60,31 +60,55 @@ def test_detect_non_audio_returns_none(
 
 # -------------------------- rip() happy path -------------------------
 
-def test_rip_success(fake_subprocess, tmp_path: Path) -> None:
+def _install_cdparanoia_popen(monkeypatch, out_dir, *, wavs_to_make, returncode, stderr_lines=()):
+    """Monkeypatch subprocess.Popen so cdparanoia 'runs' synthetically.
+
+    Sprint-3 (impl-rip-stderr-stream) replaced subprocess.run with Popen
+    for the cdparanoia call. These helper hooks reproduce the old
+    sprint-1 side-effects (WAV files appearing) under the new shape.
+    """
+    import archivist.drivers.ripper as ripper_mod
+
+    class _Fake:
+        def __init__(self, argv, **_kw):
+            self.args = argv
+            self.returncode = returncode
+            # Create the WAVs synchronously — real cdparanoia produces them
+            # incrementally; for the unit tests the file presence at .wait()
+            # is what matters.
+            for n in wavs_to_make:
+                (out_dir / f"track{n:02d}.wav").write_bytes(b"RIFF")
+            import io
+            self.stdout = io.StringIO("")
+            self.stderr = iter([s + "\n" for s in stderr_lines])
+
+        def wait(self):
+            return self.returncode
+
+    monkeypatch.setattr(ripper_mod.subprocess, "Popen", _Fake)
+
+
+def _install_flac_run(monkeypatch):
+    """Monkeypatch subprocess.run so flac calls succeed and create .flac sidecars."""
+    import archivist.drivers.ripper as ripper_mod
+
+    def fake_run(args, **_kwargs):
+        argv = list(args) if isinstance(args, (list, tuple)) else [args]
+        joined = " ".join(str(x) for x in argv)
+        if "flac" in joined:
+            wav = Path(argv[-1])
+            wav.with_suffix(".flac").write_bytes(b"fLaC")
+        return FakeCompletedProcess(args, returncode=0)
+
+    monkeypatch.setattr(ripper_mod.subprocess, "run", fake_run)
+
+
+def test_rip_success(monkeypatch, tmp_path: Path) -> None:
     """All tracks rip + encode → status='success', tracks lists FLACs, errors=[]."""
     out_dir = tmp_path / "rip"
     out_dir.mkdir()
-
-    # Simulate cdparanoia: produce 3 WAV stubs, exit 0. Then 3 successful flac
-    # calls each produce the corresponding .flac and exit 0.
-    def fake_run(args, **kwargs):
-        fake_subprocess.calls.append(_record(args, kwargs))
-        argv = list(args) if isinstance(args, (list, tuple)) else [args]
-        joined = " ".join(str(x) for x in argv)
-        if "cdparanoia" in joined:
-            for i in (1, 2, 3):
-                (out_dir / f"track{i:02d}.wav").write_bytes(b"RIFF")
-            return FakeCompletedProcess(args, returncode=0)
-        if "flac" in joined:
-            # Last arg points at the .wav; produce sibling .flac.
-            wav = Path(argv[-1])
-            wav.with_suffix(".flac").write_bytes(b"fLaC")
-            return FakeCompletedProcess(args, returncode=0)
-        return FakeCompletedProcess(args, returncode=0)
-
-    fake_subprocess.run = fake_run  # type: ignore[assignment]
-    import subprocess as _sp
-    _sp.run = fake_run  # type: ignore[assignment]
+    _install_cdparanoia_popen(monkeypatch, out_dir, wavs_to_make=(1, 2, 3), returncode=0)
+    _install_flac_run(monkeypatch)
 
     result = CDAudioRipper().rip(DEVICE, out_dir)
     assert result.status == "success"
@@ -96,30 +120,17 @@ def test_rip_success(fake_subprocess, tmp_path: Path) -> None:
 
 # -------------------------- rip() partial ----------------------------
 
-def test_rip_partial(fake_subprocess, tmp_path: Path) -> None:
+def test_rip_partial(monkeypatch, tmp_path: Path) -> None:
     """cdparanoia non-zero exit with SOME WAVs produced → status='partial'."""
     out_dir = tmp_path / "rip"
     out_dir.mkdir()
-
-    def fake_run(args, **kwargs):
-        fake_subprocess.calls.append(_record(args, kwargs))
-        argv = list(args) if isinstance(args, (list, tuple)) else [args]
-        joined = " ".join(str(x) for x in argv)
-        if "cdparanoia" in joined:
-            # Only tracks 1 + 2 made it; track 3 failed mid-rip.
-            (out_dir / "track01.wav").write_bytes(b"RIFF")
-            (out_dir / "track02.wav").write_bytes(b"RIFF")
-            return FakeCompletedProcess(
-                args, returncode=1, stderr="read error on track 3"
-            )
-        if "flac" in joined:
-            wav = Path(argv[-1])
-            wav.with_suffix(".flac").write_bytes(b"fLaC")
-            return FakeCompletedProcess(args, returncode=0)
-        return FakeCompletedProcess(args, returncode=0)
-
-    import subprocess as _sp
-    _sp.run = fake_run  # type: ignore[assignment]
+    _install_cdparanoia_popen(
+        monkeypatch, out_dir,
+        wavs_to_make=(1, 2),
+        returncode=1,
+        stderr_lines=["read error on track 3"],
+    )
+    _install_flac_run(monkeypatch)
 
     result = CDAudioRipper().rip(DEVICE, out_dir)
     assert result.status == "partial"
@@ -129,11 +140,16 @@ def test_rip_partial(fake_subprocess, tmp_path: Path) -> None:
 
 # -------------------------- rip() hard fail --------------------------
 
-def test_rip_hard_fail(fake_subprocess, tmp_path: Path) -> None:
+def test_rip_hard_fail(monkeypatch, tmp_path: Path) -> None:
     """cdparanoia hard-fails with no WAVs → status='fail', tracks=[]."""
     out_dir = tmp_path / "rip"
     out_dir.mkdir()
-    fake_subprocess.set_result(returncode=1, stderr="cdparanoia: drive not ready")
+    _install_cdparanoia_popen(
+        monkeypatch, out_dir,
+        wavs_to_make=(),
+        returncode=1,
+        stderr_lines=["cdparanoia: drive not ready"],
+    )
 
     result = CDAudioRipper().rip(DEVICE, out_dir)
     assert result.status == "fail"
