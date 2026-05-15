@@ -134,3 +134,50 @@ Reference frames from initial bring-up live in `docs/operations/sample-captures/
 - `2026-05-14_frame-09.jpg` — final accepted framing (no rotation, square crop applied)
 
 These are committed to the repo as a calibration baseline; the actual archive captures live under `/srv/cd-archivist/discs/`.
+
+## NOPASSWD sudo fragment
+
+The archivist runs as an unprivileged user but needs a narrow set of
+root-only operations: stopping/starting the `cdplay.service` unit
+around drive-claim windows, and rebinding the camera's USB device when
+ffmpeg hits a `VIDIOC_STREAMON` failure. Install this fragment by hand
+on the CM4 the first time you wire up the rig — it is **not** managed
+by the pipeline.
+
+Install command:
+
+```sh
+sudo visudo -f /etc/sudoers.d/cd-archivist
+```
+
+Paste the following (replace `cdarchivist` with the user the service
+runs as):
+
+```sudoers
+# /etc/sudoers.d/cd-archivist
+# Narrowly scoped NOPASSWD rules for the archivist runtime.
+
+# (a) Stop/start the cdplay.service unit around CD-claim windows.
+#     The archivist must own /dev/sr0 exclusively while ripping, and
+#     restart cdplay afterwards so headphone playback resumes.
+cdarchivist ALL=(root) NOPASSWD: /bin/systemctl stop cdplay.service
+cdarchivist ALL=(root) NOPASSWD: /bin/systemctl start cdplay.service
+
+# (b) USB unbind/rebind for the webcam recovery path.
+#     ffmpeg can hit VIDIOC_STREAMON after a kernel quirk; the
+#     recovery wrapper writes the bus path (e.g. "1-1.2.2") to the
+#     usb driver's unbind/bind sysfs files to reset the device.
+cdarchivist ALL=(root) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/unbind
+cdarchivist ALL=(root) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/bind
+```
+
+Verify after install:
+
+```sh
+sudo -l -U cdarchivist | grep -E "systemctl|tee"
+```
+
+Each line should appear with `(root) NOPASSWD:`. If `visudo` rejects
+the file, the syntax is wrong — fix the file before saving (visudo
+refuses to install a broken sudoers fragment).
+
