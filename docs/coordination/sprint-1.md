@@ -138,7 +138,7 @@ updated: 2026-05-13T02:38:44.641Z
 - [x] {agent: pipeline, depends: test-folder, depends: impl-manifest, id: impl-folder} Implement `archivist/pipeline/folder.py` exposing `prepare_disc_folder(disc_id: str, discs_root: Path) -> Path`. Compute target = `discs_root / disc_id`. If `target / "manifest.json"` already exists, return `target` unchanged (idempotent guard). Otherwise `mkdir(parents=True, exist_ok=True)` for the subdirs `captures/`, `audio/`, `logs/`, `review/`, then call `write_manifest(target / "manifest.json", initial_manifest)` with the documented initial shape.
   - **Acceptance:** `pytest tests/pipeline/test_folder.py` — 4 PASS. `archivist/pipeline/folder.py` exists.
 
-- [ ] {agent: pipeline, depends: test-pairing, depends: impl-manifest, id: impl-pairing} Implement `archivist/pipeline/pairing.py` exposing `make_pairing` and `attach_pairing`. `make_pairing` builds a `PairingRecord` (imported from `archivist.models.manifest`) with `method`, `confidence`, `created_at=datetime.now(UTC)`. `attach_pairing` returns a copy of the manifest with the pairing appended (`manifest.model_copy(update={"pairings": [*manifest.pairings, pairing]})`).
+- [x] {agent: pipeline, depends: test-pairing, depends: impl-manifest, id: impl-pairing} Implement `archivist/pipeline/pairing.py` exposing `make_pairing` and `attach_pairing`. `make_pairing` builds a `PairingRecord` (imported from `archivist.models.manifest`) with `method`, `confidence`, `created_at=datetime.now(UTC)`. `attach_pairing` returns a copy of the manifest with the pairing appended (`manifest.model_copy(update={"pairings": [*manifest.pairings, pairing]})`).
   - **Acceptance:** `pytest tests/pipeline/test_pairing.py` — 3 PASS. `archivist/pipeline/pairing.py` exists. Forward-compat note: future detached-capture workflows add `method="timestamp_window"` etc; today only `"single_session"` is used.
 
 ## Agent Roster
@@ -221,6 +221,13 @@ _No contract changes yet._
 - Verified: all five fail at collection as expected — `ModuleNotFoundError` on `archivist.drivers.{drive,led,camera,ripper}` and `archivist.models.manifest`. `ruff check tests/drivers/` clean.
 - Commit: `61d04e2 test(sprint-1): wave 1 driver failing tests — drive, led, camera, ripper, manifest`.
 - Next: `impl-manifest` (Wave 2) — unblocks pipeline's `impl-folder` + `impl-pairing`.
+
+### 2026-05-14 — pipeline — impl-folder + impl-pairing landed (Wave 2 pipeline done)
+
+- `archivist/pipeline/folder.py` — `prepare_disc_folder(disc_id, discs_root)` creates `<root>/<disc_id>/{captures,audio,logs,review}/` and writes the initial `Manifest` (schema 0.2, `media_type="audio_cd"`, `status="created"`, empty lists, `created_at=datetime.now(UTC)`). Idempotency guard: presence of `manifest.json` short-circuits and returns the target unchanged — re-invocations after downstream mutations (e.g. `status="ripped"`) preserve the existing manifest.
+- `archivist/pipeline/pairing.py` — `make_pairing(method, confidence="high")` builds a `PairingRecord` with `created_at=datetime.now(UTC)`. `attach_pairing(manifest, pairing)` returns `manifest.model_copy(update={"pairings": [*manifest.pairings, pairing]})` — input manifest is not mutated. Only `method="single_session"` is wired this sprint; the `Literal` widens when detached-capture workflows land.
+- Both consume `archivist.models.manifest` (delivered by drivers in d3fead6). All 11 `tests/pipeline/` cases PASS; ruff clean.
+- **Wave 2 pipeline scope complete.** Sprint-1 pipeline owns are done.
 
 ### 2026-05-14 — pipeline — impl-disc-id landed
 
