@@ -1103,6 +1103,51 @@ _No ratifications yet._
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-15 — pipeline — Bucket D operator review-recapture landed (3 commits)
+
+Sprint-3 mid-sprint amendment per `D-review-recapture-mvp` shipped in
+three atomic commits. Three tasks closed:
+
+- **test-review-recapture** (commit `5c30fa4`) — 8 failing test cases
+  in `tests/service/test_review_recapture.py`: happy-path off→on→off
+  ordering with response shape (`{"ambient", "lit"}`, optional
+  `errors`); 409 parametrized over `LoopState.state in {CAPTURE,
+  EJECT}` with zero camera/LED calls; 404 on unknown disc + invalid
+  id shape; shared ISO timestamp between the ambient/lit pair;
+  `review/` dir created on first call; LED never-raises (captures
+  proceed, `errors[]` surfaces).
+
+- **impl-review-recapture** (commit `2980f8f`) — new
+  `archivist/pipeline/review_capture.py` (`recapture_review(disc_dir,
+  *, camera, led) -> ReviewRecaptureResult` — single-shot per
+  lighting, intentionally NOT folded into `capture_disc` per task
+  scope). `create_app` gains optional `recapture_camera` /
+  `recapture_led` kwargs; `POST /api/library/{disc_id}/recapture`
+  (busy gate + path-traversal-guarded disc resolution) and
+  `GET /library/{disc_id}/review/{filename}` (JPG asset serving with
+  the same `_resolve_under` guard as captures/audio) mount only when
+  both are wired. No manifest write — sprint-4 promotes review/
+  files into the schema with album art.
+
+- **amend impl-library** (commit `8bae907`) — detail-page HTML in
+  `_LIBRARY_DETAIL_HTML` gains a "take a review photo" button with a
+  ~30-line vanilla-JS 3-2-1 countdown that POSTs to the new endpoint
+  and reloads on success; a separate "review photos" card lists
+  files from `disc_dir / "review/"` (directory listing only).
+  Production wiring in `archivist/__main__.py` now passes the camera
+  closure + `LEDPanel(led_base)` through to `create_app` so the rig
+  serves the endpoint.
+
+**Suite:** 139/139 green across `tests/{service,state_machine,
+pipeline,test_main_logging}` after Bucket D commits. `ruff check`
+clean on all changed paths. Pre-existing 7 failures in
+`tests/drivers/test_ripper.py` are in drivers' lane (uncommitted WIP
+in `archivist/drivers/ripper.py` on master) and orthogonal to this
+work. Mash Co. invariants preserved (sentence case, no decorative
+emoji, eyebrows ≤2 words). Sprint-3 pipeline scope is complete; the
+remaining drivers-owned `impl-systemctl-scope` and any open
+ripper-test work are outside this agent's owns paths.
+
 ### 2026-05-15 — planner — sprint-3 mid-sprint amendment: operator review-recapture (Bucket D)
 
 Per `D-review-recapture-mvp` (Decision Log above): a stripped-down
