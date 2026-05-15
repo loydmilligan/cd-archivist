@@ -348,7 +348,7 @@ updated: 2026-05-14T00:00:00.000Z
 
 #### Bucket C — review UI
 
-- [ ] {agent: pipeline, id: test-library-list} Failing test for `GET /
+- [x] {agent: pipeline, id: test-library-list} Failing test for `GET /
   library`. Uses FastAPI `TestClient`. Tests: (a) returns 200,
   `text/html`; (b) under a fixture `discs_root` containing
   `CD_0001/`, `CD_0002/`, `CD_0003/` with manifests of varying status
