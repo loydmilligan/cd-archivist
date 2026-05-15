@@ -8,12 +8,16 @@ permission-denied device node.
 from __future__ import annotations
 
 import fcntl
+import logging
 import os
 from pathlib import Path
 from typing import Literal
 
+_logger = logging.getLogger(__name__)
+
 # include/uapi/linux/cdrom.h
 CDROM_DRIVE_STATUS = 0x5326
+CDROMEJECT = 0x5309
 
 CDS_NO_INFO = 0
 CDS_NO_DISC = 1
@@ -48,3 +52,24 @@ def read_drive_status(device: Path) -> DriveStatus:
         return _STATUS_MAP[code]
     except KeyError as exc:
         raise ValueError(f"unexpected CDROM_DRIVE_STATUS code: {code}") from exc
+
+
+def eject(device: Path) -> bool:
+    """Eject the disc tray. Returns True on success, False on OSError.
+
+    Never raises. The common failure is `OSError: drive busy` while a
+    rip is in flight; callers retry after the rip releases the device.
+    """
+    try:
+        fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as exc:
+        _logger.warning("eject %s failed (open): %s", device, exc)
+        return False
+    try:
+        fcntl.ioctl(fd, CDROMEJECT)
+    except OSError as exc:
+        _logger.warning("eject %s failed: %s", device, exc)
+        return False
+    finally:
+        os.close(fd)
+    return True
