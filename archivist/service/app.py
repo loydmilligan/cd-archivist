@@ -95,7 +95,7 @@ def create_app(loop_state: LoopState, log_path: Path) -> FastAPI:
     return app
 
 
-_PAGE_HTML = """<!doctype html>
+_PAGE_HTML = r"""<!doctype html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
@@ -139,6 +139,8 @@ _PAGE_HTML = """<!doctype html>
       margin-bottom: var(--s-5);
     }
     .card .eyebrow { color: var(--accent); }
+    .card--ember { border-left-color: var(--ember); }
+    .card--ember .eyebrow { color: var(--ember); }
     .state-line {
       font-family: var(--font-display);
       font-weight: 700;
@@ -154,7 +156,53 @@ _PAGE_HTML = """<!doctype html>
     }
     .meta span.label { color: var(--fg-quiet); margin-right: var(--s-2); }
     .meta span.value { color: var(--fg-2); }
+    /* RIP progress bar — sky accent on an ink-2 track. */
+    #rip-progress-wrap {
+      margin: var(--s-3) 0 var(--s-2) 0;
+    }
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: var(--ink-2);
+      border-radius: var(--r-1);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--sky);
+      transition: width 200ms ease-out;
+    }
+    #rip-progress-label {
+      display: block;
+      margin-top: var(--s-1);
+      font-family: var(--font-mono);
+      font-size: var(--fs-xs);
+      color: var(--fg-muted);
+    }
     .log-card { border-left-color: var(--ink-5); }
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--s-2);
+    }
+    .chip {
+      font-family: var(--font-body);
+      font-size: var(--fs-xs);
+      letter-spacing: 0.04em;
+      text-transform: lowercase;
+      background: var(--surface-hover);
+      color: var(--fg-quiet);
+      border: 1px solid var(--line);
+      border-radius: var(--r-full);
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+    .chip[data-follow="on"] {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
     pre.log {
       font-family: var(--font-mono);
       font-size: var(--fs-xs);
@@ -175,26 +223,58 @@ _PAGE_HTML = """<!doctype html>
       color: var(--fg-quiet);
       margin-top: var(--s-6);
     }
+    .nav {
+      display: flex;
+      gap: var(--s-4);
+      margin-bottom: var(--s-5);
+      font-family: var(--font-body);
+      font-size: var(--fs-sm);
+    }
+    .nav a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      padding-bottom: 2px;
+      border-bottom: 1px solid transparent;
+    }
+    .nav a.active {
+      color: var(--fg);
+      border-bottom-color: var(--accent);
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
+    <nav class="nav">
+      <a href="/" class="active">status</a>
+      <a href="/library">library</a>
+    </nav>
+
     <p class="eyebrow">STATUS</p>
     <h1 class="page-title">cd-archivist</h1>
 
-    <section class="card" aria-label="Current state">
+    <section class="card" id="state-card" aria-label="Current state">
       <p class="eyebrow">DRIVE</p>
       <p class="state-line" id="state">&hellip;</p>
+      <div id="rip-progress-wrap" hidden>
+        <div class="progress-track">
+          <div id="rip-progress-fill" class="progress-fill"></div>
+        </div>
+        <span id="rip-progress-label">&nbsp;</span>
+      </div>
       <div class="meta">
         <div><span class="label">disc</span><span class="value" id="disc-id">&mdash;</span></div>
         <div><span class="label">last rip</span><span class="value" id="last-rip">&mdash;</span></div>
-        <div><span class="label">updated</span><span class="value" id="last-updated">&mdash;</span></div>
+        <div><span class="label">entered</span><span class="value" id="state-entered">&mdash;</span></div>
+        <div><span class="label">last tick</span><span class="value" id="last-tick">&mdash;</span></div>
       </div>
     </section>
 
     <section class="card log-card" aria-label="Recent log lines">
-      <p class="eyebrow">LOG TAIL</p>
-      <pre class="log" id="log">loading&hellip;</pre>
+      <div class="log-header">
+        <p class="eyebrow" style="margin:0">LOG TAIL</p>
+        <button id="log-follow-toggle" class="chip" data-follow="on" type="button">follow</button>
+      </div>
+      <pre class="log" id="log" data-follow="on">loading&hellip;</pre>
     </section>
 
     <p class="footnote">
@@ -207,6 +287,34 @@ _PAGE_HTML = """<!doctype html>
     const $ = (id) => document.getElementById(id);
     const dash = (v) => (v === null || v === undefined || v === "") ? "—" : v;
 
+    // Relative-time helper: "Xs ago", "Xm ago", "Xh ago".
+    function relTime(iso) {
+      if (!iso) return "—";
+      const then = new Date(iso).getTime();
+      if (Number.isNaN(then)) return "—";
+      const sec = Math.max(0, Math.round((Date.now() - then) / 1000));
+      if (sec < 60) return sec + "s ago";
+      const min = Math.round(sec / 60);
+      if (min < 60) return min + "m ago";
+      const hr = Math.round(min / 60);
+      return hr + "h ago";
+    }
+
+    // Parse "track 4/12, 38%" → 38; return null if no percent.
+    function parsePercent(label) {
+      if (!label) return null;
+      const m = String(label).match(/(\d{1,3})\s*%/);
+      if (!m) return null;
+      const n = parseInt(m[1], 10);
+      return (n >= 0 && n <= 100) ? n : null;
+    }
+
+    function applyStateAccent(state) {
+      const card = $("state-card");
+      card.classList.remove("card--ember");
+      if (state === "ERROR") card.classList.add("card--ember");
+    }
+
     async function pollStatus() {
       try {
         const r = await fetch("/api/status", { cache: "no-store" });
@@ -215,16 +323,52 @@ _PAGE_HTML = """<!doctype html>
         $("state").textContent = dash(s.state);
         $("disc-id").textContent = dash(s.disc_id);
         $("last-rip").textContent = dash(s.last_rip_status);
-        $("last-updated").textContent = dash(s.last_updated);
+        $("state-entered").textContent = relTime(s.state_entered_at);
+        $("last-tick").textContent = relTime(s.last_tick_at);
+        applyStateAccent(s.state);
+
+        // RIP progress bar — show only when there's a value.
+        const wrap = $("rip-progress-wrap");
+        if (s.rip_progress) {
+          wrap.hidden = false;
+          $("rip-progress-label").textContent = s.rip_progress;
+          const pct = parsePercent(s.rip_progress);
+          if (pct !== null) $("rip-progress-fill").style.width = pct + "%";
+        } else {
+          wrap.hidden = true;
+          $("rip-progress-fill").style.width = "0%";
+        }
       } catch (e) { /* swallow — next tick retries */ }
     }
+
+    // Log tail with follow toggle. `follow` defaults to on; clicking
+    // the chip toggles it. Manual scroll-up auto-disables follow.
+    let follow = true;
+    const pre = $("log");
+    const chip = $("log-follow-toggle");
+
+    function setFollow(on) {
+      follow = on;
+      const flag = on ? "on" : "off";
+      chip.setAttribute("data-follow", flag);
+      pre.setAttribute("data-follow", flag);
+    }
+    chip.addEventListener("click", () => setFollow(!follow));
+    pre.addEventListener("scroll", () => {
+      // If the user scrolled away from the bottom, turn follow off.
+      const distFromBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight;
+      if (distFromBottom > 24 && follow) setFollow(false);
+    });
 
     async function pollLog() {
       try {
         const r = await fetch("/api/log?lines=200", { cache: "no-store" });
         if (!r.ok) return;
         const text = await r.text();
-        $("log").textContent = text || "(empty)";
+        pre.textContent = text || "(empty)";
+        if (follow) {
+          pre.scrollTop = pre.scrollHeight;
+        }
       } catch (e) { /* swallow */ }
     }
 

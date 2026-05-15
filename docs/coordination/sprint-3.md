@@ -527,7 +527,7 @@ updated: 2026-05-14T00:00:00.000Z
     cases. Manual sanity: trigger a rip with a known-bad CD (or a
     fake ripper) — state lands in ERROR, eject returns to IDLE.
 
-- [ ] {agent: pipeline, depends: test-status-ui-liveness, depends: test-
+- [x] {agent: pipeline, depends: test-status-ui-liveness, depends: test-
   rip-progress-ui, id: impl-status-ui} Update `archivist/service/app.
   py::_PAGE_HTML`. Changes:
   1. **Liveness rendering** — under the existing `<div class="meta">`,
