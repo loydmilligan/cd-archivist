@@ -940,6 +940,87 @@ All drivers-owned Wave 1 tasks closed. Loop-side assertions for
 Verified: full drivers suite passes the previously-green cases.
 `ruff check tests/drivers/` clean.
 
+### 2026-05-14 — pipeline — Wave 2 impls landed (8 tasks, 8 commits — 59/59 green)
+
+All pipeline-owned Wave 2 tasks closed. Full pipeline test suite:
+59 passing, ruff clean across `archivist` + `tests`.
+
+- **impl-last-tick** (83eae9b) — LoopState renamed `last_updated`
+  → `state_entered_at` (advances on transitions); added `last_tick_at`
+  (heartbeat, updates every tick) and `rip_progress: str | None`.
+  `/api/status` JSON exposes all three; old `last_updated` key gone.
+  Loop's `_heartbeat()` is called at the top of every `tick()`.
+- **impl-log-fallback** (b0acda9) — `_configure_logging` no longer
+  raises on unwritable log dir. Try/except around `mkdir` and
+  `FileHandler`; falls back to stderr-only with a warning naming
+  the path + `ARCHIVIST_LOG_PATH` env var. Manual handler wiring
+  (no `basicConfig(force=True)`) so pytest's caplog isn't nuked.
+- **impl-rip-error-recovery** (b00ba99) — terminal `ERROR` state per
+  `D-rip-failure-error`. `_from_rip` wraps `rip_disc` in try/except;
+  failures (raised OR `status="fail"`) restart cdplay, record
+  `status="rip_failed"` + exception text in `manifest.errors`, and
+  park in ERROR. Only `tray-open` exits ERROR back to IDLE.
+- **impl-capture-after-eject** (0d12ba1) — flow restructure per
+  `D-eject-time-capture`: STABILIZE→RIP no longer runs capture;
+  RIP→EJECT writes the first manifest with the rip outcome;
+  EJECT runs eject + cdplay restart + 3s settle sleep then
+  transitions to CAPTURE; CAPTURE runs `capture_disc` against the
+  open tray and writes the second manifest adding captures without
+  disturbing the rip record. Capture failures preserve the rip
+  record + append the error.
+- **impl-status-ui** (6e25d80) — `_PAGE_HTML` updated for all
+  sprint-3 UI contracts: relative-time labels rendered in JS from
+  `state_entered_at` / `last_tick_at`; RIP progress bar with
+  `--sky` fill on `--ink-2` track (hidden when `rip_progress` is
+  null, parses the percent from the label); log-follow chip with
+  `data-follow="on"` default and standard tail -f scroll-up auto-
+  disable; `card--ember` class-swap on `state === "ERROR"`. Top
+  nav (status / library) added.
+- **impl-library** (c937781) — new `/library` browser. `create_app`
+  gains optional `discs_root` kwarg; when set, four routes mount:
+  list (Mash Co. card grid sorted by disc_id desc with semantic
+  card-accent class by status — `card--moss` / `card--amber` /
+  `card--ember`); detail (formatted manifest dump in `<pre>`, 6-
+  thumbnail capture grid, track list with byte-formatted sizes
+  and inline `<audio controls preload="none">` per FLAC, optional
+  `logs/` tail); two `FileResponse` routes for captures + audio
+  with a path-traversal guard (`Path.resolve()` + `relative_to`
+  check; rejects `../`, URL-encoded variants, absolute paths).
+  `__main__.py` passes `discs_root` through.
+- **impl-loop-device-missing** (1270450) — rate-limited warning when
+  `drive()` returns `"device-missing"`: one log per disconnect, flag
+  resets on recovery so re-disappearance is re-logged. Loop stays
+  in IDLE while missing. Added the two `tests/state_machine/` cases
+  the drivers' `test-drive-missing` task body specified (the test
+  file is in pipeline's owns). Forward-compat — works today; goes
+  live once drivers ships `impl-drive-missing`.
+- **impl-rip-progress** (ce5c056) — new `archivist/pipeline/rip_
+  progress.py` with `parse_cdparanoia_progress(line) → str | None`
+  (recognises "Progress: NN% complete (track N of M)" and bare
+  "(track N)" lines). `rip_disc` gains optional `progress_callback`
+  and forwards to `ripper.rip` only if the ripper signature accepts
+  it (inspect.signature) — forward-compat with today's
+  `CDAudioRipper.rip` which doesn't. State machine builds a closure
+  that parses the line + writes the result into
+  `loop_state.rip_progress`, with a `finally` that clears the
+  label when the rip ends. Live wiring activates once drivers
+  ships `impl-rip-stderr-stream`.
+
+**Cross-agent coordination notes:**
+- Drivers still have not landed `impl-drive-missing` or
+  `impl-rip-stderr-stream`. Both pipeline impls that depend on them
+  are forward-compatible: the loop handles `"device-missing"`
+  whenever the driver starts returning it, and the rip-progress
+  callback flows through whenever the ripper accepts it.
+- `tests/state_machine/test_loop.py` gained two cases for the
+  device-missing rate limit. The drivers' `test-drive-missing`
+  task body asked for tests in `tests/state_machine/`, which is
+  pipeline's owns; documenting here so it's clear who did it.
+
+Sprint-3 pipeline scope complete pending drivers' remaining Wave 2
+impls (`impl-systemctl-scope`, `impl-drive-missing`,
+`impl-rip-stderr-stream`).
+
 ### 2026-05-14 — pipeline — Wave 1 failing tests landed (10 tasks, 10 commits)
 
 All pipeline-owned Wave 1 tasks closed; test-log-stream skipped per
