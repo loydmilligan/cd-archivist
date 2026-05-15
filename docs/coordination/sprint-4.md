@@ -390,7 +390,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Five cases added to `tests/state_machine/test_
     loop.py`. Fails until `impl-failed-marker`.
 
-- [ ] {agent: pipeline, id: test-process-ready-hook} Failing tests for
+- [x] {agent: pipeline, id: test-process-ready-hook} Failing tests for
   the new post-rip hook helper `archivist/pipeline/post_rip_hook.py::
   run_process_ready_hook(hook_cmd: str | None) -> None`. Captures the
   primary half of the belt+suspenders design in
@@ -625,7 +625,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket A — music-pipeline contract conformance
 
-- [ ] {agent: pipeline, depends: test-music-paths, id: impl-music-paths}
+- [x] {agent: pipeline, depends: test-music-paths, id: impl-music-paths}
   Implement env-driven path config in `archivist/__main__.py`. Read
   `MUSIC_INBOX_DIR`, `MUSIC_WORKING_DIR`, `MUSIC_FAILED_DIR` from env
   with the documented defaults (use `Path.expanduser()` to handle
@@ -644,7 +644,7 @@ updated: 2026-05-15T00:00:00.000Z
     dogfood rig (`MUSIC_INBOX_DIR=/srv/music/inbox` etc.) starts
     cleanly.
 
-- [ ] {agent: pipeline, depends: test-folder-naming, id: impl-folder-naming}
+- [x] {agent: pipeline, depends: test-folder-naming, id: impl-folder-naming}
   Implement `next_disc_folder_name(inbox_root, *, now=None) -> str`
   in `archivist/pipeline/disc_id.py` (alongside the legacy
   `next_disc_id`). Reuse the `.disc-id.lock` fcntl lockfile for
@@ -663,7 +663,7 @@ updated: 2026-05-15T00:00:00.000Z
     `test_folder_name.py`) all pass. Existing `next_disc_id` tests
     still pass.
 
-- [ ] {agent: pipeline, depends: test-track-rename, id: impl-track-rename}
+- [x] {agent: pipeline, depends: test-track-rename, id: impl-track-rename}
   Implement `rename_tracks_to_canonical(audio_dir: Path) -> list[Path]`
   in `archivist/pipeline/rip.py`. Glob `track*.cdda.flac`; for each
   matching file, parse the track number with a regex
@@ -678,7 +678,7 @@ updated: 2026-05-15T00:00:00.000Z
     the rename happens after the existing assertion point —
     author's call; the goal is no regressions).
 
-- [ ] {agent: pipeline, depends: test-source-json-model,
+- [x] {agent: pipeline, depends: test-source-json-model,
   depends: test-source-json-write, id: impl-source-json-model}
   Implement `archivist/models/source.py` with the Pydantic v2
   `SourceJson` schema v1 per the handoff doc. All sub-models use
@@ -690,7 +690,7 @@ updated: 2026-05-15T00:00:00.000Z
     `tests/models/test_manifest.py` (or wherever Manifest tests
     live) still passes. `ruff check` clean.
 
-- [ ] {agent: pipeline, depends: test-source-json-builder,
+- [x] {agent: pipeline, depends: test-source-json-builder,
   depends: impl-source-json-model, id: impl-source-json-builder}
   Implement `archivist/pipeline/source_json.py::build_source_json(...)`.
   Drive info: read from a small new helper
@@ -720,7 +720,7 @@ updated: 2026-05-15T00:00:00.000Z
     happy-path with a known fixture, fallback when the file is
     missing).
 
-- [ ] {agent: pipeline, depends: test-canonical-photo, id: impl-canonical-photo}
+- [x] {agent: pipeline, depends: test-canonical-photo, id: impl-canonical-photo}
   Implement `select_canonical_photo` and `copy_canonical_photo` in
   `archivist/pipeline/capture.py`. The 5 supplemental captures stay
   in `<disc_dir>/captures/` untouched; `disc-photo.jpg` is a copy
@@ -755,7 +755,7 @@ updated: 2026-05-15T00:00:00.000Z
     the fake-Popen scaffolding from sprint-3's
     `test-rip-stderr-stream`.
 
-- [ ] {agent: pipeline, depends: impl-music-paths,
+- [x] {agent: pipeline, depends: impl-music-paths,
   depends: impl-folder-naming, depends: impl-track-rename,
   depends: impl-source-json-builder, depends: impl-canonical-photo,
   depends: impl-ready-marker, depends: impl-rip-log-writer,
@@ -845,7 +845,7 @@ updated: 2026-05-15T00:00:00.000Z
     cases pass. Existing terminal-ERROR + crash-recovery tests
     still pass.
 
-- [ ] {agent: pipeline, depends: test-process-ready-hook,
+- [x] {agent: pipeline, depends: test-process-ready-hook,
   depends: impl-working-dir-handoff, id: impl-process-ready-hook}
   Implement the post-rip hook helper and wire it into the state
   machine's READY-write path. New file `archivist/pipeline/
@@ -896,7 +896,7 @@ updated: 2026-05-15T00:00:00.000Z
     auto` within a second of READY landing, ahead of the 2-min
     backup-timer window).
 
-- [ ] {agent: pipeline, depends: impl-music-paths, id: impl-docs-paths}
+- [x] {agent: pipeline, depends: impl-music-paths, id: impl-docs-paths}
   Update `docs/operations/cm4-setup.md` with: the three new env
   vars + their defaults; the `/srv/music/` override block for the
   dogfood rig (point at `/srv/cd-music-stack/.env`'s `MUSIC_ROOT`
@@ -918,7 +918,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket B — sprint-3 polish carryovers
 
-- [ ] {agent: pipeline, depends: test-rip-progress-real-format,
+- [x] {agent: pipeline, depends: test-rip-progress-real-format,
   id: impl-rip-progress-real-format} Update the
   `parse_cdparanoia_progress` regex in `archivist/pipeline/
   rip_progress.py` to match the captured real-format fixture. The
@@ -933,7 +933,7 @@ updated: 2026-05-15T00:00:00.000Z
     (fake Popen yielding the fixture → `LoopState.rip_progress`
     populated) green.
 
-- [ ] {agent: pipeline, depends: test-wav-cleanup,
+- [x] {agent: pipeline, depends: test-wav-cleanup,
   id: impl-wav-cleanup} Implement post-FLAC WAV deletion in
   `archivist/drivers/ripper.py` (or `archivist/pipeline/rip.py` —
   whichever owns the per-track flac conversion loop). After each
@@ -946,7 +946,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** `tests/drivers/test_ripper.py` WAV-cleanup
     cases pass. Existing ripper tests pass.
 
-- [ ] {agent: pipeline, depends: test-library-legacy-adapter,
+- [x] {agent: pipeline, depends: test-library-legacy-adapter,
   id: impl-library-legacy-adapter} Extract a new
   `archivist/service/library.py` module containing
   `read_disc_summary(disc_dir) -> DiscSummary | None` and the
@@ -974,7 +974,7 @@ updated: 2026-05-15T00:00:00.000Z
     (with route handlers refactored, not behavior-changed for
     legacy folders).
 
-- [ ] {agent: pipeline, depends: impl-library-legacy-adapter,
+- [x] {agent: pipeline, depends: impl-library-legacy-adapter,
   depends: test-library-status-filter, id: impl-library-filter}
   Implement the `?status=` filter on `GET /library`. Default
   `success`. Mash Co. chip group at the top of the grid: 3
@@ -1015,7 +1015,7 @@ updated: 2026-05-15T00:00:00.000Z
     `test_eject.py`) eject cases pass. Existing state-machine
     tests that exercise EJECT still pass (signature unchanged).
 
-- [ ] {agent: pipeline, depends: test-waiting-remove-state,
+- [x] {agent: pipeline, depends: test-waiting-remove-state,
   depends: impl-eject-reliability,
   depends: impl-working-dir-handoff,
   id: impl-waiting-remove-state} Extend the loop state enum with
@@ -1038,7 +1038,7 @@ updated: 2026-05-15T00:00:00.000Z
     state correctly (manual sanity by the operator on the dogfood
     rig — no automated UI test).
 
-- [ ] {agent: pipeline, depends: test-manual-mode-state-gating,
+- [x] {agent: pipeline, depends: test-manual-mode-state-gating,
   depends: test-manual-mode-endpoints,
   depends: impl-waiting-remove-state,
   id: impl-manual-mode} Implement manual-mode gating + the new
@@ -1582,6 +1582,104 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-15 — pipeline — Wave 2 impls landed (16 commits, 256/256 green)
+
+All pipeline-owned Wave 2 work shipped as atomic commits in
+dependency-respecting order. Each commit turns its red Wave 1 test
+file green; the full suite ends at 256 passed, 0 failed.
+
+**Foundations:**
+- `f216d60` impl-source-json-model — `archivist/models/source.py`
+  with 9 Pydantic v2 sub-models (extra="forbid" throughout), read/
+  write helpers (.tmp + os.replace atomic), schema-mismatch +
+  malformed-JSON error paths.
+- `c4f3eea` impl-source-json-builder — `archivist/pipeline/
+  source_json.py::build_source_json`. Pure assembler; walks disc_dir
+  for files[] population; CDDA constants held in sprint-4;
+  detected_metadata stays all-null per D-source-json-v1.
+- `67daa6f` impl-folder-naming — `archivist/pipeline/folder_name.py
+  ::next_disc_folder_name`. Local-time YYYY-MM-DD_HHMM_disc-NNNNNN,
+  collision-guarded, ignores legacy CD_NNNN folders.
+
+**Pipeline helpers:**
+- `2522737` impl-track-rename — `rename_tracks_to_canonical` in
+  `pipeline/rip.py`: trackNN.cdda.flac → NN Track.flac, idempotent,
+  FileExistsError-guarded.
+- `04c891b` impl-canonical-photo — `select_canonical_photo` +
+  `copy_canonical_photo` in `pipeline/capture.py`. Prefers
+  disc_front_lit_002.jpg; supplementals stay in captures/.
+- `f1506fc` impl-wav-cleanup — `cleanup_wavs(audio_dir, *, keep=
+  False)`; pipeline-lane home (not tests/drivers/).
+
+**State-machine restructure:**
+- `666660b` impl-working-dir-handoff — major restructure. The
+  ArchivistLoop constructor accepts EITHER legacy `discs_root`
+  (sprint-3 mode preserved for the existing 18 test_loop.py cases)
+  OR the sprint-4 triple working_dir/inbox_dir/failed_dir.
+  Sprint-4 mode: STABILIZE mkdirs in working_dir; RIP writes
+  audio+rip.log there; CAPTURE writes source.json + disc-photo.jpg
+  then os.replace(working/folder → inbox/folder) AND THEN writes
+  READY; transitions to WAITING_REMOVE (not IDLE).
+
+  Folded in (single commit, tightly coupled): impl-failed-marker
+  (failure path writes FAILED+source.json+rip.log then moves
+  working/folder → failed_dir; never touches inbox) and impl-
+  waiting-remove-state (post-EJECT gate on physical removal).
+
+**Library UI:**
+- `05ae6f4` impl-library-legacy-adapter — `archivist/service/
+  library.py::read_disc_summary(disc_dir) -> DiscSummary | None`.
+  Reads both manifest.json (legacy) and source.json (new); prefers
+  source.json when both present and logs once.
+- `eeb3293` impl-library-filter — /library gains a 3-pill chip
+  group (success/failed/all, default success); active uses
+  --accent. Detail page accepts both folder shapes; new-shape
+  thumbnails via `/library/{disc_id}/photo`. `test_library.py`'s
+  legacy "all discs visible by default" assertion updated to
+  `?status=all` (documented contract change).
+
+**Bucket C UI + control surface:**
+- `80f00c1` + `359c103` impl-rip-progress-real-format — parser
+  rewritten against the fixture; module-level _last_track context
+  so bar lines emit "track N, P%" labels with their owning track.
+- `7e04232` impl-manual-mode — three components shipped together:
+  (1) `LoopState.mode: str = "auto"`; (2) `ArchivistLoop.advance(
+  trigger)` API with reset escape hatch; (3) /api/control/{mode,
+  start-rip,eject,capture,reset} endpoints with 200/400/403/409
+  semantics + /api/status surfacing `mode`.
+
+**Plumbing + ops:**
+- `2d65932` impl-music-paths — `__main__.py` reads MUSIC_INBOX_DIR
+  / MUSIC_WORKING_DIR / MUSIC_FAILED_DIR with legacy
+  ARCHIVIST_DISCS_ROOT alias + deprecation warning. Also wires
+  ARCHIVIST_MODE, the LoopState `loop=` injection for /api/control,
+  and create_app's discs_root → inbox_dir.
+- `b94cf77` impl-process-ready-hook — fire-and-forget
+  `subprocess.Popen` after the atomic READY rename via
+  `archivist/pipeline/post_rip_hook.py`. shlex.split argv form
+  (never shell=True); FileNotFoundError/PermissionError logged
+  WARNING and swallowed. READY itself now also written via
+  `.tmp` + os.replace for atomicity. Configured via
+  `ARCHIVIST_PROCESS_READY_HOOK` (default
+  `/srv/cd-music-stack/bin/process-ready-auto`; empty disables).
+- `da8b00c` impl-docs-paths — `docs/operations/cm4-setup.md`
+  rewritten with the full env-var matrix: MUSIC_*_DIR + legacy
+  alias + dogfood `/srv/music/...` override + the new
+  ARCHIVIST_MODE / KEEP_WAVS / PROCESS_READY_HOOK knobs.
+
+**Mid-sprint addition (post-rip hook):**
+- `cc408cf` test-process-ready-hook — 6 cases for the helper
+  (None/empty disable; argv form Popen; FileNotFoundError +
+  PermissionError swallow; shlex.split for command-with-args).
+- `b94cf77` impl-process-ready-hook — see above.
+
+**Status:** 256/256 tests passing across `tests/{models,pipeline,
+service,state_machine,test_main_logging}`. Sprint-4 pipeline scope
+complete. Single open follow-up: the post-rip hook fires
+ARCHIVIST_PROCESS_READY_HOOK in production but the operator-owned
+backup timer (`install-process-ready-timer`) is a separate
+non-pipeline task and untouched here.
 
 ### 2026-05-15 — planner — sprint-4 mid-sprint addition: post-rip hook + backup timer for `process-ready-auto`
 
