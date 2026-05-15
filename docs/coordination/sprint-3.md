@@ -141,7 +141,7 @@ updated: 2026-05-14T00:00:00.000Z
     `tests/service/test_app.py` gets one new case asserting
     `/api/status` round-trips `rip_progress`. Both fail until impl.
 
-- [ ] {agent: pipeline, id: test-last-tick} Failing tests for a new
+- [x] {agent: pipeline, id: test-last-tick} Failing tests for a new
   `last_tick_at: datetime` field on `LoopState` that updates every loop
   iteration (not just on transitions). The existing `last_updated` is
   renamed to `state_entered_at` and only updates on transitions

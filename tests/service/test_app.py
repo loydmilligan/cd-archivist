@@ -30,11 +30,15 @@ from archivist.service.app import LoopState, create_app
 
 @pytest.fixture
 def loop_state() -> LoopState:
+    # Sprint-3 / test-last-tick: `last_updated` was renamed to
+    # `state_entered_at`; `last_tick_at` is the new heartbeat field that
+    # updates every tick (not just on transitions). See Contract Changes.
     return LoopState(
         state="IDLE",
         disc_id=None,
         last_rip_status=None,
-        last_updated=datetime(2026, 5, 14, 12, 0, 0),
+        state_entered_at=datetime(2026, 5, 14, 12, 0, 0),
+        last_tick_at=datetime(2026, 5, 14, 12, 0, 0),
     )
 
 
@@ -56,7 +60,11 @@ def test_api_status_returns_loop_state_snapshot(loop_state: LoopState, log_path:
     assert body["state"] == "IDLE"
     assert body["disc_id"] is None
     assert body["last_rip_status"] is None
-    assert "last_updated" in body
+    # Sprint-3 / test-last-tick: snapshot exposes both timestamps as
+    # ISO strings; `last_updated` has been renamed to `state_entered_at`.
+    assert "state_entered_at" in body
+    assert "last_tick_at" in body
+    assert "last_updated" not in body
 
 
 def test_api_status_round_trips_rip_progress(loop_state: LoopState, log_path: Path) -> None:

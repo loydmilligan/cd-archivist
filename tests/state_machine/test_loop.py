@@ -154,6 +154,69 @@ def discs_root(tmp_disc_root) -> Path:
     return tmp_disc_root()
 
 
+# ---------------- last_tick_at heartbeat (sprint-3 / test-last-tick) ----
+
+
+def test_loop_state_has_both_timestamp_fields() -> None:
+    """LoopState gains last_tick_at and renames last_updated→state_entered_at."""
+    from archivist.service.app import LoopState
+
+    s = LoopState()
+    # Defaults — both populated.
+    assert s.state_entered_at is not None
+    assert s.last_tick_at is not None
+    # The old name is gone.
+    assert not hasattr(s, "last_updated")
+
+
+def test_tick_updates_last_tick_at_without_transition(discs_root: Path) -> None:
+    """A tick that does NOT transition state still bumps last_tick_at.
+
+    Heartbeat semantics: last_tick_at is "loop is alive"; state_entered_at
+    is "current state began at".
+    """
+    from archivist.service.app import LoopState
+
+    loop_state = LoopState()
+    loop, *_, clock = _make_loop(
+        statuses=["tray-open", "tray-open", "tray-open"], discs_root=discs_root
+    )
+    loop._loop_state = loop_state  # inject
+
+    before = loop_state.last_tick_at
+    clock.advance(0.05)
+    loop.tick()  # IDLE -> WAITING (transition)
+    after_transition = loop_state.last_tick_at
+    entered_after_transition = loop_state.state_entered_at
+    assert after_transition > before
+    assert entered_after_transition >= before
+
+    # Now stay in WAITING (tray-open keeps WAITING).
+    clock.advance(0.05)
+    loop.tick()  # WAITING (no transition)
+    assert loop_state.last_tick_at > after_transition, (
+        "last_tick_at must advance even when the state did not change"
+    )
+    assert loop_state.state_entered_at == entered_after_transition, (
+        "state_entered_at must NOT advance when the state did not change"
+    )
+
+
+def test_transition_updates_both_timestamps(discs_root: Path) -> None:
+    from archivist.service.app import LoopState
+
+    loop_state = LoopState()
+    loop, *_, clock = _make_loop(statuses=["tray-open"], discs_root=discs_root)
+    loop._loop_state = loop_state
+
+    entered_before = loop_state.state_entered_at
+    tick_before = loop_state.last_tick_at
+    clock.advance(0.1)
+    loop.tick()  # IDLE → WAITING
+    assert loop_state.state_entered_at > entered_before
+    assert loop_state.last_tick_at > tick_before
+
+
 # -------------------------- transitions -------------------------------
 
 
