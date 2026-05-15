@@ -899,6 +899,47 @@ _No ratifications yet._
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-14 — drivers — Wave 1 failing tests landed (3 tasks, 3 commits)
+
+All drivers-owned Wave 1 tasks closed. Loop-side assertions for
+`test-drive-missing` deferred to pipeline (state-machine territory).
+
+- **test-systemctl-scope** (`3f21947`) — 8 cases appended to
+  `tests/drivers/test_systemctl.py` per `D-cdplay-scope` option (a).
+  Three test the `scope=` kwarg on the existing API (TypeError until
+  impl): `scope="system"` keeps `["sudo", "systemctl", ...]`,
+  `scope="user"` switches to `["systemctl", "--user", ...]` for both
+  stop and start (no sudo on user scope). Five test the new
+  `find_unit_scope(name) -> Literal["system","user"] | None`
+  (ImportError until impl): user-only, system-only, both-active tie
+  goes to system, neither-active returns `None`, `FileNotFoundError`
+  on systemctl returns `None` with a warning. `find_unit_scope` is
+  imported lazily inside `_find_unit_scope()` so the existing 6
+  cases still PASS at collection.
+- **test-drive-missing** (`dcb9bba`) — 2 cases appended to
+  `tests/drivers/test_drive.py`. `FileNotFoundError` on `os.open`
+  → `read_drive_status` returns the new `"device-missing"` literal
+  (fails today: raw `FileNotFoundError` bubbles); `PermissionError`
+  still raises (passes today — confirms we're not over-catching).
+  The matching loop-level rate-limited-log test belongs to
+  `tests/state_machine/test_loop.py`, which pipeline owns; left for
+  them to land alongside `impl-loop-device-missing`.
+- **test-rip-stderr-stream** (`d132e9f`) — 4 cases appended to
+  `tests/drivers/test_ripper.py` for the Popen + live-streaming
+  refactor. The load-bearing case is
+  `test_rip_stderr_callback_fires_before_process_exit`: a
+  `_FakePopen` blocks on a gate after emitting 2 lines, the test
+  runs `rip()` in a thread and asserts ≥2 callbacks have fired
+  *before* `wait()` returns — proving the new shape isn't just
+  buffered playback. Why this refactor: the 2026-05-14 real-rig
+  rip exited 0 with zero diagnostic context because
+  `capture_output=True` buffered everything until exit. The
+  `progress_callback=None` default test trivially passes today —
+  future-proofs the API shape post-impl.
+
+Verified: full drivers suite passes the previously-green cases.
+`ruff check tests/drivers/` clean.
+
 ### 2026-05-14 — pipeline — Wave 1 failing tests landed (10 tasks, 10 commits)
 
 All pipeline-owned Wave 1 tasks closed; test-log-stream skipped per
