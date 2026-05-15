@@ -197,7 +197,7 @@ updated: 2026-05-14T00:00:00.000Z
     package root and there's no existing `tests/main/` dir). Three
     cases. Fails until `_configure_logging` is refactored.
 
-- [ ] {agent: drivers, id: test-drive-missing} Failing tests for
+- [x] {agent: drivers, id: test-drive-missing} Failing tests for
   distinguishing "device missing" from "device returned an error" in
   `archivist/drivers/drive.py`. Add a sentinel return value or a typed
   exception — proposal: extend the `DriveStatus` literal with

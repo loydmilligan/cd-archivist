@@ -141,3 +141,32 @@ def test_eject_returns_true_on_zero_ioctl(
     """ioctl returning 0 → eject returns True."""
     _patch_ioctl(monkeypatch, 0)
     assert _eject()(fake_device) is True
+
+
+# ---------------- "device-missing" literal (sprint-3) ----------------
+
+def test_device_missing_returns_literal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """FileNotFoundError on os.open → 'device-missing' (no exception bubble)."""
+    import archivist.drivers.drive as drive_mod
+
+    def fake_open(*_a: object, **_k: object) -> int:
+        raise FileNotFoundError("/dev/sr0")
+
+    monkeypatch.setattr(drive_mod.os, "open", fake_open)
+    assert read_drive_status(tmp_path / "ignored") == "device-missing"
+
+
+def test_permission_error_still_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """PermissionError is not transient — it must still bubble."""
+    import archivist.drivers.drive as drive_mod
+
+    def fake_open(*_a: object, **_k: object) -> int:
+        raise PermissionError("/dev/sr0")
+
+    monkeypatch.setattr(drive_mod.os, "open", fake_open)
+    with pytest.raises(PermissionError):
+        read_drive_status(tmp_path / "ignored")
