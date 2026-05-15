@@ -472,6 +472,50 @@ def test_error_state_holds_on_other_statuses(discs_root: Path) -> None:
         assert loop.state == State.ERROR
 
 
+def test_device_missing_logged_once_then_quiet(
+    discs_root: Path, caplog
+) -> None:
+    """drive() returning 'device-missing' triggers exactly one warning,
+    even if it persists for many ticks. Reset when the device returns."""
+    import logging as _logging
+
+    loop, *_ = _make_loop(
+        statuses=["device-missing"], discs_root=discs_root
+    )
+    caplog.set_level(_logging.WARNING)
+
+    for _ in range(10):
+        loop.tick()
+        assert loop.state == State.IDLE
+
+    msgs = [r.getMessage() for r in caplog.records if "device-missing" in r.getMessage()]
+    assert len(msgs) == 1, f"expected exactly one device-missing warning, got {len(msgs)}: {msgs!r}"
+
+
+def test_device_missing_resets_after_recovery(
+    discs_root: Path, caplog
+) -> None:
+    """If the device comes back and disappears again, the second
+    disappearance is logged again (the flag clears on recovery)."""
+    import logging as _logging
+
+    loop, *_ = _make_loop(
+        statuses=["device-missing", "device-missing", "tray-open", "device-missing"],
+        discs_root=discs_root,
+    )
+    caplog.set_level(_logging.WARNING)
+
+    loop.tick()  # missing — logs (1)
+    loop.tick()  # missing — silent
+    loop.tick()  # tray-open — clears the flag, transitions to WAITING
+    # Reset state for the next missing event.
+    loop.state = State.IDLE
+    loop.tick()  # missing again — logs (2)
+
+    msgs = [r.getMessage() for r in caplog.records if "device-missing" in r.getMessage()]
+    assert len(msgs) == 2, f"expected re-log after recovery, got {len(msgs)}: {msgs!r}"
+
+
 def test_full_cycle_creates_disc_folder_exactly_once(discs_root: Path) -> None:
     """prepare_disc_folder must be called once per cycle, not per tick.
 

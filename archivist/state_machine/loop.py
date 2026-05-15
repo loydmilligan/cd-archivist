@@ -98,6 +98,10 @@ class ArchivistLoop:
         self._stabilize_since: float | None = None
         self._cdplay_stopped: bool = False
         self._cycle = _Cycle()
+        # Sprint-3 / impl-loop-device-missing: log "device-missing" once
+        # per disconnect; reset when the device comes back so the next
+        # disconnect is re-logged.
+        self._device_missing_logged: bool = False
 
     # ------------------------- public API -----------------------------
 
@@ -137,6 +141,17 @@ class ArchivistLoop:
 
     def _from_idle(self) -> None:
         status = self._drive()
+        if status == "device-missing":
+            # Rate-limited: warn once per disconnect, reset on recovery.
+            if not self._device_missing_logged:
+                logger.warning(
+                    "CD-ROM device is missing (read_drive_status='device-missing'); "
+                    "loop will stay in IDLE until it reappears"
+                )
+                self._device_missing_logged = True
+            return
+        # Any other status counts as the device being present again.
+        self._device_missing_logged = False
         if status in ("tray-open", "disc-ok"):
             self._set_state(State.WAITING)
 

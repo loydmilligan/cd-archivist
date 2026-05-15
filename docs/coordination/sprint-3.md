@@ -499,7 +499,7 @@ updated: 2026-05-14T00:00:00.000Z
   - **Acceptance:** `tests/drivers/test_drive.py` all pass. Existing
     `eject` tests untouched.
 
-- [ ] {agent: pipeline, depends: impl-drive-missing, id: impl-loop-device-
+- [x] {agent: pipeline, depends: impl-drive-missing, id: impl-loop-device-
   missing} In `archivist/state_machine/loop.py`, add a class-level
   flag `_device_missing_logged: bool = False` (or use a `time.
   monotonic()`-based once-per-minute rate limiter). When `_drive()`
