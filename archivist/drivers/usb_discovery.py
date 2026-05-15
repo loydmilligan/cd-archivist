@@ -46,7 +46,10 @@ def discover_camera_usb_path(
 
     matches: list[tuple[int, str]] = []
     vendor, _, product = vendor_product.partition(":")
-    needle = f"{vendor}/{product}"
+    # uevent's PRODUCT= field strips leading zeros from each hex component
+    # (e.g. `0c45:6366` is encoded as `c45/6366/100`). Normalize both sides
+    # so configured ID matches reality regardless of leading-zero shape.
+    needle = f"{_norm_hex(vendor)}/{_norm_hex(product)}"
 
     for video_dir in candidates:
         n_match = _VIDEO_N_RE.search(video_dir.name)
@@ -57,7 +60,13 @@ def discover_camera_usb_path(
         except OSError:
             continue
         product_line = _find_field(body, "PRODUCT")
-        if not product_line or not product_line.startswith(needle):
+        if not product_line:
+            continue
+        parts = product_line.split("/")
+        if len(parts) < 2:
+            continue
+        actual = f"{_norm_hex(parts[0])}/{_norm_hex(parts[1])}"
+        if actual != needle:
             continue
         devpath = _find_field(body, "DEVPATH") or ""
         bus_path = _extract_bus_path(devpath)
@@ -79,6 +88,12 @@ def discover_camera_usb_path(
         env_var,
     )
     return None
+
+
+def _norm_hex(hex_id: str) -> str:
+    """Strip leading zeros, lowercase. Mirrors how the kernel encodes
+    PRODUCT= in /sys/.../uevent (e.g. `0c45` → `c45`)."""
+    return hex_id.lstrip("0").lower() or "0"
 
 
 def _find_field(uevent_body: str, key: str) -> str | None:
