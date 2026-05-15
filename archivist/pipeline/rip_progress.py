@@ -69,8 +69,22 @@ def _bar_percent(bar: str) -> int | None:
     return pct
 
 
+# Module-level context: cdparanoia emits a "outputting to trackNN" header
+# once per track and then floods stderr with bar lines that don't repeat
+# the track number. The parser keeps a small bit of state so bar updates
+# can be reported with their owning track.
+_last_track: int | None = None
+
+
+def reset_progress_context() -> None:
+    """Clear the cached track context. Call between rips to avoid bleed."""
+    global _last_track
+    _last_track = None
+
+
 def parse_cdparanoia_progress(line: str) -> str | None:
     """Return a short status label or None if the line is unrecognised."""
+    global _last_track
     if not line:
         return None
     line = line.strip()
@@ -79,32 +93,36 @@ def parse_cdparanoia_progress(line: str) -> str | None:
 
     m = _RE_FULL_PROGRESS.search(line)
     if m:
+        _last_track = int(m.group("track"))
         return f"track {m.group('track')}/{m.group('total')}, {m.group('pct')}%"
 
     m = _RE_OUTPUTTING.search(line)
     if m:
-        return f"track {int(m.group('track'))}"
+        n = int(m.group("track"))
+        _last_track = n
+        return f"track {n}"
 
     m = _RE_RIPPING_FROM.search(line)
     if m:
-        return f"track {int(m.group('track'))}"
+        n = int(m.group("track"))
+        _last_track = n
+        return f"track {n}"
 
     m_bar = _RE_BAR.search(line)
     if m_bar:
         pct = _bar_percent(m_bar.group("bar"))
         m_track = _RE_TRACK_PAREN.search(line)
-        track = int(m_track.group("track")) if m_track else None
+        track = int(m_track.group("track")) if m_track else _last_track
         if pct is not None and track is not None:
             return f"track {track}, {pct}%"
         if track is not None:
             return f"track {track}"
-        # Bar line without track context — caller's prior label still
-        # carries the track number, so we surface nothing here rather
-        # than emit a context-less "?%".
         return None
 
     m = _RE_TRACK_PAREN.search(line)
     if m:
-        return f"track {int(m.group('track'))}"
+        n = int(m.group("track"))
+        _last_track = n
+        return f"track {n}"
 
     return None
