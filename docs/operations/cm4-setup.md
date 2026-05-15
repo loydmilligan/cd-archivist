@@ -98,17 +98,55 @@ If Tasmota is unreachable at any step, log a warning and fall through to capturi
 
 ## Storage layout
 
+**Sprint-4 / D-music-pipeline-paths.** cd-archivist hands ripped discs
+off to a separate music-pipeline importer (Beets → Navidrome) via the
+filesystem. Three paths are env-driven:
+
+| Env var               | Default                          | Purpose                                                        |
+| --------------------- | -------------------------------- | -------------------------------------------------------------- |
+| `MUSIC_INBOX_DIR`     | `~/music-pipeline/inbox`         | Discs land here only AFTER `READY` is written (atomic handoff) |
+| `MUSIC_WORKING_DIR`   | `~/music-pipeline/.ripping`      | Per-disc scratch; folder moves to inbox on success             |
+| `MUSIC_FAILED_DIR`    | `~/music-pipeline/failed`        | Failed rips move here with a `FAILED` marker                   |
+
+**Legacy alias:** `ARCHIVIST_DISCS_ROOT` (sprint-1 through sprint-3)
+still works — it's silently treated as `MUSIC_INBOX_DIR` with a
+deprecation warning logged at startup. New deployments should set the
+three vars above.
+
+**Dogfood-rig override** (current CM4 at 192.168.6.38):
+```text
+/srv/music/inbox        ← MUSIC_INBOX_DIR=/srv/music/inbox
+/srv/music/.ripping     ← MUSIC_WORKING_DIR=/srv/music/.ripping
+/srv/music/failed       ← MUSIC_FAILED_DIR=/srv/music/failed
+```
+(matches `/srv/cd-music-stack/.env::MUSIC_ROOT=/srv/music`).
+
+**Per-disc folder shape (new):** `YYYY-MM-DD_HHMM_disc-NNNNNN/` with
+`source.json` (schema v1), `rip.log`, `disc-photo.jpg`,
+`NN Track.flac` files, and a `READY` marker once everything is in
+place. Per D-folder-naming-migration, legacy `CD_NNNN/` folders are
+NOT auto-migrated — the library UI surfaces both via
+`read_disc_summary` (the legacy adapter).
+
+**Logs + LED + camera** continue at:
 ```text
 /srv/cd-archivist/
-  discs/                CD_NNNN/ archival objects (canonical)
-  incoming-rips/        scratch space during rip
-  review/               manifests flagged for human review
-  logs/                 service logs
-
-/srv/music/             library — published reviewed/accepted discs
+  logs/                 service logs (ARCHIVIST_LOG_PATH)
 ```
 
-These paths are configurable via `.env` and `config/default.yaml`.
+### Other env knobs (sprint-4)
+
+| Env var                          | Default                                          | Purpose                                                |
+| -------------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| `ARCHIVIST_MODE`                 | `auto`                                           | `manual` makes the loop wait for `/api/control/*` triggers (D-manual-mode) |
+| `ARCHIVIST_KEEP_WAVS`            | unset (delete)                                   | `1`/`true`/`yes` to keep WAVs post-FLAC (D-wav-cleanup) |
+| `ARCHIVIST_PROCESS_READY_HOOK`   | `/srv/cd-music-stack/bin/process-ready-auto`     | Fire-and-forget command after each READY rename. Empty string disables (D-process-ready-trigger). |
+| `ARCHIVIST_LOG_PATH`             | `/srv/cd-archivist/logs/archivist.log`           | Pipeline log destination                                |
+| `ARCHIVIST_PORT`                 | `8228`                                           | FastAPI status surface                                  |
+| `ARCHIVIST_DEVICE`               | `/dev/sr0`                                       | CD-ROM device                                           |
+| `ARCHIVIST_LED_BASE`             | `http://192.168.5.186`                           | Tasmota LED panel endpoint                              |
+| `ARCHIVIST_VIDEO_DEVICE`         | `/dev/video0`                                    | v4l2 device for captures                                |
+
 
 ## Required system packages
 
