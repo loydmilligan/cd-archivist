@@ -1,0 +1,41 @@
+cdparanoia III release 10.2 (September 11, 2008)
+
+Ripping from sector       0 (track  1 [00:00:00.00])
+	  to sector  133199 (track 12 [02:57:74])
+
+outputting to track01.cdda.wav
+
+ (== PROGRESS == [                              | 000000 00 ] == :^D * ==)
+ (== PROGRESS == [+                             | 000928 00 ] == :^D * ==)
+ (== PROGRESS == [+ +                           | 002432 00 ] == :^D * ==)
+ (== PROGRESS == [+ + .                         | 004832 00 ] == :^D * ==)
+ (== PROGRESS == [+ + . +                       | 007232 00 ] == :^D * ==)
+ (== PROGRESS == [+ + . + .                     | 010432 00 ] == :^D * ==)
+ (== PROGRESS == [+ + . + . +                   | 013632 00 ] == :^D * ==)
+ (== PROGRESS == [+ + . + . + +                 | 016832 00 ] == :^D * ==)
+ (== PROGRESS == [...............               | 022127 00 ] == :^D * ==)
+
+outputting to track02.cdda.wav
+
+ (== PROGRESS == [                              | 022128 00 ] == :^D * ==)
+ (== PROGRESS == [+                             | 025328 00 ] == :^D * ==)
+ (== PROGRESS == [+ +                           | 029528 00 ] == :^D * ==)
+ (== PROGRESS == [+ + +                         | 035928 00 ] == :^D * ==)
+ (== PROGRESS == [........................+     | 041527 00 ] == :^D * ==)
+
+outputting to track03.cdda.wav
+
+ (== PROGRESS == [                              | 041528 00 ] == :^D * ==)
+ (== PROGRESS == [..+                           | 047728 00 ] == :^D * ==)
+ (== PROGRESS == [........................+     | 056639 00 ] == :^D * ==)
+
+outputting to track04.cdda.wav
+
+ (== PROGRESS == [..+                           | 064928 00 ] == :^D * ==)
+ (== PROGRESS == [................+             | 080639 00 ] == :^D * ==)
+
+outputting to track12.cdda.wav
+
+ (== PROGRESS == [............................+ | 132432 04 ] == :^D * ==)
+
+Done.
