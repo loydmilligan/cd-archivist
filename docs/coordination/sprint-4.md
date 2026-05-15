@@ -291,7 +291,7 @@ updated: 2026-05-15T00:00:00.000Z
     py`. Six cases. Fails until impl. Helper lives in
     `archivist/pipeline/source_json.py` (new file).
 
-- [ ] {agent: drivers, id: test-rip-log-writer} Failing tests for the
+- [x] {agent: drivers, id: test-rip-log-writer} Failing tests for the
   new per-disc `rip.log` plain-text writer. New helper
   `archivist/drivers/rip_log.py::RipLogWriter` (context-manager
   style): construct with the disc-folder path, the writer opens
