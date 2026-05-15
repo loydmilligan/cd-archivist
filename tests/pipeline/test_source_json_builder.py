@@ -273,9 +273,9 @@ def test_timestamps_carry_offsets(tmp_path: Path) -> None:
 
     blob = s.model_dump_json()
     inserted = ts.inserted_at.isoformat()
-    # Either the serialized form has the offset literally, or its
-    # presence is observable via roundtripping to a tz-aware datetime.
+    # The source datetime carries an offset.
     assert "+" in inserted or "-" in inserted[-6:]
-    # Make sure naive `Z` is NOT used anywhere in the timestamp block.
-    assert '"inserted_at": "' in blob
+    # And the serialized JSON preserves it — no naive `Z` suffix on
+    # the timestamp.
+    assert '"inserted_at":' in blob
     assert "Z\"" not in blob
