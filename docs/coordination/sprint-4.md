@@ -114,6 +114,66 @@ updated: 2026-05-15T00:00:00.000Z
     `ssh cm4 'ls /srv/music/inbox/'`; and a test
     `docker exec -it cd_beets beet import /downloads/CD_0018/` works.
 
+- [ ] {agent: operator, id: install-process-ready-timer} **Operator-
+  owned — human-driven, not an agent task.** Backup trigger for
+  `process-ready-auto`: install a systemd user timer that runs
+  `/srv/cd-music-stack/bin/process-ready-auto` every 2 minutes
+  regardless of whether cd-archivist's post-rip hook fired. This is
+  the belt half of the belt+suspenders design captured in
+  `D-process-ready-trigger` — the primary trigger is the in-process
+  hook from `impl-process-ready-hook`; this timer catches any READY
+  marker the hook missed (cd-archivist crashed mid-eject, hook env
+  var unset, hook subprocess failed silently, etc.). Does NOT gate
+  Wave 1 (unlike `migrate-music-stack`); install any time before
+  sprint-4 closes. Lives in the music-stack repo / setup, not
+  cd-archivist code. Operator copy-pastes the unit files below.
+
+  **`/srv/cd-music-stack/process-ready-auto.service`:**
+
+  ```ini
+  [Unit]
+  Description=cd-archivist music-stack: process READY-marked rips
+  After=docker.service
+
+  [Service]
+  Type=oneshot
+  User=mmariani
+  ExecStart=/srv/cd-music-stack/bin/process-ready-auto
+  ```
+
+  **`/srv/cd-music-stack/process-ready-auto.timer`:**
+
+  ```ini
+  [Unit]
+  Description=Run process-ready-auto every 2 minutes (backup to cd-archivist post-rip hook)
+
+  [Timer]
+  OnBootSec=2min
+  OnUnitActiveSec=2min
+  Persistent=true
+
+  [Install]
+  WantedBy=timers.target
+  ```
+
+  Install via user units (no system-level sudo needed):
+
+  ```sh
+  mkdir -p ~/.config/systemd/user
+  cp /srv/cd-music-stack/process-ready-auto.service ~/.config/systemd/user/
+  cp /srv/cd-music-stack/process-ready-auto.timer   ~/.config/systemd/user/
+  systemctl --user daemon-reload
+  systemctl --user enable --now process-ready-auto.timer
+  ```
+
+  - **Acceptance:** `systemctl --user list-timers` lists
+    `process-ready-auto.timer` with a `NEXT` time within 2 minutes;
+    `systemctl --user status process-ready-auto.timer` shows
+    `active (waiting)`; after one tick, `journalctl --user -u
+    process-ready-auto.service -n 50` shows the script ran.
+    Documented inline in the coord doc; no code in cd-archivist
+    changes for this task.
+
 ### Wave 1 — Failing tests (parallel-safe)
 
 #### Bucket A — music-pipeline contract conformance
@@ -329,6 +389,38 @@ updated: 2026-05-15T00:00:00.000Z
   (existing cdplay-paired invariant).
   - **Acceptance:** Five cases added to `tests/state_machine/test_
     loop.py`. Fails until `impl-failed-marker`.
+
+- [ ] {agent: pipeline, id: test-process-ready-hook} Failing tests for
+  the new post-rip hook helper `archivist/pipeline/post_rip_hook.py::
+  run_process_ready_hook(hook_cmd: str | None) -> None`. Captures the
+  primary half of the belt+suspenders design in
+  `D-process-ready-trigger`: after the atomic `READY` write succeeds,
+  cd-archivist fire-and-forget invokes the music-pipeline's
+  `process-ready-auto` script so the import kicks off with zero
+  latency rather than waiting up to 2 minutes for the systemd backup
+  timer (`install-process-ready-timer`). The helper takes a single
+  operator-configured shell command string (split via `shlex.split`,
+  shell-disabled `subprocess.Popen` argv form). Tests in `tests/
+  pipeline/test_post_rip_hook.py` (new file) using `fake_subprocess`
+  from `conftest.py`: (a) `hook_cmd is None` → returns early, no
+  subprocess call observed; (b) `hook_cmd == ""` (empty string) →
+  same early return, no subprocess call (operator-disable path); (c)
+  `hook_cmd == "/srv/cd-music-stack/bin/process-ready-auto"` →
+  `subprocess.Popen` called once with `["/srv/cd-music-stack/bin/
+  process-ready-auto"]` (argv form, `shell=False`); helper does NOT
+  call `.wait()` / `.communicate()` (fire-and-forget — the state
+  machine continues to WAITING_REMOVE without blocking on the
+  import); (d) `FileNotFoundError` raised by `Popen` (script not
+  present) → logged at WARNING via the module logger naming the
+  command, swallowed (the helper does not raise into the state
+  machine); (e) `PermissionError` raised by `Popen` → same
+  swallow-and-warn behavior as (d); (f) command with arguments
+  (e.g. `"/usr/bin/env bash -lc /srv/cd-music-stack/bin/process-
+  ready-auto"`) → split via `shlex.split`, passed as the argv list
+  to `Popen` (regression check that we don't hand the raw string
+  to a shell).
+  - **Acceptance:** New file `tests/pipeline/test_post_rip_hook.py`.
+    Six cases. Fails until `impl-process-ready-hook`.
 
 #### Bucket B — sprint-3 polish carryovers (proven by CD_0018)
 
@@ -752,6 +844,57 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** `tests/state_machine/test_loop.py` failed-disc
     cases pass. Existing terminal-ERROR + crash-recovery tests
     still pass.
+
+- [ ] {agent: pipeline, depends: test-process-ready-hook,
+  depends: impl-working-dir-handoff, id: impl-process-ready-hook}
+  Implement the post-rip hook helper and wire it into the state
+  machine's READY-write path. New file `archivist/pipeline/
+  post_rip_hook.py` with `run_process_ready_hook(hook_cmd: str |
+  None) -> None`: empty / `None` → early return; otherwise
+  `shlex.split(hook_cmd)` → `subprocess.Popen(argv, shell=False,
+  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+  start_new_session=True)`; do NOT call `.wait()` (fire-and-forget,
+  state machine must not block on the music-pipeline import).
+  `FileNotFoundError` and `PermissionError` are caught and logged at
+  WARNING with the offending command in the message — never
+  propagate (the rip succeeded; a missing importer must not poison
+  the state machine).
+
+  Module docstring documents the coupling: this helper invokes a
+  specific music-pipeline script (`process-ready-auto`) on the
+  dogfood rig where cd-archivist and the music stack are
+  co-located on the same CM4. The env override
+  `ARCHIVIST_PROCESS_READY_HOOK` lets other deployments swap the
+  command (e.g. `ssh importer-host /srv/cd-music-stack/bin/
+  process-ready-auto`) or disable the hook entirely (empty
+  string). The systemd backup timer in
+  `install-process-ready-timer` is the safety net for any case
+  the hook misses.
+
+  Wire-in: `LoopState` gains
+  `process_ready_hook: str = ""` populated by
+  `archivist/__main__.py` from env
+  `ARCHIVIST_PROCESS_READY_HOOK` (default
+  `/srv/cd-music-stack/bin/process-ready-auto` when unset; empty
+  string disables). In `archivist/state_machine/loop.py::
+  _from_capture`, immediately after the atomic `READY.tmp →
+  READY` rename succeeds (the last step landed in
+  `impl-working-dir-handoff`), call
+  `run_process_ready_hook(loop_state.process_ready_hook)`. The
+  state machine then proceeds to `WAITING_REMOVE` (Bucket C) /
+  IDLE (today) without waiting for the importer subprocess to
+  finish. Log a single rip.log line `process-ready hook fired:
+  <cmd>` (or `process-ready hook disabled` when the cmd is empty)
+  for operator forensics.
+  - **Acceptance:** `tests/pipeline/test_post_rip_hook.py` passes.
+    `tests/state_machine/test_loop.py` gains one case asserting
+    that after the READY rename, the hook is called once with the
+    configured command (use `fake_subprocess` + assert on the
+    captured argv); existing cases continue to pass. Manual
+    sanity deferred to operator real-rig run after sprint-4
+    closes (a successful rip should kick off `process-ready-
+    auto` within a second of READY landing, ahead of the 2-min
+    backup-timer window).
 
 - [ ] {agent: pipeline, depends: impl-music-paths, id: impl-docs-paths}
   Update `docs/operations/cm4-setup.md` with: the three new env
@@ -1219,6 +1362,62 @@ same Mash Co. chip/button styling.
 `mode==auto`); `/api/control/reset` (200 in any mode/state —
 operator escape hatch).
 
+### 2026-05-15 — D-process-ready-trigger — dual-trigger design for invoking `process-ready-auto` (in-process hook + systemd backup timer)
+
+**Proposed.** Gap surfaced mid-sprint-4: the music-pipeline contract
+(handoff doc + sprint-4 Bucket A) has cd-archivist write a `READY`
+marker into `<inbox>/<folder>/`, but `process-ready-auto` is a
+one-shot script — nothing in the contract actually invokes it.
+Without an external trigger, READY-marked folders pile up in inbox
+indefinitely. Two complementary triggers ship:
+
+1. **Primary — in-process post-rip hook (cd-archivist code).**
+   Immediately after the atomic `READY.tmp → READY` rename
+   succeeds in `_from_capture`, cd-archivist invokes
+   `process-ready-auto` fire-and-forget via
+   `subprocess.Popen(argv, shell=False, start_new_session=True)`.
+   No `.wait()`. State machine continues to `WAITING_REMOVE`
+   without blocking on the import. Configured via env
+   `ARCHIVIST_PROCESS_READY_HOOK` (default
+   `/srv/cd-music-stack/bin/process-ready-auto` since the
+   dogfood rig has the music stack co-located there; empty
+   string disables; any other command swaps the hook for non-
+   co-located deployments). Lives in
+   `archivist/pipeline/post_rip_hook.py` (impl in
+   `impl-process-ready-hook`, tests in
+   `test-process-ready-hook`). `FileNotFoundError` /
+   `PermissionError` from the subprocess are logged at WARNING
+   and swallowed — a missing or unrunnable importer must NOT
+   poison the state machine.
+
+2. **Backup — systemd user timer (music-stack ops, not
+   cd-archivist code).** A `process-ready-auto.timer` user unit
+   runs the script every 2 minutes regardless. Catches anything
+   the hook missed: cd-archivist crashed mid-eject, hook env var
+   was unset, hook subprocess silently failed, operator disabled
+   the hook deliberately, etc. Lives in `/srv/cd-music-stack/`
+   on the CM4 (`install-process-ready-timer` in Wave 0; the
+   operator copy-pastes the unit files documented inline in that
+   task). Does NOT gate Wave 1 — install any time before
+   sprint-4 closes.
+
+**Why both.** The hook is zero-latency for the happy path (import
+kicks off within a second of READY landing — operator gets the
+disc back into Navidrome / Jellyfin almost immediately, which
+matters when ripping a stack). The timer is the robustness layer
+for every failure mode of the hook: process crash, env mis-config,
+operator-driven disable, future deployments where cd-archivist and
+the importer aren't co-located. Belt + suspenders, both cheap.
+
+**Why a script-specific coupling is acceptable.** The default hook
+command (`/srv/cd-music-stack/bin/process-ready-auto`) hard-couples
+cd-archivist to a specific music-pipeline path on the dogfood rig.
+This is fine for v1 because (a) the env var lets any other
+deployment override or disable it, and (b) the cd-archivist v1
+audience is the dogfood rig itself. The module docstring and the
+`ARCHIVIST_PROCESS_READY_HOOK` env var name make the coupling and
+the escape hatch obvious.
+
 ## Ratification Log
 
 <!-- Same shape as Decision Log; entries land here when a
@@ -1383,6 +1582,55 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-15 — planner — sprint-4 mid-sprint addition: post-rip hook + backup timer for `process-ready-auto`
+
+Real gap surfaced by the user mid-Wave-2: the music-pipeline
+contract has cd-archivist write a `READY` marker, but
+`process-ready-auto` is a one-shot script — nothing in sprint-4 (or
+the handoff doc) actually invoked it after the marker landed.
+Without an external trigger, READY-marked folders would pile up in
+inbox indefinitely. Belt+suspenders fix lands as a small additive
+patch (does NOT restructure the existing dependency graph):
+
+1. **Primary trigger (cd-archivist code, Bucket A).** New
+   `archivist/pipeline/post_rip_hook.py::run_process_ready_hook`
+   fire-and-forgets `subprocess.Popen` against the operator-
+   configured command after the atomic `READY` rename succeeds.
+   `LoopState.process_ready_hook` populated from env
+   `ARCHIVIST_PROCESS_READY_HOOK` (default
+   `/srv/cd-music-stack/bin/process-ready-auto`; empty string
+   disables). Tests + impl land as a sibling pair to the
+   existing `READY`-write code in `impl-working-dir-handoff`
+   (kept as a separate task — distinct concern, distinct test
+   file — so the integration-heavy `impl-working-dir-handoff`
+   stays focused on the working-dir handoff itself and the hook
+   doesn't bleed into its acceptance criteria).
+
+2. **Backup trigger (operator-owned, Wave 0 sibling to
+   `migrate-music-stack`).** New
+   `install-process-ready-timer` task: systemd user timer +
+   service unit running `process-ready-auto` every 2 minutes
+   regardless. Lives in `/srv/cd-music-stack/`, not in
+   cd-archivist code. Does NOT gate Wave 1 — install any time
+   before sprint-4 closes.
+
+**Tasks added (3 total — 1 Wave 1 test + 1 Wave 2 impl + 1 Wave 0
+operator):** `test-process-ready-hook` (Wave 1, Bucket A);
+`impl-process-ready-hook` (Wave 2, Bucket A; depends
+`test-process-ready-hook` + `impl-working-dir-handoff` so the
+hook fires off the same READY-write call site that
+`impl-working-dir-handoff` introduces); `install-process-ready-
+timer` (Wave 0, operator). One new decision-log entry:
+`D-process-ready-trigger`. Total decision-log entries proposed
+for sprint-4 ratification: 11 (was 10). No other tasks touched.
+
+**Updated sprint-4 task counts:**
+- Wave 0 (operator-driven): 2 tasks (1 complete + 1 new pending)
+- Wave 1 failing tests: 12 (Bucket A) + 3 (Bucket B) + 4 (Bucket C) = **19 tests**
+- Wave 2 impls: 11 (Bucket A) + 1 docs (Bucket A) + 3 (Bucket B) + 3 (Bucket C) = **18 impls**
+- Stretch: 2 (unchanged)
+- **Total: 41 tasks** (was 38).
 
 ### 2026-05-15 — pipeline — Wave 1 failing tests landed (14 tasks, 14 commits)
 
