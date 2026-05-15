@@ -219,7 +219,7 @@ updated: 2026-05-14T00:00:00.000Z
     after the literal extension (the new value is never returned in
     the existing test paths).
 
-- [ ] {agent: pipeline, id: test-rip-error-recovery} Failing test for
+- [x] {agent: pipeline, id: test-rip-error-recovery} Failing test for
   the RIP→ERROR (or RIP→WAITING-after-backoff) recovery path. Per
   `D-rip-failure-error` (Decision Log) the chosen recovery is a
   terminal `ERROR` state that the loop sits in until the operator ejects

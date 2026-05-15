@@ -305,9 +305,12 @@ def test_eject_calls_drive_and_restarts_cdplay(discs_root: Path) -> None:
 
 
 def test_rip_exception_still_restarts_cdplay(discs_root: Path) -> None:
-    """If rip_disc raises, services.start_unit('cdplay.service') still fires.
+    """Sprint-3 / test-rip-error-recovery: rip_disc raising transitions to
+    ERROR, restarts cdplay, and surfaces the failure in the manifest.
 
-    Crash recovery invariant: cdplay must never be left stopped.
+    Crash recovery invariant: cdplay must never be left stopped. The
+    exception is caught by the loop and the rig parks in ERROR until
+    the operator ejects.
     """
     loop, _, _, services, _, _, clock = _make_loop(
         statuses=["disc-ok"],
@@ -318,15 +321,75 @@ def test_rip_exception_still_restarts_cdplay(discs_root: Path) -> None:
     loop.tick()  # WAITING -> STABILIZE
     clock.advance(2.1)
     loop.tick()  # STABILIZE -> RIP
+    loop.tick()  # RIP raises internally → caught → ERROR
 
-    with pytest.raises(RuntimeError):
-        loop.tick()  # RIP raises — but the start_unit MUST still have fired.
-
+    assert loop.state == State.ERROR
     assert "stop:cdplay.service" in services.events
     assert "start:cdplay.service" in services.events
     assert services.events.index("stop:cdplay.service") < services.events.index(
         "start:cdplay.service"
     )
+
+    # Manifest reflects the failure.
+    manifest = read_manifest(discs_root / "CD_0001" / "manifest.json")
+    assert manifest.status == "rip_failed"
+
+
+# --------------- ERROR state recovery (sprint-3 / test-rip-error-recovery) -
+
+
+def test_rip_status_fail_transitions_to_error(discs_root: Path) -> None:
+    """rip_disc returning RipResult(status='fail') → ERROR (same as raising)."""
+    fail_result = RipResult(status="fail", tracks=[], errors=["read errors"])
+    loop, _, _, services, _, _, clock = _make_loop(
+        statuses=["disc-ok"], discs_root=discs_root, rip_result=fail_result
+    )
+    loop.tick()  # IDLE -> WAITING
+    loop.tick()  # WAITING -> STABILIZE
+    clock.advance(2.1)
+    loop.tick()  # STABILIZE -> RIP
+    loop.tick()  # RIP -> ERROR (status=fail short-circuit)
+
+    assert loop.state == State.ERROR
+    assert "start:cdplay.service" in services.events
+    manifest = read_manifest(discs_root / "CD_0001" / "manifest.json")
+    assert manifest.status == "rip_failed"
+
+
+def test_error_state_tray_open_returns_to_idle(discs_root: Path) -> None:
+    """From ERROR, tray-open is the only exit — cleanup and back to IDLE."""
+    loop, drive, _, _, _, _, clock = _make_loop(
+        statuses=["disc-ok", "disc-ok", "disc-ok", "tray-open"],
+        discs_root=discs_root,
+        rip_result=RuntimeError("boom"),
+    )
+    loop.tick()  # IDLE -> WAITING
+    loop.tick()  # WAITING -> STABILIZE
+    clock.advance(2.1)
+    loop.tick()  # STABILIZE -> RIP
+    loop.tick()  # RIP -> ERROR  (consumes one of the disc-ok statuses)
+    # ERROR state should ignore drive() calls except for the tray-open exit.
+    loop.tick()  # ERROR + tray-open → IDLE
+    assert loop.state == State.IDLE
+
+
+def test_error_state_holds_on_other_statuses(discs_root: Path) -> None:
+    """ERROR + disc-ok / no-disc / drive-not-ready → stay in ERROR."""
+    loop, *_, clock = _make_loop(
+        statuses=["disc-ok"],  # constant — always disc-ok
+        discs_root=discs_root,
+        rip_result=RuntimeError("boom"),
+    )
+    loop.tick()  # IDLE -> WAITING
+    loop.tick()  # WAITING -> STABILIZE
+    clock.advance(2.1)
+    loop.tick()  # STABILIZE -> RIP
+    loop.tick()  # RIP -> ERROR
+    assert loop.state == State.ERROR
+    # Repeated ticks with disc-ok must NOT advance — operator must eject.
+    for _ in range(3):
+        loop.tick()
+        assert loop.state == State.ERROR
 
 
 def test_full_cycle_creates_disc_folder_exactly_once(discs_root: Path) -> None:
