@@ -148,7 +148,10 @@ NOT auto-migrated — the library UI surfaces both via
 | `ARCHIVIST_VIDEO_DEVICE`         | `/dev/video0`                                    | v4l2 device for captures                                |
 
 
-## Required system packages
+## Runtime apt dependencies
+
+The cd-archivist drivers shell out to several binaries at runtime. On a
+fresh CM4 image (Debian / Raspberry Pi OS), install them all in one go:
 
 ```bash
 sudo apt install -y \
@@ -158,6 +161,24 @@ sudo apt install -y \
   v4l-utils \
   eject
 ```
+
+Per-binary breakdown (which driver calls what, and which apt package
+ships it):
+
+| Binary | Driver callsite | apt package | Notes |
+|---|---|---|---|
+| `cdparanoia` | `archivist/drivers/ripper.py` (`CDAudioRipper.rip` via `Popen`) | `cdparanoia` | Bit-perfect audio CD ripper. **Not installed by default** — operator hit this on the CD_0017 smoke. |
+| `flac` | `archivist/drivers/ripper.py` (`subprocess.run(["flac", "--best", ...])`) | `flac` | Encodes each ripped WAV. **Not installed by default.** |
+| `ffmpeg` | `archivist/drivers/camera.py` (`capture_frame` v4l2 grab) | `ffmpeg` | Single-frame webcam capture per `D-camera-autodiscover`. |
+| `eject` | `archivist/drivers/drive.py` (`eject(device)`) | `util-linux` (binary ships as `eject` in Debian; `apt install eject` on bullseye/bookworm is also fine) | **Sprint-4 dep.** Per `D-eject-via-shell`, replaced the `CDROMEJECT` ioctl (which was silently ignored by the dogfood USB drive — real-rig finding from CD_0018, validated post-impl on 2026-05-15: tray now opens). |
+| `v4l-utils` | (operator debug only — `v4l2-ctl --list-devices` for camera discovery) | `v4l-utils` | Not invoked from Python; useful when `discover_camera_usb_path` returns `None`. |
+| `systemctl` | `archivist/drivers/systemctl.py` (`stop_unit` / `start_unit` / `find_unit_scope`) | `systemd` | Base system; always present on the CM4. |
+| `sudo` | `archivist/drivers/systemctl.py` (`scope="system"` argv) + `archivist/drivers/camera.py` (USB unbind/rebind recovery) | `sudo` | Base system. Requires the NOPASSWD sudoers fragment — see § "NOPASSWD sudo fragment" below. |
+| `sh` / `tee` | `archivist/drivers/camera.py::_rebind_usb` (`sudo sh -c 'echo $usb_path | sudo tee /sys/bus/usb/drivers/usb/{unbind,bind}'`) | `dash` / `coreutils` | Base system; always present. |
+
+Operator workflow tooling (beets / Navidrome / Jellyfin) is in a
+separate stack — see the sprint-4 Wave 0 migration notes. Not invoked
+from cd-archivist's drivers.
 
 Optional:
 - `cdrdao` — only if we add cue-sheet generation
