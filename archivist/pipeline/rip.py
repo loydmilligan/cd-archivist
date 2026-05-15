@@ -16,6 +16,7 @@ from archivist.models.manifest import RipRecord
 
 _CDDA_FLAC_RE = re.compile(r"^track(\d{2})\.cdda\.flac$")
 _CANONICAL_FLAC_RE = re.compile(r"^(\d{2}) Track\.flac$")
+_CDDA_WAV_RE = re.compile(r"^track(\d{2})\.cdda\.wav$")
 
 
 def rip_disc(
@@ -82,6 +83,40 @@ def rename_tracks_to_canonical(audio_dir: Path) -> list[Path]:
     for n, p in existing_canonical.items():
         final.setdefault(n, p)
     return [final[n] for n in sorted(final)]
+
+
+def cleanup_wavs(audio_dir: Path, *, keep: bool = False) -> list[Path]:
+    """Delete `trackNN.cdda.wav` files whose `.flac` sibling exists.
+
+    Per D-wav-cleanup. Returns the paths that were deleted (empty list
+    when `keep=True` or nothing matched). A WAV without a matching FLAC
+    is preserved — it likely indicates a failed conversion the operator
+    needs for debugging.
+
+    Raises `FileNotFoundError` / `NotADirectoryError` when `audio_dir`
+    isn't a directory.
+    """
+    if not audio_dir.exists():
+        raise FileNotFoundError(audio_dir)
+    if not audio_dir.is_dir():
+        raise NotADirectoryError(audio_dir)
+    if keep:
+        return []
+
+    deleted: list[Path] = []
+    for p in sorted(audio_dir.iterdir()):
+        if not p.is_file():
+            continue
+        m = _CDDA_WAV_RE.match(p.name)
+        if not m:
+            continue
+        n = m.group(1)
+        flac = audio_dir / f"track{n}.cdda.flac"
+        canonical = audio_dir / f"{n} Track.flac"
+        if flac.is_file() or canonical.is_file():
+            p.unlink()
+            deleted.append(p)
+    return deleted
 
 
 def _ripper_accepts_progress(ripper: Ripper) -> bool:
