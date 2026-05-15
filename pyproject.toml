@@ -29,7 +29,5 @@ exclude = ["tests*", "src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Legacy top-level tests reference the deprecated src/cd_archivist package
-# (superseded by archivist/ per sprint-1 plan). Ignored until removed.
-addopts = "--strict-markers --strict-config --ignore-glob=tests/test_*.py"
+addopts = "--strict-markers --strict-config"
 norecursedirs = [".git", "build", "dist", "src"]

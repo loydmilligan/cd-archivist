@@ -180,7 +180,7 @@ updated: 2026-05-14T00:00:00.000Z
     keyword-only param with a `"system"` default. New cases fail until
     impl.
 
-- [ ] {agent: pipeline, id: test-log-fallback} Failing tests for the
+- [x] {agent: pipeline, id: test-log-fallback} Failing tests for the
   graceful-degradation path in `archivist/__main__.py::_configure_
   logging`. When `log_path.parent` cannot be created (e.g.
   `PermissionError` writing under `/srv/...` from a laptop dev shell),
