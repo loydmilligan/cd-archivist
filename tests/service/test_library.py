@@ -224,3 +224,55 @@ def test_library_detail_log_tail_when_logs_present(client: TestClient) -> None:
     body = client.get("/library/CD_0001").text
     # Fixture wrote logs/rip.log; the page tails it.
     assert "ripping" in body or "ok" in body
+
+
+# -------- asset serving (test-library-asset-serving) -----------------
+
+
+def test_capture_endpoint_serves_jpg(client: TestClient) -> None:
+    resp = client.get("/library/CD_0001/captures/disc_front_lit_001.jpg")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/jpeg"
+    assert resp.content.startswith(b"\xff\xd8")
+
+
+def test_audio_endpoint_serves_flac(client: TestClient) -> None:
+    resp = client.get("/library/CD_0001/audio/track01.flac")
+    assert resp.status_code == 200
+    # Accept any flac variant (audio/flac, audio/x-flac); impl-library
+    # sets the media_type explicitly per task body.
+    ct = resp.headers["content-type"]
+    assert "flac" in ct.lower(), f"unexpected content-type: {ct!r}"
+    assert resp.content.startswith(b"fLaC")
+
+
+def test_traversal_attempts_return_404(
+    client: TestClient, discs_root: Path, tmp_path: Path
+) -> None:
+    """Path-traversal must never serve files outside the disc_dir."""
+    secret = tmp_path / "secret.txt"
+    secret.write_text("PASSWORD=hunter2")
+    paths_to_try = [
+        "/library/CD_0001/captures/../../../secret.txt",
+        "/library/CD_0001/captures/..%2F..%2F..%2Fsecret.txt",
+        "/library/CD_0001/audio/../../secret.txt",
+        "/library/CD_0001/captures//etc/passwd",
+    ]
+    for p in paths_to_try:
+        resp = client.get(p)
+        assert resp.status_code in (404, 400), f"{p!r} returned {resp.status_code}"
+        assert b"PASSWORD" not in resp.content
+
+
+def test_missing_asset_returns_404(client: TestClient) -> None:
+    resp = client.get("/library/CD_0001/captures/does-not-exist.jpg")
+    assert resp.status_code == 404
+    resp = client.get("/library/CD_0001/audio/missing.flac")
+    assert resp.status_code == 404
+
+
+def test_unknown_disc_in_asset_path_returns_404(client: TestClient) -> None:
+    resp = client.get("/library/CD_9999/captures/disc_front_lit_001.jpg")
+    assert resp.status_code == 404
+    resp = client.get("/library/INVALID/captures/x.jpg")
+    assert resp.status_code == 404

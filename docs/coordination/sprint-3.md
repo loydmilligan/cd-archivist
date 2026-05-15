@@ -380,7 +380,7 @@ updated: 2026-05-14T00:00:00.000Z
   - **Acceptance:** Cases added to `tests/service/test_library.py`.
     Fails until impl. Seven cases.
 
-- [ ] {agent: pipeline, id: test-library-asset-serving} Failing tests
+- [x] {agent: pipeline, id: test-library-asset-serving} Failing tests
   for the file-serving endpoints: `GET /library/CD_NNNN/captures/
   <filename>` and `GET /library/CD_NNNN/audio/<filename>`. Tests: (a)
   capture endpoint serves an existing JPG with content-type `image/
