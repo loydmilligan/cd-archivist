@@ -74,11 +74,17 @@ def test_disc_ok(monkeypatch: pytest.MonkeyPatch, fake_device: Path) -> None:
     assert read_drive_status(fake_device) == "disc-ok"
 
 
-def test_missing_device_raises(tmp_path: Path) -> None:
-    """OSError from os.open() must bubble up — no swallowing."""
+def test_missing_device_returns_device_missing(tmp_path: Path) -> None:
+    """Missing device node → "device-missing" (sprint-3 contract change).
+
+    Sprint-1 originally bubbled the FileNotFoundError; sprint-3's
+    impl-drive-missing reclassifies it as a transient state the loop
+    handles via rate-limited logging. Other OSErrors (PermissionError,
+    EIO, …) still bubble — covered by test_permission_error_still_raises
+    below.
+    """
     missing = tmp_path / "does-not-exist"
-    with pytest.raises(OSError):
-        read_drive_status(missing)
+    assert read_drive_status(missing) == "device-missing"
 
 
 # -------------------------- eject() ---------------------------------

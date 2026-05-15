@@ -25,7 +25,7 @@ CDS_TRAY_OPEN = 2
 CDS_DRIVE_NOT_READY = 3
 CDS_DISC_OK = 4
 
-DriveStatus = Literal["no-disc", "tray-open", "drive-not-ready", "disc-ok"]
+DriveStatus = Literal["no-disc", "tray-open", "drive-not-ready", "disc-ok", "device-missing"]
 
 _STATUS_MAP: dict[int, DriveStatus] = {
     CDS_NO_DISC: "no-disc",
@@ -39,11 +39,20 @@ def read_drive_status(device: Path) -> DriveStatus:
     """Return the current CDROM drive state.
 
     Opens the device non-blocking (so the kernel doesn't wait for media),
-    issues CDROM_DRIVE_STATUS, and maps the result to one of four
-    documented states. Raises OSError if the device path cannot be
-    opened (missing, no permission, etc.).
+    issues CDROM_DRIVE_STATUS, and maps the result to one of five
+    documented states.
+
+    Returns `"device-missing"` when the device node does not exist
+    (FileNotFoundError on os.open) — this is the transient
+    USB-disconnect / drive-not-yet-enumerated case that the state-
+    machine loop treats as IDLE-with-rate-limited-warning rather than
+    a hard error. Other OSErrors (PermissionError, EIO, …) still raise
+    — those are real failures the loop should see.
     """
-    fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return "device-missing"
     try:
         code = fcntl.ioctl(fd, CDROM_DRIVE_STATUS)
     finally:

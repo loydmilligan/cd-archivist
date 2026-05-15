@@ -534,7 +534,7 @@ updated: 2026-05-14T00:00:00.000Z
     starts cleanly with stderr-only logs and a clear warning naming
     the unwritable default log path.
 
-- [ ] {agent: drivers, depends: test-drive-missing, id: impl-drive-missing}
+- [x] {agent: drivers, depends: test-drive-missing, id: impl-drive-missing}
   Extend `DriveStatus` literal in `archivist/drivers/drive.py` to
   include `"device-missing"`. Wrap `os.open(device, ...)` in a
   try/except that catches **only** `FileNotFoundError` and returns
