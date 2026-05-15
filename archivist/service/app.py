@@ -357,6 +357,22 @@ def _render_library_detail(disc_dir: Path) -> str:
         for p in capture_files
     )
 
+    # Operator review captures (sprint-3 / D-review-recapture-mvp).
+    # Surfaced from the directory listing only — not in the manifest.
+    review_dir = disc_dir / "review"
+    review_files = sorted(review_dir.glob("*.jpg")) if review_dir.is_dir() else []
+    review_imgs = "\n".join(
+        f'<figure class="review-item">'
+        f'  <a target="_blank" href="/library/{disc_id}/review/{html.escape(p.name)}">'
+        f'    <img class="thumb" src="/library/{disc_id}/review/{html.escape(p.name)}" alt="">'
+        f'  </a>'
+        f'  <figcaption class="review-caption">{html.escape(p.name)}</figcaption>'
+        f'</figure>'
+        for p in review_files
+    )
+    if not review_imgs:
+        review_imgs = '<p class="meta">no review photos yet.</p>'
+
     # Audio tracks.
     audio_dir = disc_dir / "audio"
     audio_files = sorted(audio_dir.glob("*.flac")) if audio_dir.is_dir() else []
@@ -390,6 +406,7 @@ def _render_library_detail(disc_dir: Path) -> str:
         .replace("{{ACCENT}}", accent)
         .replace("{{MANIFEST}}", manifest_block)
         .replace("{{CAPTURES}}", cap_imgs or '<p class="meta">no captures.</p>')
+        .replace("{{REVIEW_IMGS}}", review_imgs)
         .replace("{{TRACKS}}", track_rows or '<li class="meta">no audio.</li>')
         .replace("{{LOG_BLOCK}}", log_block)
     )
@@ -740,6 +757,27 @@ _LIBRARY_STYLES = r"""
     white-space: pre-wrap; word-break: break-word;
   }
   .log-card { border-left-color: var(--ink-5); }
+  .review-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+  .review-actions { display: flex; align-items: center; gap: var(--s-3); }
+  .btn-primary {
+    font-family: var(--font-body); font-size: var(--fs-sm);
+    color: var(--fg); background: var(--surface-2);
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: var(--r-3); padding: 8px 14px; cursor: pointer;
+  }
+  .btn-primary:hover { background: var(--surface-hover); }
+  .btn-primary[disabled] { opacity: 0.5; cursor: progress; }
+  .countdown {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: 28px; color: var(--accent); min-width: 1.5em;
+    text-align: center;
+  }
+  .review-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                 gap: var(--s-3); margin-top: var(--s-3); }
+  .review-item { margin: 0; }
+  .review-caption { font-family: var(--font-mono); font-size: var(--fs-xs);
+                    color: var(--fg-quiet); margin-top: 4px;
+                    word-break: break-all; }
 </style>
 """
 
@@ -801,6 +839,21 @@ _LIBRARY_DETAIL_HTML = r"""<!doctype html>
     </section>
 
     <section class="card">
+      <div class="review-header">
+        <p class="eyebrow" style="margin:0">REVIEW PHOTOS</p>
+        <div class="review-actions">
+          <span id="countdown" class="countdown" aria-live="polite"></span>
+          <button id="recapture-btn" class="btn-primary" type="button">
+            take a review photo
+          </button>
+        </div>
+      </div>
+      <div id="review-grid" class="review-grid">
+        {{REVIEW_IMGS}}
+      </div>
+    </section>
+
+    <section class="card">
       <p class="eyebrow">TRACKS</p>
       <ul class="tracks">
         {{TRACKS}}
@@ -809,6 +862,51 @@ _LIBRARY_DETAIL_HTML = r"""<!doctype html>
 
     {{LOG_BLOCK}}
   </main>
+
+  <script>
+    // 3-2-1 countdown, then POST to /api/library/<disc>/recapture.
+    // No framework — ~30 lines of vanilla JS.
+    (function () {
+      const discId = "{{DISC_ID}}";
+      const btn = document.getElementById("recapture-btn");
+      const cd = document.getElementById("countdown");
+      if (!btn || !cd) return;
+
+      function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+      async function run() {
+        btn.disabled = true;
+        try {
+          for (const n of [3, 2, 1]) {
+            cd.textContent = String(n);
+            await sleep(1000);
+          }
+          cd.textContent = "…";
+          const resp = await fetch(
+            "/api/library/" + discId + "/recapture",
+            { method: "POST", cache: "no-store" }
+          );
+          if (!resp.ok) {
+            cd.textContent = "failed (" + resp.status + ")";
+            await sleep(2500);
+          } else {
+            cd.textContent = "done";
+            await sleep(600);
+            // Refresh page so the review grid picks up the new pair.
+            window.location.reload();
+            return;
+          }
+        } catch (e) {
+          cd.textContent = "error";
+          await sleep(2500);
+        } finally {
+          cd.textContent = "";
+          btn.disabled = false;
+        }
+      }
+      btn.addEventListener("click", run);
+    })();
+  </script>
 </body>
 </html>
 """

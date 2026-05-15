@@ -168,7 +168,14 @@ def main() -> int:
         )
 
     loop_state = LoopState()
-    app = create_app(loop_state, log_path, discs_root=discs_root)
+    camera = _build_camera(discover_camera_usb_path)
+    led = LEDPanel(led_base)
+    app = create_app(
+        loop_state, log_path,
+        discs_root=discs_root,
+        recapture_camera=camera,
+        recapture_led=led,
+    )
     server, server_thread = _start_uvicorn(app, port)
 
     loop = ArchivistLoop(
@@ -176,8 +183,8 @@ def main() -> int:
         device=device,
         drive=_DriveAdapter(device),
         ripper=CDAudioRipper(),
-        camera=_build_camera(discover_camera_usb_path),
-        led=LEDPanel(led_base),
+        camera=camera,
+        led=led,
         services=_Services(),
         clock=time.monotonic,
         sleeper=time.sleep,
