@@ -59,6 +59,23 @@ def test_api_status_returns_loop_state_snapshot(loop_state: LoopState, log_path:
     assert "last_updated" in body
 
 
+def test_api_status_round_trips_rip_progress(loop_state: LoopState, log_path: Path) -> None:
+    """LoopState gains an optional rip_progress field surfaced in /api/status.
+
+    Sprint-3 / test-rip-progress: `rip_progress: str | None = None` (default).
+    """
+    client = TestClient(create_app(loop_state, log_path))
+
+    # Default: None.
+    body = client.get("/api/status").json()
+    assert body.get("rip_progress") is None
+
+    # Set: the JSON reflects it.
+    loop_state.rip_progress = "track 4/12, 38%"
+    body = client.get("/api/status").json()
+    assert body["rip_progress"] == "track 4/12, 38%"
+
+
 def test_api_status_reflects_live_updates(loop_state: LoopState, log_path: Path) -> None:
     """Mutating loop_state between calls must surface — no stale caching."""
     client = TestClient(create_app(loop_state, log_path))

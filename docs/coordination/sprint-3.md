@@ -123,7 +123,7 @@ updated: 2026-05-14T00:00:00.000Z
 
 #### Bucket A — sprint-2 polish
 
-- [ ] {agent: pipeline, id: test-rip-progress} Failing tests for parsing
+- [x] {agent: pipeline, id: test-rip-progress} Failing tests for parsing
   cdparanoia's per-track stderr progress and surfacing it on
   `LoopState`. Add a `rip_progress: str | None` field to
   `archivist/service/app.py::LoopState` (default `None`) and a parser
