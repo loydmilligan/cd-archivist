@@ -648,7 +648,7 @@ updated: 2026-05-15T00:00:00.000Z
   surfacing.
   - **Acceptance:** `tests/pipeline/test_ready_marker.py` passes.
 
-- [ ] {agent: drivers, depends: test-rip-log-writer, id: impl-rip-log-writer}
+- [x] {agent: drivers, depends: test-rip-log-writer, id: impl-rip-log-writer}
   Implement `archivist/drivers/rip_log.py::RipLogWriter`. Plain-text
   writer with `[<ISO-8601-local-with-offset>] <message>\n` line
   format. `event(message: str)` writes-and-flushes (the importer
