@@ -36,11 +36,43 @@ logger = logging.getLogger("archivist")
 
 # Defaults are documented in cm4-setup.md.
 _DEFAULT_DEVICE = "/dev/sr0"
-_DEFAULT_DISCS_ROOT = "/srv/cd-archivist/discs"
+_DEFAULT_DISCS_ROOT = "/srv/cd-archivist/discs"  # legacy (pre-sprint-4)
 _DEFAULT_LOG_PATH = "/srv/cd-archivist/logs/archivist.log"
 _DEFAULT_PORT = 8228  # D-port-8228
 _DEFAULT_LED_BASE = "http://192.168.5.186"
 _DEFAULT_VIDEO_DEVICE = "/dev/video0"
+
+# Sprint-4 / D-music-pipeline-paths: env-driven inbox/working/failed.
+_DEFAULT_MUSIC_INBOX = "~/music-pipeline/inbox"
+_DEFAULT_MUSIC_WORKING = "~/music-pipeline/.ripping"
+_DEFAULT_MUSIC_FAILED = "~/music-pipeline/failed"
+
+
+def _resolve_music_paths() -> tuple[Path, Path, Path]:
+    """Resolve `MUSIC_{INBOX,WORKING,FAILED}_DIR` per D-music-pipeline-paths.
+
+    Legacy `ARCHIVIST_DISCS_ROOT` is honoured as an alias for the inbox
+    when neither the new env vars nor the legacy default suffice; logs a
+    deprecation warning so operators see the migration path.
+    """
+    legacy_root = os.environ.get("ARCHIVIST_DISCS_ROOT")
+    inbox_env = os.environ.get("MUSIC_INBOX_DIR")
+    working_env = os.environ.get("MUSIC_WORKING_DIR")
+    failed_env = os.environ.get("MUSIC_FAILED_DIR")
+
+    if legacy_root and not inbox_env:
+        logger.warning(
+            "ARCHIVIST_DISCS_ROOT is deprecated; please set MUSIC_INBOX_DIR "
+            "(and optionally MUSIC_WORKING_DIR / MUSIC_FAILED_DIR). "
+            "Aliasing to MUSIC_INBOX_DIR=%s for this run.",
+            legacy_root,
+        )
+        inbox_env = legacy_root
+
+    inbox = Path(os.path.expanduser(inbox_env or _DEFAULT_MUSIC_INBOX))
+    working = Path(os.path.expanduser(working_env or _DEFAULT_MUSIC_WORKING))
+    failed = Path(os.path.expanduser(failed_env or _DEFAULT_MUSIC_FAILED))
+    return inbox, working, failed
 
 
 class _DriveAdapter:
@@ -146,15 +178,29 @@ def _start_uvicorn(app: Any, port: int) -> tuple[uvicorn.Server, threading.Threa
 
 def main() -> int:
     device = Path(os.environ.get("ARCHIVIST_DEVICE", _DEFAULT_DEVICE))
-    discs_root = Path(os.environ.get("ARCHIVIST_DISCS_ROOT", _DEFAULT_DISCS_ROOT))
     log_path = Path(os.environ.get("ARCHIVIST_LOG_PATH", _DEFAULT_LOG_PATH))
     port = int(os.environ.get("ARCHIVIST_PORT", str(_DEFAULT_PORT)))
     led_base = os.environ.get("ARCHIVIST_LED_BASE", _DEFAULT_LED_BASE)
     video_device = Path(os.environ.get("ARCHIVIST_VIDEO_DEVICE", _DEFAULT_VIDEO_DEVICE))
 
-    discs_root.mkdir(parents=True, exist_ok=True)
     _configure_logging(log_path)
-    logger.info("starting archivist — device=%s discs_root=%s port=%d", device, discs_root, port)
+    inbox_dir, working_dir, failed_dir = _resolve_music_paths()
+    for d in (inbox_dir, working_dir, failed_dir):
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.error("cannot create music-pipeline dir %s: %s", d, exc)
+            raise
+
+    initial_mode = os.environ.get("ARCHIVIST_MODE", "auto")
+    if initial_mode not in ("auto", "manual"):
+        logger.warning("ARCHIVIST_MODE=%r invalid; falling back to auto", initial_mode)
+        initial_mode = "auto"
+
+    logger.info(
+        "starting archivist — device=%s inbox=%s working=%s failed=%s mode=%s port=%d",
+        device, inbox_dir, working_dir, failed_dir, initial_mode, port,
+    )
 
     # Camera USB autodiscover — primary; ARCHIVIST_CAMERA_USB_PATH is the fallback
     # (consumed inside discover_camera_usb_path per D-camera-autodiscover).
@@ -167,19 +213,14 @@ def main() -> int:
             video_device,
         )
 
-    loop_state = LoopState()
+    loop_state = LoopState(mode=initial_mode)
     camera = _build_camera(discover_camera_usb_path)
     led = LEDPanel(led_base)
-    app = create_app(
-        loop_state, log_path,
-        discs_root=discs_root,
-        recapture_camera=camera,
-        recapture_led=led,
-    )
-    server, server_thread = _start_uvicorn(app, port)
 
     loop = ArchivistLoop(
-        discs_root=discs_root,
+        working_dir=working_dir,
+        inbox_dir=inbox_dir,
+        failed_dir=failed_dir,
         device=device,
         drive=_DriveAdapter(device),
         ripper=CDAudioRipper(),
@@ -190,6 +231,16 @@ def main() -> int:
         sleeper=time.sleep,
         loop_state=loop_state,
     )
+
+    # /library reads from the inbox (where READY-marked folders live).
+    app = create_app(
+        loop_state, log_path,
+        discs_root=inbox_dir,
+        recapture_camera=camera,
+        recapture_led=led,
+        loop=loop,
+    )
+    server, server_thread = _start_uvicorn(app, port)
 
     shutdown = threading.Event()
 
