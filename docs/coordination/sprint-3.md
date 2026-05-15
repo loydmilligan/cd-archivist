@@ -310,7 +310,7 @@ updated: 2026-05-14T00:00:00.000Z
 
 #### Bucket B — capture-timing redesign
 
-- [ ] {agent: pipeline, id: test-capture-after-eject} Failing tests for
+- [x] {agent: pipeline, id: test-capture-after-eject} Failing tests for
   the new capture-timing flow. State machine: STABILIZE → RIP (no
   capture) → EJECT (drive.eject + cdplay restart) → CAPTURE (settle
   sleep + capture_disc against the now-open tray) → IDLE. Add
