@@ -7,11 +7,15 @@ the absolute `RipResult.tracks` into POSIX-relative strings under
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Callable
 from pathlib import Path
 
 from archivist.drivers.ripper import Ripper
 from archivist.models.manifest import RipRecord
+
+_CDDA_FLAC_RE = re.compile(r"^track(\d{2})\.cdda\.flac$")
+_CANONICAL_FLAC_RE = re.compile(r"^(\d{2}) Track\.flac$")
 
 
 def rip_disc(
@@ -39,6 +43,45 @@ def rip_disc(
 
     tracks = [Path(t).relative_to(disc_dir).as_posix() for t in result.tracks]
     return RipRecord(status=result.status, tracks=tracks, errors=list(result.errors))
+
+
+def rename_tracks_to_canonical(audio_dir: Path) -> list[Path]:
+    """Rename `trackNN.cdda.flac` → `NN Track.flac` in `audio_dir`.
+
+    Returns the new paths sorted by track number. Idempotent on an
+    already-canonical directory. Raises `FileExistsError` if a target
+    name already exists (refuses to overwrite; source file preserved
+    for operator triage).
+    """
+    pairs: list[tuple[int, Path, Path]] = []
+    existing_canonical: dict[int, Path] = {}
+
+    for p in audio_dir.iterdir():
+        if not p.is_file():
+            continue
+        m_cdda = _CDDA_FLAC_RE.match(p.name)
+        if m_cdda:
+            n = int(m_cdda.group(1))
+            pairs.append((n, p, audio_dir / f"{n:02d} Track.flac"))
+            continue
+        m_canon = _CANONICAL_FLAC_RE.match(p.name)
+        if m_canon:
+            existing_canonical[int(m_canon.group(1))] = p
+
+    # Collision pre-check (refuse to overwrite anything).
+    for n, src, dst in pairs:
+        if dst.exists() and dst != src:
+            raise FileExistsError(
+                f"refusing to rename {src.name} → {dst.name}: target exists"
+            )
+
+    for _n, src, dst in pairs:
+        src.rename(dst)
+
+    final: dict[int, Path] = {n: dst for n, _src, dst in pairs}
+    for n, p in existing_canonical.items():
+        final.setdefault(n, p)
+    return [final[n] for n in sorted(final)]
 
 
 def _ripper_accepts_progress(ripper: Ripper) -> bool:
