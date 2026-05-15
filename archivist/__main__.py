@@ -57,15 +57,50 @@ class _DriveAdapter:
 
 
 def _configure_logging(log_path: Path) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(sys.stderr),
-        logging.FileHandler(log_path, encoding="utf-8"),
-    ]
-    fmt = "%(asctime)s %(levelname)-7s %(name)s — %(message)s"
-    logging.basicConfig(level=logging.INFO, format=fmt, handlers=handlers)
+    """Attach stderr + optional file logging; degrade gracefully.
+
+    Sprint-3 / test-log-fallback: if `log_path.parent` cannot be
+    created (e.g. running on a laptop dev shell against the default
+    `/srv/cd-archivist/logs/`), or if the FileHandler cannot be
+    constructed, log a clear warning naming the path + the
+    ARCHIVIST_LOG_PATH env var, fall back to stderr-only, and never
+    raise. The FastAPI surface must come up regardless.
+    """
+    file_handler_error: Exception | None = None
+    file_handler: logging.Handler | None = None
+
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        file_handler_error = exc
+    else:
+        try:
+            file_handler = logging.FileHandler(log_path, encoding="utf-8")
+        except OSError as exc:
+            file_handler_error = exc
+
+    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s — %(message)s")
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+
+    stream = logging.StreamHandler(sys.stderr)
+    stream.setFormatter(fmt)
+    root.addHandler(stream)
+
+    if file_handler is not None:
+        file_handler.setFormatter(fmt)
+        root.addHandler(file_handler)
+
     # Quiet uvicorn's access log down a notch — the loop is the heartbeat.
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    if file_handler_error is not None:
+        logger.warning(
+            "log file unwritable at %s (%s); falling back to stderr-only. "
+            "Override with ARCHIVIST_LOG_PATH.",
+            log_path,
+            file_handler_error,
+        )
 
 
 def _build_camera(discover: Any) -> Any:

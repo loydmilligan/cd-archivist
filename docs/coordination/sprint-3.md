@@ -471,7 +471,7 @@ updated: 2026-05-14T00:00:00.000Z
     suite green. `docs/operations/cm4-setup.md` updated. `_Services`
     in entrypoint discovers scope at startup (one extra log line).
 
-- [ ] {agent: pipeline, depends: test-log-fallback, id: impl-log-fallback}
+- [x] {agent: pipeline, depends: test-log-fallback, id: impl-log-fallback}
   Refactor `_configure_logging` in `archivist/__main__.py` to handle
   parent-mkdir failure: try `log_path.parent.mkdir(parents=True,
   exist_ok=True)` inside try/except `OSError`; on failure log to
