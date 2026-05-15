@@ -23,15 +23,20 @@ import html
 import logging
 import re
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from archivist.models.manifest import Manifest, read_manifest
+from archivist.pipeline.review_capture import recapture_review
+
+_RECAPTURE_BUSY_STATES = {"CAPTURE", "EJECT"}
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +80,8 @@ def create_app(
     log_path: Path,
     *,
     discs_root: Path | None = None,
+    recapture_camera: Callable[..., Any] | None = None,
+    recapture_led: Any | None = None,
 ) -> FastAPI:
     app = FastAPI(title="cd-archivist", docs_url=None, redoc_url=None)
 
@@ -105,7 +112,12 @@ def create_app(
     # ---------------- library browser (sprint-3 / impl-library) ----------
 
     if discs_root is not None:
-        _mount_library_routes(app, discs_root)
+        _mount_library_routes(
+            app, discs_root,
+            loop_state=loop_state,
+            recapture_camera=recapture_camera,
+            recapture_led=recapture_led,
+        )
 
     return app
 
@@ -179,7 +191,14 @@ def _disc_dir(discs_root: Path, disc_id: str) -> Path | None:
     return d
 
 
-def _mount_library_routes(app: FastAPI, discs_root: Path) -> None:
+def _mount_library_routes(
+    app: FastAPI,
+    discs_root: Path,
+    *,
+    loop_state: "LoopState",
+    recapture_camera: Callable[..., Any] | None = None,
+    recapture_led: Any | None = None,
+) -> None:
     @app.get("/library", response_class=HTMLResponse)
     def library_list() -> HTMLResponse:
         return HTMLResponse(_render_library_list(discs_root))
@@ -212,6 +231,44 @@ def _mount_library_routes(app: FastAPI, discs_root: Path) -> None:
         if target is None:
             raise HTTPException(status_code=404)
         return FileResponse(target, media_type="audio/flac")
+
+    @app.get("/library/{disc_id}/review/{filename}")
+    def library_review_asset(disc_id: str, filename: str) -> FileResponse:
+        d = _disc_dir(discs_root, disc_id)
+        if d is None:
+            raise HTTPException(status_code=404)
+        target = _resolve_under(d / "review", filename)
+        if target is None:
+            raise HTTPException(status_code=404)
+        return FileResponse(target, media_type="image/jpeg")
+
+    @app.post("/api/library/{disc_id}/recapture")
+    def api_recapture(disc_id: str) -> JSONResponse:
+        # (b) busy gate — loop owns the camera in CAPTURE/EJECT.
+        if loop_state.state in _RECAPTURE_BUSY_STATES:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"pipeline is busy ({loop_state.state}); "
+                    "try again after eject completes."
+                ),
+            )
+        # (c) disc-existence + (d) id-shape.
+        d = _disc_dir(discs_root, disc_id)
+        if d is None:
+            raise HTTPException(status_code=404)
+        if recapture_camera is None or recapture_led is None:
+            raise HTTPException(
+                status_code=503,
+                detail="recapture not configured (camera/led not wired).",
+            )
+        result = recapture_review(
+            d, camera=recapture_camera, led=recapture_led,
+        )
+        payload: dict[str, Any] = {"ambient": result.ambient, "lit": result.lit}
+        if result.errors:
+            payload["errors"] = result.errors
+        return JSONResponse(payload)
 
 
 def _render_library_list(discs_root: Path) -> str:
