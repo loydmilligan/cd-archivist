@@ -35,28 +35,33 @@ class FakeResponse:
             raise requests.HTTPError(f"{self.status_code}")
 
 
+class _CapturedGets(list):
+    """List of (url, kwargs) tuples plus a scriptable response slot."""
+
+    response_holder: dict[str, Any]
+
+
 @pytest.fixture
-def captured_gets(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict]]:
+def captured_gets(monkeypatch: pytest.MonkeyPatch) -> _CapturedGets:
     """Patches requests.get in the led module; records (url, kwargs)."""
     import archivist.drivers.led as led_mod
 
-    calls: list[tuple[str, dict]] = []
-    response_holder: dict[str, Any] = {"resp": FakeResponse({"POWER": "ON"})}
+    calls = _CapturedGets()
+    calls.response_holder = {"resp": FakeResponse({"POWER": "ON"})}
 
     def fake_get(url: str, **kwargs: Any) -> FakeResponse:
         calls.append((url, kwargs))
-        r = response_holder["resp"]
+        r = calls.response_holder["resp"]
         if isinstance(r, Exception):
             raise r
         return r
 
     monkeypatch.setattr(led_mod.requests, "get", fake_get)
-    calls.response_holder = response_holder  # type: ignore[attr-defined]
     return calls
 
 
-def _set_response(calls: list, resp: Any) -> None:
-    calls.response_holder["resp"] = resp  # type: ignore[attr-defined]
+def _set_response(calls: _CapturedGets, resp: Any) -> None:
+    calls.response_holder["resp"] = resp
 
 
 # ---------------------------- happy paths ----------------------------
