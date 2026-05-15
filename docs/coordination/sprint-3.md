@@ -899,6 +899,68 @@ _No ratifications yet._
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-14 — pipeline — Wave 1 failing tests landed (10 tasks, 10 commits)
+
+All pipeline-owned Wave 1 tasks closed; test-log-stream skipped per
+operator instruction ("OPTIONAL — skip if Wave 1 gets too wide").
+
+- **test-rip-progress** (0769ea6) — `tests/pipeline/test_rip_progress.py`
+  with 5 parser cases; one new case in `tests/service/test_app.py`
+  asserting `/api/status` round-trips a `rip_progress` field.
+- **test-last-tick** (8a36a6a) — fixture and existing snapshot test
+  in `tests/service/test_app.py` updated to construct LoopState with
+  `state_entered_at` + `last_tick_at` (rename per Contract Changes);
+  3 new cases in `tests/state_machine/test_loop.py` asserting the
+  heartbeat semantics (transition advances both, no-transition tick
+  only advances `last_tick_at`).
+- **test-log-fallback** (cbeb6c3) — `tests/test_main_logging.py` with
+  3 cases for `_configure_logging` stderr-only fallback when the log
+  dir can't be created. Side cleanup: removed the legacy
+  `tests/test_disc_id.py` + `tests/test_pairing.py` (referenced the
+  dead `cd_archivist` package) and dropped the corresponding
+  `--ignore-glob=tests/test_*.py` from `pyproject.toml`.
+- **test-rip-error-recovery** (2c74d5a) — updated
+  `test_rip_exception_still_restarts_cdplay` to assert the new
+  terminal ERROR state (loop now catches the rip exception instead
+  of letting it propagate); 3 new cases for `RipResult(status="fail")
+  → ERROR`, `ERROR + tray-open → IDLE`, `ERROR + other → stays ERROR`.
+- **test-status-ui-liveness** (c1cde00) — 2 cases asserting the page
+  references both `state_entered_at` and `last_tick_at` in the JS;
+  log tail has `data-follow="on"` + `id="log-follow-toggle"` and the
+  scrollTop/scrollHeight follow logic.
+- **test-rip-progress-ui** (cf4abd7) — 1 case asserting the page has
+  an element with `id="rip-progress*"`, reads `s.rip_progress` from
+  the polling JS, and uses `--sky` (fill) + `--ink-2` (track).
+- **test-capture-after-eject** (e2f13b3) — Bucket B central piece:
+  reshaped existing happy-path tests to reflect the post-eject
+  capture flow (STABILIZE→RIP no longer fires camera/led; the cycle
+  is 6 ticks not 5: IDLE→WAITING→STABILIZE→RIP→EJECT→CAPTURE→IDLE).
+  New cases: capture-after-eject ordering, sleeper(3.0) between
+  eject and capture, two-write manifest split, capture failure
+  preserves rip record.
+- **test-capture-sequence-update** (2c4570b) — no-op close per task
+  acceptance: `tests/pipeline/test_capture.py` is already
+  loop-state-agnostic; the move is a caller restructure only.
+- **test-library-list** (755689c) — new file
+  `tests/service/test_library.py` with 6 list-page cases (HTML, all
+  three disc-ids, thumbnails, semantic card-accent classes
+  card--moss/amber/ember by status, track-count metadata, Mash Co.
+  invariants reused from test_app.py).
+- **test-library-detail** (2bd814b) — 7 detail-page cases (HTML,
+  unknown→404, manifest dump in `<pre>`, 6 thumbnails, `<audio
+  controls>` per FLAC with `/library/CD_NNNN/audio/...` src, file
+  sizes formatted, log tail when `logs/` populated).
+- **test-library-asset-serving** (e61e5d0) — 5 asset-serving cases
+  including the load-bearing path-traversal guard (plants a secret
+  outside discs_root and asserts traversal attempts never leak it).
+
+**Skipped:** `test-log-stream` (optional per operator + task body
+"can be deferred if Wave 1 is too wide"). The `rip_progress` field
+on `/api/status` from `test-rip-progress` carries the load-bearing
+surface; live log streaming is fast-follow if needed.
+
+Wave 2 impls follow.
+
 ### 2026-05-14 — planner — sprint-3 drafted
 
 - 2 waves, **25 tasks** total. Wave 1 = 15 failing-test tasks
