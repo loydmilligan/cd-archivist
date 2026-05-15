@@ -397,6 +397,53 @@ updated: 2026-05-14T00:00:00.000Z
     load-bearing — read-only browsing of arbitrary files would be a
     real bug.
 
+#### Bucket D — operator review-recapture (mid-sprint amendment)
+
+<!-- Added 2026-05-15 per D-review-recapture-mvp: a stripped-down
+     version of the sprint-4 manual-capture spec lands in sprint-3
+     because operator-recapture is high-value and the slice that
+     ships here (off-on-off mini-dance into review/, no manifest
+     touch, no LED toggle, no upload) is much narrower than the
+     full sprint-4 design. See docs/design/2026-05-15-manual-
+     capture-and-album-art.md for the full sprint-4 scope. -->
+
+- [ ] {agent: pipeline, id: test-review-recapture} Failing tests for
+  `POST /api/library/CD_NNNN/recapture`. Endpoint orchestrates a
+  single off→on→off mini-capture sequence (one ambient frame with the
+  LED off, one lit frame with the LED on, then LED off again) and
+  saves both stills into `CD_NNNN/review/`. Tests, against a fake
+  camera + fake LED + fake `LoopState`: (a) **happy path** — endpoint
+  invokes camera+LED in the documented order (`led.power_off()` is a
+  no-op if already off, `camera.capture_frame(...)`, `led.power_on()`,
+  `camera.capture_frame(...)`, `led.power_off()` — record the call
+  sequence on the fakes and assert ordering); response JSON returns
+  `{"ambient": "review/review_ambient_<ISO_TS>.jpg", "lit": "review/
+  review_lit_<ISO_TS>.jpg"}`. (b) **409 when the loop owns the
+  camera** — fixture `LoopState(state=CAPTURE)` and `LoopState(state=
+  EJECT)` both yield HTTP 409 with a body explaining the busy
+  condition; assert no camera/LED calls were made. (c) **404 when
+  CD_NNNN doesn't exist** — `discs_root` empty (or contains a
+  different disc-id) → 404, no side effects. (d) **filename
+  convention** — files land in `<disc_dir>/review/` named
+  `review_ambient_{ISO_TS}.jpg` and `review_lit_{ISO_TS}.jpg` where
+  the timestamp is shared between the pair (so they sort together);
+  `review/` directory is created if absent (it's already created by
+  `prepare_disc_folder`, but the endpoint must not assume it exists
+  on a disc captured before sprint-3). (e) **LED failure tolerated**
+  — fake LED whose `power_on` / `power_off` raise are honoured by
+  the `LEDPanel` "never raises" invariant: capture still proceeds,
+  the two stills still land on disk, and the response JSON includes
+  an `errors` array naming the LED failure (response shape:
+  `{"ambient": "...", "lit": "...", "errors": ["led power_on
+  failed: ..."]}` on partial degradation; `errors` omitted on full
+  success).
+  - **Acceptance:** New file `tests/service/test_review_recapture.py`
+    (or appended to `tests/service/test_library.py` — author's
+    call). Five cases. Fails until `impl-review-recapture`. State-
+    machine fakes follow the same shape as the existing library
+    tests (constructable `LoopState` + injected fakes via
+    `create_app`).
+
 ### Wave 2 — Implementations
 
 #### Bucket A — sprint-2 polish
@@ -638,6 +685,25 @@ updated: 2026-05-14T00:00:00.000Z
   - `GET /library/{disc_id}/audio/{filename}` — same shape with
     `media_type="audio/flac"`.
 
+  **Review-photo surfacing (sprint-3 mid-sprint amendment per
+  `D-review-recapture-mvp`).** The detail page also lists any files in
+  `CD_NNNN/review/` alongside the existing `captures/` thumbnails,
+  under a separate section header (sentence case — e.g. "operator
+  review captures"). Each review file gets a thumbnail + filename;
+  served via the same path-traversal-guarded `FileResponse` shape
+  (extend the existing `/library/{disc_id}/captures/{filename}` route
+  to also accept `review` as the subdirectory, or add a sibling
+  `/library/{disc_id}/review/{filename}` route — author's call). The
+  detail template also gains a **"Take a review photo"** button that
+  triggers a client-side 3-2-1 countdown (vanilla JS, ~15 lines) and
+  POSTs to `/api/library/CD_NNNN/recapture` (endpoint lands in
+  `impl-review-recapture`); on success, the page refreshes the review/
+  section. No new template file — all of this lives inside the
+  existing detail-page HTML in `app.py`. Review files are NOT added
+  to the manifest in sprint-3 — they surface from the directory
+  listing only (manifest schema bump deferred to sprint-4 per the
+  decision log).
+
   Both pages reuse the existing `tokens.css` and the same Mash Co.
   patterns: dark-first, sentence case, no emoji, eyebrows ≤2 words,
   card has full border + 3px left-border accent. Add a top nav strip
@@ -651,6 +717,71 @@ updated: 2026-05-14T00:00:00.000Z
     `CD_NNNN/`, browse to `/library`, see the grid, click into a
     disc, see captures + manifest + playable FLACs. Any path-
     traversal attempt 404s.
+
+#### Bucket D — operator review-recapture (mid-sprint amendment)
+
+- [ ] {agent: pipeline, depends: test-review-recapture, depends: impl-
+  library, id: impl-review-recapture} Implement
+  `POST /api/library/CD_NNNN/recapture` in `archivist/service/app.py`.
+  The route is registered alongside the other `/library/...` routes
+  and is only mounted when `discs_root` is configured (same gate as
+  the rest of the library surface). Steps:
+  1. **Busy check.** Read the injected `LoopState`; if
+     `loop_state.state in {State.CAPTURE, State.EJECT}` (the two
+     phases where the auto pipeline owns the camera), return HTTP
+     409 with a JSON body explaining the busy condition. No camera
+     or LED touch on this path.
+  2. **Disc-existence check.** Resolve `discs_root / disc_id`; if
+     the directory doesn't exist (or `disc_id` doesn't match
+     `CD_\d{4}`), return 404. Reuse the same path-resolution +
+     traversal guard helper as the existing capture/audio routes.
+  3. **Orchestrate the off→on→off sequence.** Call a new helper —
+     `recapture_review(disc_dir, *, camera, led) ->
+     ReviewRecaptureResult` — which lives in
+     `archivist/pipeline/review_capture.py` (new file; do **not**
+     fold into `capture_disc` — different intent: review_capture is
+     single-shot per lighting condition, where `capture_disc` is
+     the multi-frame auto pipeline). The helper:
+     - generates a single ISO timestamp shared between the pair
+       (`datetime.now(timezone.utc).isoformat().replace(":", "-")`
+       or similar filesystem-safe shape);
+     - ensures `disc_dir / "review"` exists (`mkdir(parents=True,
+       exist_ok=True)`);
+     - calls `led.power_off()` (defensive — LED should already be
+       off; the `LEDPanel` never-raises invariant means a failure
+       just appends to the errors list and continues);
+     - calls `camera.capture_frame(disc_dir / "review" /
+       f"review_ambient_{ts}.jpg", frames=15)` — the inner ffmpeg
+       keep-last-frame behavior is fine for stills here;
+     - calls `led.power_on()`;
+     - calls `camera.capture_frame(disc_dir / "review" /
+       f"review_lit_{ts}.jpg", frames=15)`;
+     - calls `led.power_off()` in a finally so the LED is always
+       restored;
+     - returns the relative paths (`"review/review_ambient_..."`
+       and `"review/review_lit_..."`) plus an `errors: list[str]`
+       collected from any LED failures.
+  4. **Response shape.** `{"ambient": "review/...", "lit":
+     "review/...", "errors": [...]}` — `errors` key omitted when
+     empty (or present-but-empty — author's call; the test asserts
+     it's absent on full success).
+  5. **No manifest write.** Per `D-review-recapture-mvp`, sprint-3
+     does NOT touch the manifest. The review files surface in the
+     library detail page from a directory listing of
+     `disc_dir / "review"`. Sprint-4 promotes review/ files into
+     the manifest when album-art lands.
+
+  Dependency note: `depends: impl-library` because the detail-page
+  surface (the "Take a review photo" button + countdown JS + the
+  review/ listing) is amended into `impl-library`'s scope. The POST
+  endpoint and the helper are independent from that — they share
+  only the route-registration block in `app.py`.
+  - **Acceptance:** `tests/service/test_review_recapture.py` (or
+    the appended `test_library.py` cases) all pass. Full suite
+    green. Ruff clean. Manual sanity: with the rig powered, browse
+    to `/library/CD_NNNN`, click "Take a review photo", watch the
+    3-2-1 countdown, see two new files appear under `review/` in
+    the page after the POST returns.
 
 ## Agent Roster
 
@@ -694,6 +825,79 @@ cross-repo follow-up.
      canonical for decision-request resolutions; this section is the
      project-readable mirror (N7) — orc proposes entries via
      ratification cards. -->
+
+### 2026-05-15 — D-review-recapture-mvp — minimum-useful operator recapture lands in sprint-3; full manual-capture spec defers to sprint-4
+
+Mid-sprint scope expansion. The operator-recapture workflow (a button
+on the library detail page that takes a fresh review photo of the
+disc / case after the auto pipeline has finished) is high-value — it
+unblocks the operator from physically rerunning the rig when the
+auto-capture missed the print or caught a glare. The full sprint-4
+manual-capture-and-album-art spec
+(`docs/design/2026-05-15-manual-capture-and-album-art.md`) is a
+sprint of its own; this decision carves out the smallest useful
+slice and lands it now while everything else in sprint-3 is still
+warm.
+
+**What ships in sprint-3:**
+
+- **One button + 3-2-1 countdown.** "Take a review photo" on the
+  existing `/library/CD_NNNN` detail page; countdown rendered
+  client-side (vanilla JS) gives the operator time to position the
+  disc/case in front of the cam.
+- **Off-on-off mini-dance, server-side.** Backend takes one ambient
+  frame (LED off), turns LED on, takes one lit frame, turns LED
+  off. Always this sequence in sprint-3 — no LED-mode toggle.
+- **Two files into `review/`.** `review_ambient_{ISO_TS}.jpg` and
+  `review_lit_{ISO_TS}.jpg` (shared timestamp so the pair sorts
+  together) under the existing `CD_NNNN/review/` subdirectory
+  (already created by `prepare_disc_folder`).
+- **Detail-page listing.** The `/library/CD_NNNN` page lists
+  `review/` files alongside the existing `captures/` thumbnails,
+  under a separate section header.
+- **Basic busy check.** HTTP 409 if `LoopState.state in {CAPTURE,
+  EJECT}` (the two phases the auto pipeline owns the camera). No
+  fancy locking.
+
+**What does NOT ship in sprint-3 (deferred to sprint-4 per the
+existing design doc):**
+
+- LED-mode toggle (off/on/both) — sprint-3 always does the off→on
+  →off mini-dance.
+- Album-art upload (multipart form, categories like
+  `front`/`back`/`disc`/`booklet`, magic-byte validation) — full
+  sprint-4 scope.
+- Manifest schema bump — review/ files are NOT added to the manifest
+  in sprint-3. They live on disk and surface in the UI from the
+  directory listing only. Sprint-4 brings the manifest into the
+  picture when album-art lands; this keeps the schema stable
+  through sprint-3.
+- Live alignment overlay — already sprint-5+ in the design doc.
+- Race-condition handling beyond the 409 busy check.
+
+**Why review/ and not captures/.** `captures/` is the auto pipeline's
+domain (the 6 ambient/lit pairs that `capture_disc` writes). Mixing
+operator stills into the same directory would muddy the pipeline's
+output and risk confusing the eventual OCR/metadata pass. `review/`
+keeps the two streams separated and surfaces them as logically
+distinct sections in the library UI.
+
+**Why no manifest touch in sprint-3.** The schema bump that promotes
+review files into the manifest is part of the album-art work in
+sprint-4 — both manifest changes ship together so the schema
+version increments once, not twice in successive sprints. Until then
+the directory listing is the source of truth for review files.
+
+Implications: 1 new Wave 1 task (`test-review-recapture`), 1 new
+Wave 2 task (`impl-review-recapture`), and an amendment to
+`impl-library` that adds the review/ section + button + countdown
+to the detail-page template. New helper file
+`archivist/pipeline/review_capture.py` (does NOT reuse
+`capture_disc` — different intent: single-shot per lighting
+condition vs. multi-frame burst). New `POST /api/library/CD_NNNN/
+recapture` route registered alongside the existing `/library/...`
+routes. No changes to manifest schema, drivers, state machine, or
+the auto pipeline.
 
 ### 2026-05-14 — D-cdplay-scope — `systemctl` wrapper gains a `scope=` kwarg; entrypoint auto-discovers cdplay's scope
 
@@ -898,6 +1102,56 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-15 — planner — sprint-3 mid-sprint amendment: operator review-recapture (Bucket D)
+
+Per `D-review-recapture-mvp` (Decision Log above): a stripped-down
+slice of the sprint-4 manual-capture spec
+(`docs/design/2026-05-15-manual-capture-and-album-art.md`) lands in
+sprint-3 as a new Bucket D. The MVP is one button + 3-2-1 countdown
+on `/library/CD_NNNN` that POSTs to a new `/api/library/CD_NNNN/
+recapture` endpoint, which runs an off→on→off mini-dance and writes
+two stills (`review_ambient_<TS>.jpg`, `review_lit_<TS>.jpg`) into
+`CD_NNNN/review/`. No manifest touch (schema stable through
+sprint-3); no LED-mode toggle, no album-art upload, no overlay
+(all sprint-4+).
+
+**Delta to sprint-3 plan:**
+
+- **+1 Wave 1 task:** `test-review-recapture` (pipeline). Five
+  cases: happy-path call ordering + JSON shape; 409 when
+  `LoopState.state in {CAPTURE, EJECT}`; 404 on unknown disc;
+  filename + `review/` directory invariants; LED-failure tolerated
+  per the `LEDPanel` never-raises invariant.
+- **+1 Wave 2 task:** `impl-review-recapture` (pipeline; depends
+  on `test-review-recapture` and `impl-library`). New POST endpoint
+  in `archivist/service/app.py` plus a new helper file
+  `archivist/pipeline/review_capture.py` (does NOT reuse
+  `capture_disc` — different intent: single-shot per lighting
+  vs. multi-frame burst).
+- **Amendment to `impl-library`:** detail-page template gains a
+  "Take a review photo" button + 3-2-1 countdown JS + a "operator
+  review captures" section listing `review/` files alongside
+  `captures/` thumbnails. The asset-serving route is extended (or
+  a sibling route added) to serve `review/<filename>` with the
+  same path-traversal guard. Because `impl-library` is already
+  marked `[x]`, this amendment is queued as a follow-up commit on
+  the same task — pipeline picks it up alongside
+  `impl-review-recapture`.
+
+**New totals:** 27 tasks (Wave 1 = 16, Wave 2 = 11) — was 25 (15/10);
+optional `test-log-stream` was skipped per prior log entry so the
+landed count is 26 tasks (15/11) once Bucket D fully lands. Sprint
+buckets are now A (sprint-2 polish), B (capture-timing redesign),
+C (review UI), D (operator review-recapture).
+
+**Decision Log entry added:** `D-review-recapture-mvp` captures the
+deliberate scope decision and the explicit deferrals to sprint-4.
+**No Contract Changes entry** — the new endpoint is additive on the
+service surface; no signature or schema changes ripple to other
+agents.
+
+User reviews this draft before commit + agent kickoff.
 
 ### 2026-05-14 — drivers — Wave 1 failing tests landed (3 tasks, 3 commits)
 
