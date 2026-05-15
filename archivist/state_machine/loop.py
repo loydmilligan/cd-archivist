@@ -98,6 +98,7 @@ class ArchivistLoop:
     # ------------------------- public API -----------------------------
 
     def tick(self) -> State:
+        self._heartbeat()
         try:
             self._advance()
         except Exception:
@@ -200,13 +201,21 @@ class ArchivistLoop:
 
     # ------------------------- helpers --------------------------------
 
+    def _heartbeat(self) -> None:
+        """Advance last_tick_at on every tick (not just transitions)."""
+        if self._loop_state is not None:
+            self._loop_state.last_tick_at = datetime.now(UTC)
+
     def _set_state(self, new_state: State, **patch: Any) -> None:
         self.state = new_state
         if self._loop_state is None:
             return
-        # Update the snapshot the FastAPI service reads.
+        # Update the snapshot the FastAPI service reads. state_entered_at
+        # advances ONLY on real transitions; last_tick_at is the heartbeat.
+        now = datetime.now(UTC)
         self._loop_state.state = new_state.value
-        self._loop_state.last_updated = datetime.now(UTC)
+        self._loop_state.state_entered_at = now
+        self._loop_state.last_tick_at = now
         for k, v in patch.items():
             if hasattr(self._loop_state, k):
                 setattr(self._loop_state, k, v)

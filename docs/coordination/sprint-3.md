@@ -436,7 +436,7 @@ updated: 2026-05-14T00:00:00.000Z
     `None` default; the Popen refactor preserves the existing
     return contract on success). `ruff check` clean.
 
-- [ ] {agent: pipeline, depends: test-last-tick, id: impl-last-tick}
+- [x] {agent: pipeline, depends: test-last-tick, id: impl-last-tick}
   Refactor `LoopState`: rename `last_updated → state_entered_at`, add
   `last_tick_at: datetime`. The state-machine `_set_state` updates
   both fields on transitions; a new `_tick_heartbeat()` method updates

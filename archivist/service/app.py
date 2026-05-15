@@ -38,12 +38,21 @@ _STATIC_DIR = Path(__file__).parent / "static"
 
 @dataclass
 class LoopState:
-    """Mutable snapshot the state-machine writes; the service reads."""
+    """Mutable snapshot the state-machine writes; the service reads.
+
+    Sprint-3 / test-last-tick: `last_updated` was renamed to
+    `state_entered_at` (advances on transitions only) and a separate
+    `last_tick_at` heartbeat field was added (advances every tick).
+    See Contract Changes in docs/coordination/sprint-3.md.
+    """
 
     state: str = "IDLE"
     disc_id: str | None = None
     last_rip_status: str | None = None
-    last_updated: datetime = field(default_factory=lambda: datetime.now(UTC))
+    state_entered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_tick_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Sprint-3 / test-rip-progress: live cdparanoia progress label.
+    rip_progress: str | None = None
 
 
 def _tail_log(path: Path, lines: int) -> str:
@@ -69,7 +78,9 @@ def create_app(loop_state: LoopState, log_path: Path) -> FastAPI:
                 "state": loop_state.state,
                 "disc_id": loop_state.disc_id,
                 "last_rip_status": loop_state.last_rip_status,
-                "last_updated": loop_state.last_updated.isoformat(),
+                "state_entered_at": loop_state.state_entered_at.isoformat(),
+                "last_tick_at": loop_state.last_tick_at.isoformat(),
+                "rip_progress": loop_state.rip_progress,
             }
         )
 
