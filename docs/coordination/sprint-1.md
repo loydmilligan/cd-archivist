@@ -202,6 +202,28 @@ _No contract changes yet._
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-14 — orc — sprint-1 closed
+
+- All 17 tasks across Wave 0 / Wave 1 / Wave 2 are `[x]`. Test totals: drivers 32/32, pipeline 11/11; `ruff check archivist tests` clean.
+- Commit chain (sprint scope):
+  - `545cc9a` wave 0 scaffold
+  - `4cf62e3` wave 1 pipeline failing tests
+  - `61d04e2` wave 1 driver failing tests
+  - `6bba896` coord-doc — drivers Wave 1 done
+  - `273bfa6` impl-disc-id
+  - `d3fead6` impl-manifest
+  - `0771532` impl-drive
+  - `b173f19` impl-folder
+  - `03c5a0a` impl-pairing
+  - `0f9ddb8` impl-led
+  - `3878d89` impl-camera
+  - `f03773e` impl-ripper
+- Tag: `sprint-1-done` cut at the wrap commit so sprint-2 diffs are scoped cleanly.
+- Out-of-scope items deferred to sprint-2 per the Wave 2 comment block (state machine wiring, FastAPI status surface, cdplay.service stop/restart, VIDIOC_STREAMON USB recovery, real-rig E2E).
+- Two follow-ups surfaced during impl that are worth carrying into sprint-2 planning:
+  - `tests/` has no `__init__.py`; ripper test had to inline a `FakeCompletedProcess` shim instead of importing from `tests/conftest.py`. Decide whether to make `tests/` a package or accept inline duplication.
+  - `LEDPanel` pre-encodes `cmnd` into the URL string (vs passing as `params={...}`) so tests can introspect the raw URL — a test-driven choice, not necessarily the right production shape.
+
 ### 2026-05-14 — drivers — Wave 2 fully green: impl-led + impl-camera + impl-ripper landed
 
 - `archivist/drivers/led.py` — `LEDPanel(base_url)` with `power_on` / `power_off` / `status`. Pre-encodes the `cmnd` argument via `urllib.parse.quote` and embeds it in the URL (so callers / tests can introspect the raw URL string), 5s timeout. Catches `requests.RequestException` and JSON-decode `ValueError`; logs `"LED %s failed: %s"` and returns the documented sentinel (`False` / `"unknown"`). Never raises. Parses `{"POWER": "ON" | "OFF"}` — any other shape → `"unknown"`. Also fixed a latent bug in `tests/drivers/test_led.py` where the fixture attached an attribute to a bare `list` (Python rejects this); replaced with a typed `_CapturedGets(list)` subclass.
