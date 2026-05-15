@@ -86,7 +86,7 @@ updated: 2026-05-13T02:38:44.641Z
 
 ### Wave 0 — Scaffold
 
-- [ ] {agent: pipeline, id: pipeline-scaffold} Initialize the `archivist/` Python package: create empty package directories `archivist/{drivers,pipeline,models}/__init__.py` and `tests/{drivers,pipeline}/__init__.py`; write `pyproject.toml` (Python 3.11+, dependencies: `pydantic`, `requests`, runtime; `pytest`, `pytest-mock`, `ruff` dev); write `ruff.toml` (line-length 100, target-version py311, default selections); write `pytest.ini` or `[tool.pytest.ini_options]` in pyproject (test paths = `tests/`, addopts strict markers); write `tests/conftest.py` with shared fixtures: a `tmp_disc_root` factory fixture (yields a tmp dir laid out like `/srv/cd-archivist/discs/`) and a `fake_subprocess` fixture for stubbing `subprocess.run` / `subprocess.Popen` cleanly.
+- [x] {agent: pipeline, id: pipeline-scaffold} Initialize the `archivist/` Python package: create empty package directories `archivist/{drivers,pipeline,models}/__init__.py` and `tests/{drivers,pipeline}/__init__.py`; write `pyproject.toml` (Python 3.11+, dependencies: `pydantic`, `requests`, runtime; `pytest`, `pytest-mock`, `ruff` dev); write `ruff.toml` (line-length 100, target-version py311, default selections); write `pytest.ini` or `[tool.pytest.ini_options]` in pyproject (test paths = `tests/`, addopts strict markers); write `tests/conftest.py` with shared fixtures: a `tmp_disc_root` factory fixture (yields a tmp dir laid out like `/srv/cd-archivist/discs/`) and a `fake_subprocess` fixture for stubbing `subprocess.run` / `subprocess.Popen` cleanly.
   - **Acceptance:** Files created: `pyproject.toml`, `ruff.toml`, `tests/conftest.py`, and the empty `__init__.py` files listed above. `pytest --collect-only` runs cleanly (collects zero tests, no errors). `ruff check archivist tests` returns 0. The package is installable in editable mode (`pip install -e .` succeeds) — verify locally, no commit needed.
 
 ### Wave 1 — Failing tests (parallel-safe; each implicit-depends on `pipeline-scaffold`)
@@ -201,6 +201,16 @@ _No contract changes yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-14 — pipeline — Wave 0 scaffold landed
+
+- Created `archivist/{drivers,pipeline,models}/__init__.py` and `tests/{drivers,pipeline}/__init__.py` for the new package layout.
+- Rewrote `pyproject.toml` to the sprint-1 spec: Python 3.11+, runtime deps `pydantic`+`requests`, dev deps `pytest`+`pytest-mock`+`ruff`; setuptools find-packages scoped to `archivist*`; `[tool.pytest.ini_options]` with `testpaths=["tests"]` and `--strict-markers --strict-config`. Removed old runtime deps (pyyaml, watchdog, opencv-python, fastapi, uvicorn, etc.) per the new scope — they re-land when sprint-2 needs them.
+- Added `ruff.toml` (line-length 100, target-version py311) and `tests/conftest.py` with `tmp_disc_root` factory + `fake_subprocess` fixtures (records calls, scriptable returncode/stdout/stderr, supports exception injection for `FileNotFoundError`/`TimeoutExpired` paths).
+- Legacy `tests/test_disc_id.py` and `tests/test_pairing.py` import from the deprecated `cd_archivist` package; ignored via `addopts=--ignore-glob=tests/test_*.py` so collection stays clean. They will be removed when Wave 1 lands their replacements under `tests/pipeline/`.
+- Verified: `pip install -e .` succeeds; `pytest --collect-only` collects 0 tests with no errors; `ruff check archivist tests` returns 0.
+- `.gitignore`: added `*.egg-info/`, `build/`, `dist/`.
+- Unblocks all of Wave 1 (drivers + pipeline tests).
 
 ### 2026-05-14 — planner — sprint plan drafted
 
