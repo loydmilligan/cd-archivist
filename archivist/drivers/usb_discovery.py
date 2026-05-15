@@ -68,7 +68,16 @@ def discover_camera_usb_path(
         actual = f"{_norm_hex(parts[0])}/{_norm_hex(parts[1])}"
         if actual != needle:
             continue
+        # On real /sys, the uevent file does NOT contain DEVPATH (that's a
+        # udev event-time field, not a stored attribute). Resolve the
+        # videoN symlink to recover the bus path from the filesystem.
+        # Fall back to DEVPATH for tests that synthesize the field.
         devpath = _find_field(body, "DEVPATH") or ""
+        if not devpath:
+            try:
+                devpath = str(video_dir.resolve(strict=False))
+            except OSError:
+                devpath = ""
         bus_path = _extract_bus_path(devpath)
         if bus_path:
             matches.append((int(n_match.group(1)), bus_path))
