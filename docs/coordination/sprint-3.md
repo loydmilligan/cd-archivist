@@ -266,7 +266,7 @@ updated: 2026-05-14T00:00:00.000Z
   - **Acceptance:** Test added to `tests/service/test_app.py`. Fails
     until impl-status-ui.
 
-- [ ] {agent: drivers, id: test-rip-stderr-stream} Failing tests for
+- [x] {agent: drivers, id: test-rip-stderr-stream} Failing tests for
   live-streaming cdparanoia stderr in `archivist/drivers/ripper.py`.
   Today `CDAudioRipper.rip` uses `subprocess.run(..., capture_output=
   True)` which buffers stderr until the process exits — on the
