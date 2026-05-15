@@ -66,30 +66,33 @@ def _set_response(calls: _CapturedGets, resp: Any) -> None:
 
 # ---------------------------- happy paths ----------------------------
 
-def test_power_on_happy(captured_gets: list) -> None:
+def test_power_on_happy(captured_gets: _CapturedGets) -> None:
     _set_response(captured_gets, FakeResponse({"POWER": "ON"}))
     panel = LEDPanel(BASE_URL)
     assert panel.power_on() is True
-    url, _ = captured_gets[0]
-    assert "Power%20On" in url or "Power On" in url
-    assert url.startswith(BASE_URL)
+    url, kwargs = captured_gets[0]
+    assert url == f"{BASE_URL}/cm"
+    assert kwargs["params"] == {"cmnd": "Power On"}
 
 
-def test_power_off_happy(captured_gets: list) -> None:
+def test_power_off_happy(captured_gets: _CapturedGets) -> None:
     _set_response(captured_gets, FakeResponse({"POWER": "OFF"}))
     panel = LEDPanel(BASE_URL)
     assert panel.power_off() is True
-    url, _ = captured_gets[0]
-    assert "Power%20Off" in url or "Power Off" in url
+    url, kwargs = captured_gets[0]
+    assert url == f"{BASE_URL}/cm"
+    assert kwargs["params"] == {"cmnd": "Power Off"}
 
 
-def test_status_on(captured_gets: list) -> None:
+def test_status_on(captured_gets: _CapturedGets) -> None:
     _set_response(captured_gets, FakeResponse({"POWER": "ON"}))
     panel = LEDPanel(BASE_URL)
     assert panel.status() == "on"
+    _, kwargs = captured_gets[0]
+    assert kwargs["params"] == {"cmnd": "Power"}
 
 
-def test_status_off(captured_gets: list) -> None:
+def test_status_off(captured_gets: _CapturedGets) -> None:
     _set_response(captured_gets, FakeResponse({"POWER": "OFF"}))
     panel = LEDPanel(BASE_URL)
     assert panel.status() == "off"

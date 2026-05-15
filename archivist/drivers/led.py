@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 from typing import Literal
-from urllib.parse import quote
 
 import requests
 
@@ -50,9 +49,9 @@ class LEDPanel:
         return value in {"ON", "OFF"}
 
     def _get(self, cmnd: str) -> dict | None:
-        url = f"{self.base_url}/cm?cmnd={quote(cmnd)}"
+        url = f"{self.base_url}/cm"
         try:
-            resp = requests.get(url, timeout=_TIMEOUT_SECONDS)
+            resp = requests.get(url, params={"cmnd": cmnd}, timeout=_TIMEOUT_SECONDS)
             return resp.json()
         except requests.RequestException as exc:
             _logger.warning("LED %s failed: %s", cmnd, exc)
