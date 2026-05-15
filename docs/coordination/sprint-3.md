@@ -365,7 +365,7 @@ updated: 2026-05-14T00:00:00.000Z
   - **Acceptance:** New file `tests/service/test_library.py`. Fails
     until `impl-library` adds the route. Six cases.
 
-- [ ] {agent: pipeline, id: test-library-detail} Failing test for `GET
+- [x] {agent: pipeline, id: test-library-detail} Failing test for `GET
   /library/CD_NNNN`. Tests: (a) returns 200 for an existing disc; (b)
   returns 404 for a non-existent disc; (c) body contains the formatted
   manifest dump (a `<pre>` with the JSON); (d) body contains 6

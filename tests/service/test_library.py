@@ -178,5 +178,49 @@ def test_library_list_mash_invariants(client: TestClient) -> None:
     assert offenders == [], f"3+-word caps in /library: {offenders!r}"
 
 
-# Detail-page and asset-serving cases land in the next two commits
-# (test-library-detail and test-library-asset-serving).
+# -------- /library/CD_NNNN — detail page (test-library-detail) -------
+
+
+def test_library_detail_existing_disc(client: TestClient) -> None:
+    resp = client.get("/library/CD_0001")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+
+
+def test_library_detail_unknown_disc_404(client: TestClient) -> None:
+    resp = client.get("/library/CD_9999")
+    assert resp.status_code == 404
+
+
+def test_library_detail_renders_manifest_dump(client: TestClient) -> None:
+    body = client.get("/library/CD_0001").text
+    assert "<pre" in body
+    assert "schema_version" in body
+    assert "audio_cd" in body
+
+
+def test_library_detail_renders_capture_thumbnails(client: TestClient) -> None:
+    body = client.get("/library/CD_0001").text
+    matches = re.findall(
+        r"/library/CD_0001/captures/disc_front_(?:ambient|lit)_\d{3}\.jpg", body
+    )
+    assert len(matches) >= 6
+
+
+def test_library_detail_renders_audio_players(client: TestClient) -> None:
+    body = client.get("/library/CD_0001").text
+    assert body.count("<audio") >= 2
+    assert "/library/CD_0001/audio/track01.flac" in body
+    assert "/library/CD_0001/audio/track02.flac" in body
+
+
+def test_library_detail_shows_file_sizes(client: TestClient) -> None:
+    body = client.get("/library/CD_0001").text
+    # Some byte-size unit must appear with the track listing.
+    assert any(unit in body for unit in ("KB", "MB", "kB", "MiB", "B "))
+
+
+def test_library_detail_log_tail_when_logs_present(client: TestClient) -> None:
+    body = client.get("/library/CD_0001").text
+    # Fixture wrote logs/rip.log; the page tails it.
+    assert "ripping" in body or "ok" in body
