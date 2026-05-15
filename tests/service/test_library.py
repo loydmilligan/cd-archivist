@@ -129,7 +129,10 @@ def test_library_list_returns_html(client: TestClient) -> None:
 
 
 def test_library_list_contains_all_disc_ids(client: TestClient) -> None:
-    body = client.get("/library").text
+    """Sprint-4: `?status=all` is required to see failed/created discs.
+    Default (success) hides CD_0002 (rip_failed) and CD_0003 (created).
+    """
+    body = client.get("/library?status=all").text
     assert "CD_0001" in body
     assert "CD_0002" in body
     assert "CD_0003" in body

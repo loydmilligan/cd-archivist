@@ -44,6 +44,11 @@ _LOG_LINES_CAP = 1000
 _LOG_LINES_DEFAULT = 200
 _STATIC_DIR = Path(__file__).parent / "static"
 _DISC_ID_RE = re.compile(r"^CD_\d{4}$")
+# Sprint-4: also accept the new shape `YYYY-MM-DD_HHMM_disc-NNNNNN`.
+_NEW_FOLDER_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}_disc-\d{6}$")
+_VALID_DISC_FOLDER_RE = re.compile(
+    r"^(?:CD_\d{4}|\d{4}-\d{2}-\d{2}_\d{4}_disc-\d{6})$"
+)
 
 
 @dataclass
@@ -183,7 +188,7 @@ def _resolve_under(root: Path, *parts: str) -> Path | None:
 
 
 def _disc_dir(discs_root: Path, disc_id: str) -> Path | None:
-    if not _DISC_ID_RE.match(disc_id):
+    if not _VALID_DISC_FOLDER_RE.match(disc_id):
         return None
     d = discs_root / disc_id
     if not d.is_dir():
@@ -200,15 +205,19 @@ def _mount_library_routes(
     recapture_led: Any | None = None,
 ) -> None:
     @app.get("/library", response_class=HTMLResponse)
-    def library_list() -> HTMLResponse:
-        return HTMLResponse(_render_library_list(discs_root))
+    def library_list(status: str = "success") -> HTMLResponse:
+        if status not in ("success", "failed", "all"):
+            status = "success"
+        return HTMLResponse(_render_library_list(discs_root, status=status))
 
     @app.get("/library/{disc_id}", response_class=HTMLResponse)
     def library_detail(disc_id: str) -> HTMLResponse:
-        if not _DISC_ID_RE.match(disc_id):
+        if not _VALID_DISC_FOLDER_RE.match(disc_id):
             raise HTTPException(status_code=404)
         d = _disc_dir(discs_root, disc_id)
-        if d is None or not (d / "manifest.json").is_file():
+        if d is None:
+            raise HTTPException(status_code=404)
+        if not (d / "manifest.json").is_file() and not (d / "source.json").is_file():
             raise HTTPException(status_code=404)
         return HTMLResponse(_render_library_detail(d))
 
@@ -231,6 +240,17 @@ def _mount_library_routes(
         if target is None:
             raise HTTPException(status_code=404)
         return FileResponse(target, media_type="audio/flac")
+
+    @app.get("/library/{disc_id}/photo")
+    def library_photo(disc_id: str) -> FileResponse:
+        """Serve the canonical disc-photo.jpg (sprint-4 new-shape folders)."""
+        d = _disc_dir(discs_root, disc_id)
+        if d is None:
+            raise HTTPException(status_code=404)
+        target = _resolve_under(d, "disc-photo.jpg")
+        if target is None:
+            raise HTTPException(status_code=404)
+        return FileResponse(target, media_type="image/jpeg")
 
     @app.get("/library/{disc_id}/review/{filename}")
     def library_review_asset(disc_id: str, filename: str) -> FileResponse:
@@ -271,29 +291,92 @@ def _mount_library_routes(
         return JSONResponse(payload)
 
 
-def _render_library_list(discs_root: Path) -> str:
+def _render_library_list(discs_root: Path, *, status: str = "success") -> str:
+    from archivist.service.library import read_disc_summary
+
     cards: list[str] = []
     if discs_root.is_dir():
-        # Sort by disc_id descending — newest first.
         entries = sorted(
-            (p for p in discs_root.iterdir() if _DISC_ID_RE.match(p.name)),
+            (p for p in discs_root.iterdir() if _VALID_DISC_FOLDER_RE.match(p.name)),
             key=lambda p: p.name,
             reverse=True,
         )
         for d in entries:
-            mp = d / "manifest.json"
-            if not mp.is_file():
+            summary = read_disc_summary(d)
+            if summary is None:
                 continue
-            try:
-                m = read_manifest(mp)
-            except (ValueError, OSError):
+            if status == "success" and not summary.rip_success:
                 continue
-            cards.append(_render_library_card(d, m))
+            if status == "failed" and summary.rip_success:
+                continue
+            cards.append(_render_summary_card(d, summary))
 
     grid = "\n".join(cards) if cards else (
-        '<p class="meta">no discs yet. insert one to start.</p>'
+        '<p class="meta">no discs match this filter.</p>'
     )
-    return _LIBRARY_LIST_HTML.replace("{{GRID}}", grid)
+
+    chips = _render_status_chip_group(status)
+    return (
+        _LIBRARY_LIST_HTML
+        .replace("{{CHIPS}}", chips)
+        .replace("{{GRID}}", grid)
+    )
+
+
+def _render_status_chip_group(active: str) -> str:
+    """Three-pill chip group; active uses --accent, inactive --surface-2."""
+    chips: list[str] = []
+    for label in ("success", "failed", "all"):
+        if label == active:
+            style = "background: var(--accent); color: var(--bg);"
+            cls = "chip chip--active"
+        else:
+            style = "background: var(--surface-2); color: var(--fg-muted);"
+            cls = "chip"
+        chips.append(
+            f'<a class="{cls}" href="/library?status={label}" style="{style}">{label}</a>'
+        )
+    return '<div class="chip-group">' + "\n".join(chips) + "</div>"
+
+
+def _render_summary_card(disc_dir: Path, summary: Any) -> str:
+    disc_id = html.escape(summary.disc_id_or_folder)
+    if summary.rip_success:
+        accent = "card--moss"
+        rip_status_label = "SUCCESS"
+    else:
+        accent = "card--ember"
+        rip_status_label = "FAILED"
+
+    thumb: str
+    if summary.thumbnail is not None:
+        # Route the thumbnail through whichever asset-serving endpoint
+        # applies. New-shape folders serve disc-photo.jpg via /library/.../
+        # but legacy folders serve via /library/.../captures/.
+        if summary.is_legacy:
+            thumb_url = f"/library/{disc_id}/captures/{html.escape(summary.thumbnail.name)}"
+        else:
+            thumb_url = f"/library/{disc_id}/photo"
+        thumb = f'<img class="thumb" src="{thumb_url}" alt="">'
+    else:
+        thumb = '<div class="thumb-empty">no capture</div>'
+
+    created = _rel_time(summary.created_at) if summary.created_at else "—"
+
+    return (
+        f'<a class="card card--lib {accent}" href="/library/{disc_id}">'
+        f'  {thumb}'
+        f'  <div class="card-body">'
+        f'    <p class="eyebrow">{rip_status_label}</p>'
+        f'    <h2 class="card-title">{disc_id}</h2>'
+        f'    <p class="meta">'
+        f'      <span>{summary.track_count} tracks</span>'
+        f'      <span class="dot">·</span>'
+        f'      <span>{html.escape(created)}</span>'
+        f'    </p>'
+        f'  </div>'
+        f'</a>'
+    )
 
 
 def _render_library_card(disc_dir: Path, m: Manifest) -> str:
@@ -757,6 +840,15 @@ _LIBRARY_STYLES = r"""
     white-space: pre-wrap; word-break: break-word;
   }
   .log-card { border-left-color: var(--ink-5); }
+  .chip-group {
+    display: flex; gap: var(--s-2); margin-bottom: var(--s-5);
+  }
+  .chip {
+    font-family: var(--font-body); font-size: var(--fs-sm);
+    text-decoration: none; padding: 6px 14px;
+    border-radius: var(--r-full); border: 1px solid var(--line);
+  }
+  .chip--active { border-color: var(--accent); }
   .review-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
   .review-actions { display: flex; align-items: center; gap: var(--s-3); }
   .btn-primary {
@@ -799,6 +891,7 @@ _LIBRARY_LIST_HTML = r"""<!doctype html>
     </nav>
     <p class="eyebrow">LIBRARY</p>
     <h1 class="page-title">cd-archivist</h1>
+    {{CHIPS}}
     <div class="grid">
       {{GRID}}
     </div>
