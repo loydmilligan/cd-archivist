@@ -233,3 +233,35 @@ def test_root_page_no_three_word_caps_body_copy(loop_state: LoopState, log_path:
         f"3+-word ALL CAPS body copy is not an eyebrow — sentence case "
         f"required. Offenders: {offenders!r}"
     )
+
+
+# -------- liveness rendering (sprint-3 / test-status-ui-liveness) ----
+
+
+def test_root_page_renders_both_timestamps(loop_state: LoopState, log_path: Path) -> None:
+    """Page JS references both state_entered_at and last_tick_at.
+
+    The HTML doesn't have to format them server-side — the JS computes
+    "entered Xm ago" / "last tick Ns ago" client-side. We assert that
+    both field names appear in the page (in the polling JS) so the
+    wiring is real.
+    """
+    client = TestClient(create_app(loop_state, log_path))
+    body = client.get("/").text
+    assert "state_entered_at" in body
+    assert "last_tick_at" in body
+
+
+def test_root_page_log_follow_toggle(loop_state: LoopState, log_path: Path) -> None:
+    """Log tail has a data-follow attribute and a toggle button.
+
+    Auto-scroll follow defaults to "on"; clicking the chip toggles it.
+    """
+    client = TestClient(create_app(loop_state, log_path))
+    body = client.get("/").text
+    # The <pre> declares the follow state.
+    assert 'data-follow="on"' in body
+    # A toggle control exists.
+    assert 'id="log-follow-toggle"' in body
+    # JS contains the scroll-to-bottom line gated on follow.
+    assert "scrollTop" in body and "scrollHeight" in body

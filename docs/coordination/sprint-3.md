@@ -241,7 +241,7 @@ updated: 2026-05-14T00:00:00.000Z
     Four new cases plus existing crash-recovery test still passing.
     Fails until impl-rip-error-recovery.
 
-- [ ] {agent: pipeline, id: test-status-ui-liveness} Failing UI test
+- [x] {agent: pipeline, id: test-status-ui-liveness} Failing UI test
   for the status page rendering both timestamps ("entered Xm ago, last
   tick Ns ago"), and an auto-scrolling log tail with a "follow"
   toggle. Reuses the existing `tests/service/test_app.py`. Asserts:
