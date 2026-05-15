@@ -422,6 +422,113 @@ updated: 2026-05-15T00:00:00.000Z
     `archivist/service/library.py` (new file extracted from
     `app.py` — keeps the route handlers thin).
 
+#### Bucket C — real-rig fixes surfaced during post-Wave-0 smoke (2026-05-15)
+
+> Three issues observed on the dogfood CM4 after Wave 0 completed:
+> (1) `CDROMEJECT` ioctl reports success but the USB drive's tray
+> doesn't physically open (firmware quirk); (2) when eject fails,
+> the loop transitions back to WAITING, sees `disc-ok`, and
+> immediately re-rips the same disc (CD_0019, CD_0020, ... all from
+> the same physical disc tonight); (3) auto-mode timing has too
+> many edge cases — operator needs an explicit "manual mode" where
+> state transitions through STABILIZE/RIP/CAPTURE/EJECT are
+> button-driven rather than automatic. Bucket C is **complementary
+> to Bucket A** (does not block contract conformance) but lands in
+> the same sprint because the underlying state-machine restructure
+> in `impl-working-dir-handoff` is the natural integration point.
+
+- [ ] {agent: drivers, id: test-eject-reliability} Failing tests for
+  the new shell-based `eject(device: Path) -> bool` in
+  `archivist/drivers/drive.py`. The current ioctl impl
+  (`fcntl.ioctl(fd, CDROMEJECT)`) returns success on the dogfood
+  USB drive but the tray never physically opens — almost certainly
+  a drive-firmware quirk where `CDROMEJECT` is silently ignored.
+  The shell `eject` binary uses ATAPI `START STOP UNIT` with the
+  LoEj+Start bits, which is more universally honored. Tests use
+  `fake_subprocess` from `conftest.py` to stub `subprocess.run`:
+  (a) `returncode == 0` → returns `True`; (b) non-zero returncode
+  → returns `False`, stderr captured and logged via the module
+  logger (assert via caplog); (c) `FileNotFoundError` (no `eject`
+  binary on PATH) → returns `False`, logs a clear error naming the
+  missing binary; (d) `subprocess.TimeoutExpired` → returns
+  `False`, logs the timeout (10s ceiling); (e) **never-raises
+  invariant** — no input or subprocess outcome causes the function
+  to raise (the state machine relies on this). Function signature
+  is unchanged from the ioctl version (`eject(device: Path) ->
+  bool`) so callers don't need to know about the impl change.
+  - **Acceptance:** Five cases in `tests/drivers/test_drive.py`
+    (or a sibling `test_eject.py` if `test_drive.py` gets
+    crowded — author's call). Fails until
+    `impl-eject-reliability`.
+
+- [ ] {agent: pipeline, id: test-waiting-remove-state} Failing tests
+  for the new `WAITING_REMOVE` loop state. After EJECT phase
+  completes, the loop must transition to `WAITING_REMOVE` (NOT
+  back to WAITING/IDLE), and stay there until the drive reports
+  `tray-open` OR `no-disc` — i.e. until the operator has
+  physically removed the disc. This is robust against the
+  eject-firmware quirk in Bucket C #1 even after that's fixed:
+  if the tray didn't physically open, the state machine sits in
+  `WAITING_REMOVE` rather than auto-re-ripping. Tests in
+  `tests/state_machine/test_loop.py`: (a) post-EJECT `tick()` →
+  `LoopState.phase == "waiting_remove"`; (b) in `WAITING_REMOVE`
+  with drive reporting `disc-ok` → stays put, no advance, no
+  re-rip cycle started, `tick()` is effectively a no-op for
+  forward progress; (c) in `WAITING_REMOVE` with `tray-open` →
+  advances to IDLE/WAITING (ready for the next disc); (d) in
+  `WAITING_REMOVE` with `no-disc` → advances to IDLE/WAITING;
+  (e) `LoopState` serialization includes the new state (status
+  endpoint surfaces it correctly).
+  - **Acceptance:** Five cases in `tests/state_machine/test_loop.
+    py`. Fails until `impl-waiting-remove-state`.
+
+- [ ] {agent: pipeline, id: test-manual-mode-state-gating} Failing
+  tests for manual-mode gating of state-machine auto-transitions.
+  In manual mode, the loop still polls drive status (so it knows
+  what's there) but the production-phase auto-transitions
+  (STABILIZE→RIP, RIP→EJECT, EJECT→CAPTURE, CAPTURE→WAITING_REMOVE)
+  do NOT fire automatically. They fire only when an explicit
+  operator-trigger advances them. Tests in `tests/state_machine/
+  test_loop.py`: (a) `LoopState.mode == "manual"` + `disc-ok` →
+  loop transitions IDLE→STABILIZE (drive-state observation still
+  happens) but does NOT auto-advance STABILIZE→RIP even after
+  STABILIZE_SECONDS elapses; (b) in `manual` mode + `STABILIZE`,
+  calling the explicit `advance("rip")` trigger advances to RIP
+  and runs the rip; (c) in `manual` mode + `RIP` complete,
+  `advance("eject")` advances to EJECT, `advance("capture")`
+  advances to CAPTURE; (d) in `auto` mode (default), all
+  transitions fire as today (regression check); (e) `advance()`
+  with a trigger that doesn't match the current state is a
+  no-op at the state-machine level (the HTTP layer surfaces 409
+  — see `test-manual-mode-endpoints`); (f) `advance("reset")`
+  in any mode returns the loop to IDLE without ripping, clears
+  the in-flight `_cycle`, and is logged via `RipLogWriter` if a
+  cycle was active.
+  - **Acceptance:** Six cases in `tests/state_machine/test_loop.
+    py`. Fails until `impl-manual-mode`.
+
+- [ ] {agent: pipeline, id: test-manual-mode-endpoints} Failing
+  tests for the new manual-mode HTTP control surface. New
+  endpoints in `archivist/service/app.py`:
+  `POST /api/control/start-rip`, `POST /api/control/eject`,
+  `POST /api/control/capture`, `POST /api/control/reset`,
+  `POST /api/control/mode?mode=auto|manual`. Tests in
+  `tests/service/test_control_endpoints.py` (new file): (a)
+  `POST /api/control/mode?mode=manual` → `200`, `LoopState.mode`
+  flips to `"manual"`; (b) `POST /api/control/mode?mode=auto` →
+  `200`, flips back; (c) `POST /api/control/mode?mode=garbage`
+  → `400`; (d) in manual mode + `STABILIZE`, `POST
+  /api/control/start-rip` → `200`, advances to RIP; (e) in
+  manual mode + `IDLE`, `POST /api/control/start-rip` → `409`
+  (state mismatch); (f) in `auto` mode, `POST
+  /api/control/start-rip` → `403` (manual-only trigger refused);
+  (g) `POST /api/control/reset` works in either mode and from
+  any state (operator escape hatch — always allowed); (h)
+  `/api/status` response includes `mode: "auto" | "manual"` so
+  the UI knows which buttons to show.
+  - **Acceptance:** Eight cases in `tests/service/test_control_
+    endpoints.py`. Fails until `impl-manual-mode`.
+
 ### Wave 2 — Implementations
 
 #### Bucket A — music-pipeline contract conformance
@@ -740,6 +847,107 @@ updated: 2026-05-15T00:00:00.000Z
     → just CD_0017 (or whichever was the failed one); `?status=
     all` → everything.
 
+#### Bucket C — real-rig fixes surfaced during post-Wave-0 smoke (2026-05-15)
+
+- [ ] {agent: drivers, depends: test-eject-reliability,
+  id: impl-eject-reliability} Replace the ioctl-based `eject` in
+  `archivist/drivers/drive.py` with `subprocess.run(["eject",
+  str(device)], capture_output=True, text=True, timeout=10)`.
+  Returncode 0 → `True`; non-zero → `False` with stderr logged via
+  the module logger; `FileNotFoundError` → `False` with a clear
+  log; `subprocess.TimeoutExpired` → `False` with timeout logged.
+  Function signature unchanged so neither the state machine nor
+  existing tests need to know about the impl change. Module
+  docstring updated to document that the `CDROMEJECT` ioctl was
+  tried first but didn't move the tray on the dogfood USB drive
+  (cite this as a real-rig finding from the post-Wave-0 smoke on
+  2026-05-15) — the shell `eject` binary uses ATAPI `START STOP
+  UNIT` with LoEj+Start, which is more universally honored, and
+  also handles fallback paths (LOAD/UNLOAD, etc.) we'd otherwise
+  have to reimplement. Add `eject` as a runtime-binary dependency
+  documented in `docs/operations/cm4-setup.md` (already standard
+  on Debian, including the CM4 — folded into `impl-docs-paths` if
+  convenient).
+  - **Acceptance:** `tests/drivers/test_drive.py` (or
+    `test_eject.py`) eject cases pass. Existing state-machine
+    tests that exercise EJECT still pass (signature unchanged).
+
+- [ ] {agent: pipeline, depends: test-waiting-remove-state,
+  depends: impl-eject-reliability,
+  depends: impl-working-dir-handoff,
+  id: impl-waiting-remove-state} Extend the loop state enum with
+  `WAITING_REMOVE`. Update the EJECT→IDLE/WAITING transition to
+  EJECT→WAITING_REMOVE. Add the WAITING_REMOVE handler keyed on
+  drive status: `tray-open` OR `no-disc` → IDLE/WAITING (whichever
+  matches the existing post-eject convention); `disc-ok` → stay in
+  WAITING_REMOVE (no advance, no re-rip). The status page
+  (`archivist/service/static/` + the FastAPI status template)
+  renders the new state with the Mash Co. `--amber` token (the
+  "needs operator" semantic color) and a short copy line such as
+  "Remove disc to continue." `LoopState` JSON serialization
+  includes the new state so `/api/status` consumers see it. **No
+  abort path needed** — the operator can always physically open
+  the tray manually OR (once Bucket C #3 lands) hit the manual-
+  mode `POST /api/control/reset` to force back to IDLE; either
+  resolves the wait. Documented in the state docstring.
+  - **Acceptance:** `tests/state_machine/test_loop.py`
+    waiting-remove cases pass. The status page renders the new
+    state correctly (manual sanity by the operator on the dogfood
+    rig — no automated UI test).
+
+- [ ] {agent: pipeline, depends: test-manual-mode-state-gating,
+  depends: test-manual-mode-endpoints,
+  depends: impl-waiting-remove-state,
+  id: impl-manual-mode} Implement manual-mode gating + the new
+  control endpoints. Changes:
+  1. **`LoopState.mode: Literal["auto","manual"]`** — defaults
+     from env `ARCHIVIST_MODE` (validated, defaults to `"auto"`
+     when unset or invalid; invalid value logged with a warning).
+     Mode is included in `LoopState.to_dict()` so `/api/status`
+     surfaces it.
+  2. **State-machine gating** — the existing auto-transitions
+     (STABILIZE→RIP, RIP→EJECT, EJECT→CAPTURE,
+     CAPTURE→WAITING_REMOVE) check `loop_state.mode`; in
+     `manual` mode, they DO NOT fire automatically. Drive
+     polling + state observation happens in both modes; only the
+     forward production-phase transitions are gated.
+  3. **`advance(trigger: Literal["rip","eject","capture",
+     "reset"]) -> bool`** method on the state machine. Each
+     trigger advances iff the current state matches; otherwise
+     no-op (returns `False`). `reset` is always allowed and
+     returns to IDLE without ripping, clearing the in-flight
+     `_cycle` and logging via `RipLogWriter` if active.
+  4. **New endpoints in `archivist/service/app.py`:**
+     `POST /api/control/mode?mode=auto|manual` (200 / 400);
+     `POST /api/control/start-rip`, `POST /api/control/eject`,
+     `POST /api/control/capture` — each: 200 if `advance()`
+     succeeded, 409 if the trigger doesn't match the current
+     state, 403 if `loop_state.mode == "auto"` (manual-only
+     triggers); `POST /api/control/reset` — 200 in either mode
+     from any state.
+  5. **UI** — the FastAPI status page renders a two-button mode
+     toggle group at the top of the state card (Auto | Manual)
+     using Mash Co. tokens (active = `--accent` background,
+     inactive = `--surface-2`); when `mode == "manual"`, a
+     per-state action button group renders below the state line
+     showing the buttons that match the current state ("Start
+     rip" in STABILIZE; "Eject now" in RIP-complete; "Capture
+     now" in EJECT-complete; "Reset" always present). Buttons
+     are `<form method="post" action="/api/control/...">` with
+     no JS — same anchor-link pattern as the library `?status=`
+     filter. **Default mode = `"auto"`** (preserves today's
+     behavior for operators who don't set `ARCHIVIST_MODE`); the
+     judgment call is captured in `D-manual-mode`. The new
+     `?status=` filter UI from Bucket B and the manual-mode
+     button group share the same Mash Co. chip/button styling.
+  - **Acceptance:** `tests/state_machine/test_loop.py` gating
+    cases pass; `tests/service/test_control_endpoints.py`
+    passes; existing auto-mode tests still pass (regression).
+    Manual sanity on the dogfood rig: flip to manual, drive a
+    full disc through STABILIZE→RIP→EJECT→CAPTURE→WAITING_REMOVE
+    by clicking the buttons; flip back to auto, confirm next
+    disc auto-progresses.
+
 #### Stretch (only if Wave 2 finishes early)
 
 - [ ] {agent: pipeline, id: impl-source-json-sha256} _Stretch_ —
@@ -772,17 +980,21 @@ updated: 2026-05-15T00:00:00.000Z
 | Agent | Owns | Does not touch |
 |---|---|---|
 | drivers | `archivist/drivers/{drive,led,camera,ripper,systemctl,usb_discovery,rip_log}.py`, `archivist/models/manifest.py`, `tests/drivers/` | `archivist/pipeline/`, `archivist/state_machine/`, `archivist/service/`, `archivist/__main__.py`, `archivist/models/source.py` |
-| pipeline | `archivist/pipeline/{disc_id,folder,pairing,capture,rip,rip_progress,review_capture,source_json}.py`, `archivist/state_machine/`, `archivist/service/` (incl. `archivist/service/static/` and the new `archivist/service/library.py`), `archivist/models/source.py`, `archivist/__main__.py`, `tests/pipeline/`, `tests/state_machine/`, `tests/service/`, `tests/models/`, `tests/test_main_logging.py`, `tests/test_main_music_paths.py`, `tests/__init__.py`, `tests/conftest.py`, `pyproject.toml`, `ruff.toml`, `docs/operations/cm4-setup.md`, `docs/operations/sprint-2-smoke.md`, `docs/ripper-handoff-for-claude-code.md` (dogfood-rig override note only), `docs/coordination/sprint-4.md` | `archivist/drivers/` internals (consumes their public interfaces) |
+| pipeline | `archivist/pipeline/{disc_id,folder,pairing,capture,rip,rip_progress,review_capture,source_json}.py`, `archivist/state_machine/`, `archivist/service/` (incl. `archivist/service/static/`, the new `archivist/service/library.py`, and the new manual-mode control endpoints in `app.py`), `archivist/models/source.py`, `archivist/__main__.py`, `tests/pipeline/`, `tests/state_machine/`, `tests/service/` (incl. new `tests/service/test_control_endpoints.py`), `tests/models/`, `tests/test_main_logging.py`, `tests/test_main_music_paths.py`, `tests/__init__.py`, `tests/conftest.py`, `pyproject.toml`, `ruff.toml`, `docs/operations/cm4-setup.md`, `docs/operations/sprint-2-smoke.md`, `docs/ripper-handoff-for-claude-code.md` (dogfood-rig override note only), `docs/coordination/sprint-4.md` | `archivist/drivers/` internals (consumes their public interfaces) |
 
 Same two agents as sprints 1-3. Drivers' sprint-4 footprint is small:
 the new `archivist/drivers/rip_log.py::RipLogWriter` (lives next to the
 ripper because the ripper consumes it as the `progress_callback`), the
-`read_drive_info` helper on `drive.py` (small `/proc` parser), and the
-WAV-cleanup edit in `ripper.py` (post-FLAC `wav.unlink`). Pipeline owns
-everything else: the new `source.json` model + builder, the folder-name
-allocator, the working-dir → inbox handoff in the state machine, the
-`READY` / `FAILED` markers, the canonical-photo selection, the
-library legacy adapter, and the `?status=` filter.
+`read_drive_info` helper on `drive.py` (small `/proc` parser), the
+WAV-cleanup edit in `ripper.py` (post-FLAC `wav.unlink`), and the
+ioctl→shell-eject swap in `drive.py` (Bucket C — `impl-eject-
+reliability`; signature unchanged). Pipeline owns everything else:
+the new `source.json` model + builder, the folder-name allocator, the
+working-dir → inbox handoff in the state machine, the `READY` /
+`FAILED` markers, the canonical-photo selection, the library legacy
+adapter, the `?status=` filter, and the Bucket C state-machine
+extensions (`WAITING_REMOVE` state, `LoopState.mode` gating, the new
+`/api/control/*` endpoints, and the manual-mode UI button group).
 
 **New cross-agent meeting point:** `RipLogWriter.event` is consumed by
 the state machine (`_from_*` handlers call it directly) and by the
@@ -919,6 +1131,94 @@ schema's dump in a `<pre>` block — legacy folders show
 `DiscSummary.rip_success` which the adapter derives correctly for
 both shapes.
 
+### 2026-05-15 — D-eject-via-shell — replace `CDROMEJECT` ioctl with shell `eject` binary
+
+**Proposed.** Real-rig finding from the post-Wave-0 smoke on
+2026-05-15: the CM4's USB CD drive accepts `CDROMEJECT`
+(`fcntl.ioctl(fd, 0x5309)`) and returns success, but the tray
+never physically opens. Almost certainly a drive-firmware quirk
+where `CDROMEJECT` is silently ignored. Resolution: switch the
+implementation of `archivist/drivers/drive.py::eject(device)` to
+shell out to the `eject` binary via `subprocess.run(["eject",
+str(device)], capture_output=True, text=True, timeout=10)`. The
+`eject` binary uses ATAPI `START STOP UNIT` with the LoEj+Start
+bits, which is more universally honored, and also handles
+fallback paths (LOAD/UNLOAD, etc.) we'd otherwise have to
+reimplement.
+
+**Tradeoff:** the ioctl approach is correct for many drives and
+adds no runtime-binary dependency, but it's unreliable across the
+spectrum (this dogfood drive is the proof). `eject` is a standard
+Debian package (already present on the CM4) so the dependency
+cost is effectively zero. Function signature stays
+`eject(device: Path) -> bool` so neither the state machine nor
+existing tests need to change. Module docstring documents the
+ioctl-was-tried-first history so future maintainers don't repeat
+the exploration.
+
+### 2026-05-15 — D-waiting-remove-state — new `WAITING_REMOVE` state gates re-rip on physical disc removal, not on EJECT phase completion
+
+**Proposed.** Real-rig finding from the post-Wave-0 smoke on
+2026-05-15: even with `D-eject-via-shell` fixing the eject
+mechanism, there's an underlying state-machine bug. After the
+EJECT phase completes, the loop transitions back to
+WAITING/IDLE. If the drive STILL reports `disc-ok` (because
+eject failed OR because the operator hasn't physically removed
+the disc yet), the loop sees `disc-ok` and immediately starts
+another rip cycle. The CM4 generated CD_0019, CD_0020, ... all
+from the same physical disc tonight before the operator caught
+it.
+
+**Resolution:** introduce a new `WAITING_REMOVE` state. After
+EJECT, transition to `WAITING_REMOVE` (not directly to
+IDLE/WAITING). `WAITING_REMOVE` only advances when drive status
+reports `tray-open` OR `no-disc` — i.e. the disc has been
+physically removed. While `disc-ok` persists, the state machine
+sits in `WAITING_REMOVE` and does nothing. This is robust
+against the eject-firmware-quirk too: even if the tray doesn't
+physically open, the machine just waits for the operator to
+intervene rather than auto-re-ripping.
+
+**No abort path needed:** the operator can always physically
+open the tray manually OR use `POST /api/control/reset` (from
+`D-manual-mode`) to force back to IDLE. The status-page render
+uses Mash Co. `--amber` (the "needs operator" semantic color)
+so the wait is visually obvious.
+
+### 2026-05-15 — D-manual-mode — operator can drive the state machine step-by-step until auto-mode timing edge cases are polished
+
+**Proposed.** Real-rig finding from the post-Wave-0 smoke on
+2026-05-15: auto-mode timing has accumulated too many edge cases
+(the sprint-2/3 polish queue + `D-eject-via-shell` +
+`D-waiting-remove-state` above). Until those polish items land
+and shake out, the operator needs an explicit "manual mode"
+where the state machine doesn't auto-advance through STABILIZE/
+RIP/CAPTURE/EJECT — instead, the operator clicks "Start rip",
+"Eject now", "Capture now", "Reset" buttons in the FastAPI UI
+when ready.
+
+**Default = `auto`.** This is a judgment call: defaulting to
+manual would force every existing operator workflow to change,
+which violates the "preserve today's behavior unless asked"
+principle. Defaulting to auto keeps the dogfood rig behaving as
+before, with manual mode as an explicit opt-in (via
+`ARCHIVIST_MODE=manual` env or the UI toggle). Mode persists in
+`LoopState.mode` and is exposed in `/api/status` so the UI knows
+which buttons to show. The mode toggle itself is a two-button
+group at the top of the state card.
+
+**Complementary, not replacement.** This is orthogonal to the
+sprint-3 review-recapture button (`D-review-recapture-mvp`):
+that button takes an extra photo on demand; the new manual-mode
+buttons drive the state machine step by step. Both share the
+same Mash Co. chip/button styling.
+
+**Endpoints (all `POST`):** `/api/control/mode?mode=auto|manual`
+(200/400); `/api/control/start-rip`, `/api/control/eject`,
+`/api/control/capture` (200 / 409 state mismatch / 403 if
+`mode==auto`); `/api/control/reset` (200 in any mode/state —
+operator escape hatch).
+
 ## Ratification Log
 
 <!-- Same shape as Decision Log; entries land here when a
@@ -1012,6 +1312,56 @@ _No ratifications yet._
   as the last step of `_from_capture`; the importer (external,
   read-only) consumes the marker.
 
+### 2026-05-15 — `eject(device)` switches from ioctl to shell `eject` binary
+
+- **Before:** `archivist/drivers/drive.py::eject(device)` issued
+  `CDROMEJECT` (`0x5309`) via `fcntl.ioctl`. No runtime-binary
+  dependency.
+- **After:** Shell out to `subprocess.run(["eject", str(device)],
+  capture_output=True, text=True, timeout=10)`. Signature unchanged
+  (`eject(device: Path) -> bool`). Adds `eject` (Debian-standard,
+  already present on the CM4) as a runtime-binary dependency.
+- **Consumers:** state machine `_from_eject` calls the same
+  function; no caller change. Tests in `tests/drivers/test_drive.py`
+  (or sibling) update their fakes from `fake_ioctl` to
+  `fake_subprocess`.
+
+### 2026-05-15 — new `WAITING_REMOVE` state + `LoopState.mode`
+
+- **Before:** Loop states were the existing IDLE/STABILIZE/RIP/
+  EJECT/CAPTURE/WAITING/ERROR set. After EJECT the loop returned
+  to WAITING/IDLE; a `disc-ok` reading there immediately started
+  another rip cycle. `LoopState` had no `mode` field — auto-
+  advance was always on.
+- **After:** New `WAITING_REMOVE` state sits between EJECT and
+  IDLE/WAITING; only `tray-open` OR `no-disc` advances it
+  (prevents auto-re-rip when eject didn't physically open the
+  tray). `LoopState.mode: Literal["auto","manual"]` (default
+  `"auto"` from `ARCHIVIST_MODE`); in `manual` mode the
+  production-phase auto-transitions are gated and require
+  explicit `advance(trigger)` calls.
+- **Consumers:** `archivist/state_machine/loop.py`;
+  `archivist/service/app.py` (status payload + new control
+  endpoints); status page renders the new state with `--amber`
+  and a button group when `mode == "manual"`. Tests in
+  `tests/state_machine/test_loop.py` and the new
+  `tests/service/test_control_endpoints.py`.
+
+### 2026-05-15 — new `/api/control/*` endpoints (manual mode)
+
+- **Before:** No `/api/control/*` namespace. The only
+  state-mutating endpoint was sprint-3's review-recapture trigger.
+- **After:** `POST /api/control/mode?mode=auto|manual` (200 / 400);
+  `POST /api/control/start-rip`, `POST /api/control/eject`,
+  `POST /api/control/capture` (200 if `advance()` succeeds, 409 on
+  state mismatch, 403 if `mode==auto`); `POST /api/control/reset`
+  (200 in any mode/state — operator escape hatch). `/api/status`
+  response includes `mode: "auto" | "manual"`.
+- **Consumers:** the FastAPI status page renders the mode toggle
+  + the per-state action button group; future remote-control
+  surfaces (none planned this sprint) can drive the loop via the
+  same endpoints.
+
 ## Blockers
 
 <!-- One bullet per active blocker. Format:
@@ -1033,6 +1383,59 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-15 — planner — sprint-4 mid-sprint addition: Bucket C (real-rig fixes from post-Wave-0 smoke)
+
+Three issues surfaced by the operator during the post-Wave-0 smoke on
+the dogfood CM4 land in sprint-4 BEFORE agents kick off (precedent:
+`D-review-recapture-mvp` from sprint-3, which also landed mid-plan
+after a real-rig finding). Issues:
+
+1. **Eject ioctl reports success but tray doesn't open.**
+   `archivist/drivers/drive.py::eject` issues `CDROMEJECT` (`0x5309`)
+   via `fcntl.ioctl`. On the dogfood USB CD drive the call returns
+   success but the tray never physically opens — almost certainly a
+   firmware quirk. Switching to shell-out to the `eject` binary
+   (ATAPI `START STOP UNIT` with LoEj+Start) is more universally
+   honored.
+2. **Loop re-rips the same disc when eject doesn't physically work.**
+   Underlying state-machine bug: after EJECT, the loop returns to
+   WAITING; if the drive still reports `disc-ok`, it immediately
+   starts another rip cycle. CD_0019, CD_0020, ... all generated
+   from the same physical disc tonight before the operator caught
+   it. Fix: new `WAITING_REMOVE` state that only advances when the
+   drive reports `tray-open` OR `no-disc`.
+3. **Manual mode (operator-driven state-machine advance).**
+   Auto-mode timing has too many edge cases. Operator needs an
+   explicit Auto | Manual toggle in the FastAPI UI; in Manual mode,
+   STABILIZE/RIP/CAPTURE/EJECT transitions are button-driven via
+   new `POST /api/control/{start-rip,eject,capture,reset,mode}`
+   endpoints. Default remains `auto` — the new mode is opt-in via
+   the UI toggle or `ARCHIVIST_MODE=manual` env.
+
+**Tasks added (7 total — 4 Wave 1 tests + 3 Wave 2 impls):**
+`test-eject-reliability`, `test-waiting-remove-state`,
+`test-manual-mode-state-gating`, `test-manual-mode-endpoints`
+(Wave 1); `impl-eject-reliability`,
+`impl-waiting-remove-state`, `impl-manual-mode` (Wave 2). All
+land in a new "Bucket C — real-rig fixes surfaced during
+post-Wave-0 smoke" subsection in both Wave 1 and Wave 2; existing
+Bucket A and Bucket B tasks unchanged. Bucket A (music-pipeline
+contract conformance) remains the load-bearing scope; Bucket C
+is complementary — `impl-waiting-remove-state` and
+`impl-manual-mode` depend on `impl-working-dir-handoff` so the
+state-machine restructure is the natural integration point.
+
+**Three new decision-log entries proposed:** `D-eject-via-shell`,
+`D-waiting-remove-state`, `D-manual-mode`. Total decision-log
+entries proposed for sprint-4 ratification: 10 (was 7).
+
+**Updated sprint-4 task counts:**
+- Wave 0 (operator-driven): 1 task (complete)
+- Wave 1 failing tests: 11 (Bucket A) + 3 (Bucket B) + 4 (Bucket C) = **18 tests**
+- Wave 2 impls: 10 (Bucket A) + 1 docs (Bucket A) + 3 (Bucket B) + 3 (Bucket C) = **17 impls**
+- Stretch: 2 (unchanged)
+- **Total: 38 tasks** (was 31 including stretch + Wave 0; was 27 post-Wave-0 non-stretch).
 
 ### 2026-05-15 — operator — Wave 0 migration complete
 
