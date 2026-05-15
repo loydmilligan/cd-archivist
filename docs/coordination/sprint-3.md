@@ -407,7 +407,7 @@ updated: 2026-05-14T00:00:00.000Z
      full sprint-4 design. See docs/design/2026-05-15-manual-
      capture-and-album-art.md for the full sprint-4 scope. -->
 
-- [ ] {agent: pipeline, id: test-review-recapture} Failing tests for
+- [x] {agent: pipeline, id: test-review-recapture} Failing tests for
   `POST /api/library/CD_NNNN/recapture`. Endpoint orchestrates a
   single off→on→off mini-capture sequence (one ambient frame with the
   LED off, one lit frame with the LED on, then LED off again) and
@@ -720,7 +720,7 @@ updated: 2026-05-14T00:00:00.000Z
 
 #### Bucket D — operator review-recapture (mid-sprint amendment)
 
-- [ ] {agent: pipeline, depends: test-review-recapture, depends: impl-
+- [x] {agent: pipeline, depends: test-review-recapture, depends: impl-
   library, id: impl-review-recapture} Implement
   `POST /api/library/CD_NNNN/recapture` in `archivist/service/app.py`.
   The route is registered alongside the other `/library/...` routes
