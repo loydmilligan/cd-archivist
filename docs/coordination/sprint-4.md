@@ -136,7 +136,7 @@ updated: 2026-05-15T00:00:00.000Z
     to `tests/test_main_logging.py`). Five cases. Fails until
     `impl-music-paths`.
 
-- [ ] {agent: pipeline, id: test-folder-naming} Failing tests for the
+- [x] {agent: pipeline, id: test-folder-naming} Failing tests for the
   new disc folder naming scheme. New helper `next_disc_folder_name(
   inbox_root: Path, *, now: datetime | None = None) -> str` in
   `archivist/pipeline/disc_id.py` (or sibling `archivist/pipeline/
@@ -160,7 +160,7 @@ updated: 2026-05-15T00:00:00.000Z
     `next_disc_id` tests still pass — the legacy helper stays
     available for the legacy code path until everything migrates.
 
-- [ ] {agent: pipeline, id: test-track-rename} Failing tests for the
+- [x] {agent: pipeline, id: test-track-rename} Failing tests for the
   new post-FLAC track-rename step. After `flac` produces
   `track01.cdda.flac`, a new helper `rename_tracks_to_canonical(audio_dir:
   Path) -> list[Path]` renames each `trackNN.cdda.flac` to `NN
@@ -176,7 +176,7 @@ updated: 2026-05-15T00:00:00.000Z
     Five cases. Fails until impl. Helper lives in
     `archivist/pipeline/rip.py` next to `rip_disc`.
 
-- [ ] {agent: pipeline, id: test-source-json-model} Failing tests for
+- [x] {agent: pipeline, id: test-source-json-model} Failing tests for
   the new Pydantic v2 model `SourceJson` (schema v1) per the handoff
   doc §source.json. New file `archivist/models/source.py`. Top-level
   fields: `schema_version: Literal[1]`, `ripper`, `disc`, `drive`,
@@ -200,7 +200,7 @@ updated: 2026-05-15T00:00:00.000Z
     `archivist/models/manifest.py` (Manifest v0.2) stays untouched —
     both models coexist.
 
-- [ ] {agent: pipeline, id: test-source-json-write} Failing tests for
+- [x] {agent: pipeline, id: test-source-json-write} Failing tests for
   `write_source_json(path: Path, payload: SourceJson) -> None` and
   `read_source_json(path: Path) -> SourceJson`. Tests: (a) write +
   read round-trip equals the original; (b) atomic write — `.tmp`
@@ -210,7 +210,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Tests in `tests/models/test_source.py`. Four
     cases. Fails until impl.
 
-- [ ] {agent: pipeline, id: test-working-dir-handoff} Failing tests for
+- [x] {agent: pipeline, id: test-working-dir-handoff} Failing tests for
   the new working-dir → inbox atomic handoff in the state machine.
   Tests in `tests/state_machine/test_loop.py`: (a) STABILIZE creates
   the disc folder under `working_dir`, NOT under `inbox_dir`; (b)
@@ -246,7 +246,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** New file `tests/pipeline/test_ready_marker.py`.
     Five cases. Fails until impl.
 
-- [ ] {agent: pipeline, id: test-canonical-photo} Failing tests for
+- [x] {agent: pipeline, id: test-canonical-photo} Failing tests for
   the canonical-disc-photo selection. New helper
   `select_canonical_photo(captures_dir: Path) -> Path | None`. Per
   `D-canonical-disc-photo`, picks `disc_front_lit_002.jpg` (the
@@ -267,7 +267,7 @@ updated: 2026-05-15T00:00:00.000Z
     Six cases. Fails until impl. Helper lives in
     `archivist/pipeline/capture.py` (next to `capture_disc`).
 
-- [ ] {agent: pipeline, id: test-source-json-builder} Failing tests for
+- [x] {agent: pipeline, id: test-source-json-builder} Failing tests for
   `build_source_json(disc_dir: Path, *, ripper_name, ripper_version,
   hostname, drive_info, rip_record, capture_result, ready_at,
   timestamps) -> SourceJson` — the assembler that turns the
@@ -311,7 +311,7 @@ updated: 2026-05-15T00:00:00.000Z
     `drivers/` because it's the writer used by the ripper; the state
     machine consumes it as a callback.
 
-- [ ] {agent: pipeline, id: test-failed-marker} Failing tests for the
+- [x] {agent: pipeline, id: test-failed-marker} Failing tests for the
   failed-disc disposition. Per `D-failed-disc-disposition`, on RIP
   failure the loop: (i) writes `<working_dir>/<folder>/FAILED` (a
   marker file with `failed_at=<ISO>` + `reason=<short string>`); (ii)
@@ -332,7 +332,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket B — sprint-3 polish carryovers (proven by CD_0018)
 
-- [ ] {agent: pipeline, id: test-rip-progress-real-format} Failing
+- [x] {agent: pipeline, id: test-rip-progress-real-format} Failing
   tests for the `parse_cdparanoia_progress` regex update. The
   sprint-3 parser was written from the cdparanoia man page; the
   CD_0018 real-rig stderr format doesn't match. Author captures a
@@ -365,7 +365,7 @@ updated: 2026-05-15T00:00:00.000Z
     new fixture file. ≥4 cases including the fixture-driven check.
     Fails until the parser regex is updated.
 
-- [ ] {agent: pipeline, id: test-wav-cleanup} Failing tests for
+- [x] {agent: pipeline, id: test-wav-cleanup} Failing tests for
   post-FLAC WAV deletion. Per `D-wav-cleanup`, after each track's
   flac conversion succeeds, the source `track01.cdda.wav` is
   deleted; an `ARCHIVIST_KEEP_WAVS=1` env var disables the cleanup
@@ -380,7 +380,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Four cases in `tests/drivers/test_ripper.py`.
     Fails until `impl-wav-cleanup`.
 
-- [ ] {agent: pipeline, id: test-library-status-filter} Failing
+- [x] {agent: pipeline, id: test-library-status-filter} Failing
   tests for the `?status=` query parameter on `GET /library`.
   Query param: `status` ∈ {`success`, `failed`, `all`}, default
   `success`. Tests in `tests/service/test_library.py`: (a) no
@@ -400,7 +400,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Six cases in `tests/service/test_library.py`.
     Fails until `impl-library-filter`.
 
-- [ ] {agent: pipeline, id: test-library-legacy-adapter} Failing
+- [x] {agent: pipeline, id: test-library-legacy-adapter} Failing
   tests for the unified library reader that handles BOTH
   `manifest.json` (legacy v0.2) and `source.json` (new v1) per
   `D-library-legacy-adapter`. New helper `read_disc_summary(disc_dir:
@@ -461,7 +461,7 @@ updated: 2026-05-15T00:00:00.000Z
     crowded — author's call). Fails until
     `impl-eject-reliability`.
 
-- [ ] {agent: pipeline, id: test-waiting-remove-state} Failing tests
+- [x] {agent: pipeline, id: test-waiting-remove-state} Failing tests
   for the new `WAITING_REMOVE` loop state. After EJECT phase
   completes, the loop must transition to `WAITING_REMOVE` (NOT
   back to WAITING/IDLE), and stay there until the drive reports
@@ -482,7 +482,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Five cases in `tests/state_machine/test_loop.
     py`. Fails until `impl-waiting-remove-state`.
 
-- [ ] {agent: pipeline, id: test-manual-mode-state-gating} Failing
+- [x] {agent: pipeline, id: test-manual-mode-state-gating} Failing
   tests for manual-mode gating of state-machine auto-transitions.
   In manual mode, the loop still polls drive status (so it knows
   what's there) but the production-phase auto-transitions
@@ -507,7 +507,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Six cases in `tests/state_machine/test_loop.
     py`. Fails until `impl-manual-mode`.
 
-- [ ] {agent: pipeline, id: test-manual-mode-endpoints} Failing
+- [x] {agent: pipeline, id: test-manual-mode-endpoints} Failing
   tests for the new manual-mode HTTP control surface. New
   endpoints in `archivist/service/app.py`:
   `POST /api/control/start-rip`, `POST /api/control/eject`,
@@ -1383,6 +1383,107 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-15 — pipeline — Wave 1 failing tests landed (14 tasks, 14 commits)
+
+All 14 pipeline-owned Wave 1 tests landed as atomic commits. Each
+test file failing in the documented red state, ready for Wave 2 to
+turn green. Coverage by bucket:
+
+**Bucket A — music-pipeline contract conformance (9 tests):**
+
+- `909e3af` test-source-json-model — 13 cases against
+  `archivist/models/source.py::SourceJson` (v1) + write/read helpers:
+  minimal/full payload round-trip, schema_version mismatch, extra
+  fields forbidden (top + nested), ISO offsets preserved, status
+  booleans required, files[].kind enum, sha256 optional, atomic
+  write via `.tmp` + os.replace, read path-aware error messages.
+- `69afa42` test-folder-naming — 9 cases for
+  `archivist/pipeline/folder_name.py::next_disc_folder_name(inbox,
+  *, now=None) -> str`. YYYY-MM-DD_HHMM_disc-NNNNNN; counter scans
+  inbox; legacy CD_NNNN folders ignored; 24-hour local time; safe
+  chars only; collision guard; pure helper (no mkdir).
+- `f366837` test-track-rename — 5 cases for
+  `archivist/pipeline/rip.py::rename_tracks_to_canonical`: happy
+  path, ordering, idempotent, leaves unrelated files alone,
+  collision guard preserves both.
+- `8d2a894` test-canonical-photo — 8 cases for
+  `select_canonical_photo` + `copy_canonical_photo` in
+  `archivist/pipeline/capture.py`: middle lit chosen, fallback to
+  any lit, None when no lit, byte-equal copy, supplementals
+  preserved, idempotent, no-op when captures dir missing.
+- `3fff570` test-source-json-builder — 6 cases for
+  `archivist/pipeline/source_json.py::build_source_json`: happy
+  path populates files[] + status, photo failure keeps ready=True
+  with warning, rip failure → ready=False + errors,
+  detected_metadata always all-nulls in sprint-4, physical_disc
+  burned/handwritten always null, timestamps carry offsets.
+- `a8b6a8c` test-working-dir-handoff — 5 cases for the new
+  state-machine path config: STABILIZE creates folder in working_dir
+  not inbox, RIP writes audio + rip.log in working_dir,
+  os.replace handoff before READY, inbox never has a partial
+  folder, OSError on move → ERROR with working folder preserved.
+  ArchivistLoop constructor gains working_dir/inbox_dir/failed_dir.
+- `52df700` test-failed-marker — 6 cases for D-failed-disc-disposition:
+  RIP raise OR RipResult(status='fail') both move folder to
+  failed_dir with FAILED + source.json + rip.log; inbox untouched;
+  ERROR state still entered; cdplay-paired invariant; FAILED marker
+  carries failed_at + reason naming the failure mode.
+- `dfdb912` test-library-legacy-adapter — 6 cases for
+  `archivist/service/library.py::read_disc_summary` returning a
+  `DiscSummary` dataclass; legacy-only / new-only / both / neither;
+  disc_id_or_folder field correct for both shapes; source.json wins
+  when both present.
+- `ab271d1` test-rip-progress-real-format — 7 cases + new fixture
+  `tests/pipeline/fixtures/cdparanoia_stderr_real.txt` (~40 lines
+  covering "Ripping from sector", "outputting to trackNN.cdda.wav",
+  PROGRESS bar lines, "Done."). Fixture-driven ≥10 non-None
+  results; documented label shape; existing synthetic edges
+  preserved; end-to-end replay sets LoopState.rip_progress. Per
+  task scope the fixture can be refreshed from a real CM4 rip
+  during impl; current shape is faithful to cdparanoia III 10.2.
+
+**Bucket B — sprint-3 polish carryovers (2 tests):**
+
+- `3fad424` test-wav-cleanup — 5 cases for
+  `archivist/pipeline/rip.py::cleanup_wavs(audio_dir, *, keep=False)
+  -> list[Path]` per D-wav-cleanup. Pipeline-lane home (the
+  agent-roster boundary keeps this out of tests/drivers/). Default
+  deletes WAVs whose FLAC sibling exists, keep=True preserves both,
+  orphan WAVs preserved, empty/missing handled.
+- `9b84240` test-library-status-filter — 6 cases against a mixed
+  inbox (new success + new failure + legacy success + legacy
+  failure): default=success hides failures, ?status=failed only
+  failures, ?status=all everything, chip group rendered with three
+  pills (active=--accent), chips are anchor links (no JS), filter
+  consults the adapter for both shapes.
+
+**Bucket C — real-rig fixes from post-Wave-0 smoke (3 tests):**
+
+- `0013ca2` test-waiting-remove-state — 5 cases for the new
+  WAITING_REMOVE state per D-waiting-remove-state. Post-EJECT lands
+  there; persistent disc-ok holds (no auto-re-rip — the CD_0019/
+  0020/... cascade root cause); tray-open OR no-disc releases;
+  enum.value is a serializable string.
+- `fabc3e8` test-manual-mode-state-gating — 7 cases for the new
+  `advance(trigger)` API and `LoopState.mode` field. Manual holds
+  at STABILIZE without trigger, advance("rip") fires the rip,
+  advance("eject")/advance("capture") progress through phases,
+  auto-mode regression preserved, wrong-state advance is a no-op,
+  advance("reset") returns to IDLE in any mode.
+- `6eaaef1` test-manual-mode-endpoints — 10 cases for the
+  /api/control/* surface: mode toggle 200/400, start-rip
+  200/409/403 (manual+STABILIZE/manual+IDLE/auto), eject+capture
+  403 in auto, reset 200 in every mode×state combo,
+  /api/status surfaces `mode`.
+
+**Status:** 14 commits land 84 new failing tests + extends 2 existing
+files (test_rip_progress.py + fixtures dir). All commits atomic;
+each one its own scope. Mash Co. design-system invariants preserved
+in the test assertions (chip group on /library uses --accent for
+active, sentence-case copy, anchor-link filters). No drivers code
+touched; no `archivist/drivers/` or `tests/drivers/` paths modified
+per the agent-roster boundary. Wave 2 (impls) waits for go-ahead.
 
 ### 2026-05-15 — drivers — Wave 2 impls landed (2 tasks, 2 commits)
 
