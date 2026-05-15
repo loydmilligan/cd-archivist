@@ -97,7 +97,7 @@ updated: 2026-05-15T00:00:00.000Z
 > cd-archivist, eliminating the cross-machine transport question
 > entirely.
 
-- [ ] {agent: operator, id: migrate-music-stack} **Operator-owned —
+- [x] {agent: operator, id: migrate-music-stack} **Operator-owned —
   human-driven, not an agent task.** Follow the procedure in
   `docs/operations/2026-05-15-music-stack-migration.md` to relocate the
   music-pipeline stack (Navidrome + Jellyfin + beets) from the laptop
@@ -1033,6 +1033,24 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-15 — operator — Wave 0 migration complete
+
+Music-pipeline stack relocated from laptop (`/srv/cd-music-stack` on `mash-ubie`) to CM4 (`/srv/cd-music-stack` on `piUSBcam2` / `192.168.6.38`). All 10 steps of `docs/operations/2026-05-15-music-stack-migration.md` executed cleanly.
+
+**End state on CM4:**
+- All three containers `Up`: `cd_navidrome`, `cd_jellyfin`, `cd_beets`
+- URLs reachable from LAN: `http://192.168.6.38:{4533,8096,8337}/`
+- Music tree intact: `/srv/music/inbox/CD_0004` (341MB) + `/srv/music/inbox/CD_0018` (282MB) carried over
+- Runtime sqlite DBs wiped on landing (clean start for navidrome / jellyfin / beets)
+- `.env` correct: PUID/PGID=1000 (matches mmariani), TZ=America/Los_Angeles, MUSIC_ROOT=/srv/music
+
+**Beets config gotchas surfaced during the smoke-test import of CD_0018** (these are sprint-4 polish for the music-stack scaffold, NOT cd-archivist code work — but worth logging here so they don't recur on the next deployment):
+1. `fetchart.sources` was scaffolded in the legacy flat-string format (`filesystem coverart itunes amazon albumart`) which the current beets rejects with `UnknownPairError`. Patched in place to a YAML list of source names. Plugin loaded cleanly after container restart.
+2. **The `musicbrainz` plugin was missing from `plugins:`** — `chroma` (AcoustID) explicitly warns `"musicbrainz plugin not enabled; acoustid matches will not produce candidates"` and produces zero results regardless of search method. Symptom: every import path (auto-match, text search, direct ID lookup) returned "no matching release found." Added `musicbrainz` to the plugin list, restarted container, MB queries started returning real candidates.
+3. **Burned-CD AcoustID failure:** the CD_0018 rip is a burned copy; its audio fingerprint doesn't match the commercial 1999 US Nitro release in AcoustID's DB. Beets' auto-match returned weak candidates (best 32% confidence) but text search + direct MBID lookup (`5100dc6d-7191-483c-901d-cdb95bf06f88`) both work. This is the design failure mode that sprint-4's `musicbrainz_disc_id` stretch task addresses for future rips.
+
+Wave 0 is closed. Wave 1 (failing tests) is unblocked.
 
 ### 2026-05-15 — planner — sprint-4 drafted
 
