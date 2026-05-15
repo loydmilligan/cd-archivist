@@ -849,7 +849,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket C — real-rig fixes surfaced during post-Wave-0 smoke (2026-05-15)
 
-- [ ] {agent: drivers, depends: test-eject-reliability,
+- [x] {agent: drivers, depends: test-eject-reliability,
   id: impl-eject-reliability} Replace the ioctl-based `eject` in
   `archivist/drivers/drive.py` with `subprocess.run(["eject",
   str(device)], capture_output=True, text=True, timeout=10)`.
@@ -1383,6 +1383,50 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-15 — drivers — Wave 2 impls landed (2 tasks, 2 commits)
+
+All drivers-owned Wave 2 tasks closed. Drivers suite 72/72 PASS;
+`ruff check archivist/ tests/drivers/` clean. (Repo-wide 59 fails
+are pipeline's in-flight Wave 1 reds, not drivers territory.)
+
+- **impl-rip-log-writer** (`093aaa1`) — new module
+  `archivist/drivers/rip_log.py` with `RipLogWriter(disc_dir)`.
+  Context-manager-style: `__enter__` creates the disc dir if needed
+  and opens `<disc_dir>/rip.log` in append mode (text, UTF-8);
+  `__exit__` flushes + closes. `event(message)` writes one
+  `[<ISO-8601-local-with-offset>] <message>\n` line and `flush()`es —
+  the flush-per-event posture is load-bearing because the importer may
+  pick up a partial log on a crash and we want trailing events
+  visible. Timestamp via `datetime.now().astimezone().isoformat(
+  timespec="seconds")` (local + offset, no microseconds — cleaner
+  log). Convenience: `event()` before `__enter__` triggers `__enter__`
+  itself, so a callsite that forgets `with` still produces output.
+  Pipeline wires `event` as the `progress_callback` for
+  `CDAudioRipper.rip` in `impl-working-dir-handoff`. **6/6** PASS in
+  `tests/drivers/test_rip_log.py`.
+- **impl-eject-reliability** (next commit) — `D-eject-via-shell`.
+  `archivist/drivers/drive.py::eject` switched from
+  `fcntl.ioctl(fd, CDROMEJECT)` to `subprocess.run(["eject",
+  str(device)], capture_output=True, text=True, timeout=10)`.
+  Returncode 0 → `True`; non-zero → `False` with stderr logged;
+  `FileNotFoundError` → `False` with a log line naming the missing
+  binary; `subprocess.TimeoutExpired` → `False` with the timeout
+  logged; never-raises invariant guarded with a broad-except. Function
+  signature is unchanged so callers (state machine + existing tests)
+  don't need to adapt — `CDROMEJECT` constant is gone, `fcntl` import
+  retained for `read_drive_status`. Module docstring rewritten to
+  document both the new shell-out and the real-rig finding from
+  CD_0018 smoke (CDROMEJECT silently ignored on the dogfood USB
+  drive). The `eject(1)` binary is part of Debian's default install
+  set, including the CM4. **12/12** PASS in
+  `tests/drivers/test_drive.py` (5 read_drive_status + 2 device-
+  missing + 5 shell-eject).
+
+Unblocks: pipeline's `impl-waiting-remove-state` (has a hard dep on
+`impl-eject-reliability` per the planner's note); the working-dir
+handoff loop will call `event()` at each state transition through
+`impl-working-dir-handoff`.
 
 ### 2026-05-15 — drivers — Wave 1 failing tests landed (2 tasks, 2 commits)
 

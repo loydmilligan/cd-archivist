@@ -1,23 +1,36 @@
-"""CD drive state probe via Linux CDROM_DRIVE_STATUS ioctl.
+"""CD drive state probe + tray eject.
 
-Per sprint-1 task impl-drive. Maps the four documented kernel return
-codes to the public state literal. The OSError path from os.open
-bubbles up untouched — callers decide how to handle a missing or
-permission-denied device node.
+`read_drive_status` (sprint-1 impl-drive, sprint-3 impl-drive-missing)
+issues the Linux `CDROM_DRIVE_STATUS` ioctl and maps the kernel return
+codes to a public state literal.
+
+`eject` (sprint-1 impl-eject, sprint-4 impl-eject-reliability) shells
+out to the `eject` binary. Sprint-1's ioctl-based impl
+(`fcntl.ioctl(fd, CDROMEJECT)` / 0x5309) reported success on the
+dogfood USB drive but the tray never physically opened — a drive-
+firmware quirk where `CDROMEJECT` is silently ignored
+(real-rig finding from CD_0018 smoke, 2026-05-15, per `D-eject-via-
+shell`). The shell `eject` binary uses ATAPI `START STOP UNIT` with
+LoEj+Start, which the same drive honors, and handles fallback paths
+(LOAD/UNLOAD, etc.) we'd otherwise have to reimplement. The function
+signature is unchanged so neither the state machine nor existing
+tests need to know about the impl swap. The `eject` binary is part
+of Debian's default install set, including the CM4.
 """
 from __future__ import annotations
 
 import fcntl
 import logging
 import os
+import subprocess
 from pathlib import Path
 from typing import Literal
 
 _logger = logging.getLogger(__name__)
+_EJECT_TIMEOUT_SECONDS = 10.0
 
 # include/uapi/linux/cdrom.h
 CDROM_DRIVE_STATUS = 0x5326
-CDROMEJECT = 0x5309
 
 CDS_NO_INFO = 0
 CDS_NO_DISC = 1
@@ -64,21 +77,40 @@ def read_drive_status(device: Path) -> DriveStatus:
 
 
 def eject(device: Path) -> bool:
-    """Eject the disc tray. Returns True on success, False on OSError.
+    """Eject the disc tray via the shell `eject` binary.
 
-    Never raises. The common failure is `OSError: drive busy` while a
-    rip is in flight; callers retry after the rip releases the device.
+    Returns `True` on `eject(1)` returncode 0, `False` on any failure
+    (non-zero returncode, `FileNotFoundError`, `subprocess.Timeout
+    Expired`, or any other exception the runtime might surface).
+    Never raises — the state machine relies on this invariant.
+
+    See module docstring for the rationale on shell-out vs. the
+    sprint-1 `CDROMEJECT` ioctl.
     """
+    argv = ["eject", str(device)]
     try:
-        fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
-    except OSError as exc:
-        _logger.warning("eject %s failed (open): %s", device, exc)
+        result = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=_EJECT_TIMEOUT_SECONDS,
+        )
+    except FileNotFoundError as exc:
+        _logger.warning("eject %s failed: `eject` binary missing on PATH: %s", device, exc)
         return False
-    try:
-        fcntl.ioctl(fd, CDROMEJECT)
-    except OSError as exc:
-        _logger.warning("eject %s failed: %s", device, exc)
+    except subprocess.TimeoutExpired as exc:
+        _logger.warning(
+            "eject %s timed out after %ss: %s", device, _EJECT_TIMEOUT_SECONDS, exc,
+        )
         return False
-    finally:
-        os.close(fd)
+    except Exception as exc:  # noqa: BLE001 — never-raises invariant
+        _logger.warning("eject %s failed (unexpected): %s", device, exc)
+        return False
+
+    if result.returncode != 0:
+        _logger.warning(
+            "eject %s exit %s: %s",
+            device, result.returncode, (result.stderr or "").strip(),
+        )
+        return False
     return True
