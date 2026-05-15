@@ -1,0 +1,178 @@
+"""CLI entrypoint — boots the FastAPI service and the state-machine loop.
+
+Run as `python -m archivist`. Defaults match the bare-metal CM4 rig
+documented in docs/operations/cm4-setup.md; override via env vars.
+
+Container-readiness (forward-compat — sprint-3 may pick Docker, may
+stay bare-metal): config comes from env vars only, logging goes to
+both stderr and the configured log file (line-buffered so `docker
+logs` would work), and SIGTERM cleanly stops both the uvicorn server
+and the state-machine loop.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import signal
+import sys
+import threading
+import time
+from pathlib import Path
+from types import FrameType
+from typing import Any
+
+import uvicorn
+
+from archivist.drivers import systemctl
+from archivist.drivers.camera import capture_frame_with_recovery
+from archivist.drivers.drive import eject, read_drive_status
+from archivist.drivers.led import LEDPanel
+from archivist.drivers.ripper import CDAudioRipper
+from archivist.drivers.usb_discovery import discover_camera_usb_path
+from archivist.service.app import LoopState, create_app
+from archivist.state_machine.loop import ArchivistLoop
+
+logger = logging.getLogger("archivist")
+
+# Defaults are documented in cm4-setup.md.
+_DEFAULT_DEVICE = "/dev/sr0"
+_DEFAULT_DISCS_ROOT = "/srv/cd-archivist/discs"
+_DEFAULT_LOG_PATH = "/srv/cd-archivist/logs/archivist.log"
+_DEFAULT_PORT = 8228  # D-port-8228
+_DEFAULT_LED_BASE = "http://192.168.5.186"
+_DEFAULT_VIDEO_DEVICE = "/dev/video0"
+
+
+class _DriveAdapter:
+    """Bundle `read_drive_status` + `eject` into the object the loop wants."""
+
+    def __init__(self, device: Path) -> None:
+        self._device = device
+
+    def __call__(self) -> str:
+        return read_drive_status(self._device)
+
+    def eject(self, device: Path) -> bool:
+        return eject(device)
+
+
+def _configure_logging(log_path: Path) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stderr),
+        logging.FileHandler(log_path, encoding="utf-8"),
+    ]
+    fmt = "%(asctime)s %(levelname)-7s %(name)s — %(message)s"
+    logging.basicConfig(level=logging.INFO, format=fmt, handlers=handlers)
+    # Quiet uvicorn's access log down a notch — the loop is the heartbeat.
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+
+def _build_camera(discover: Any) -> Any:
+    """Curry capture_frame_with_recovery with the discovery callable."""
+
+    def camera(device: Path, out_path: Path, *, frames: int = 15) -> Path | None:
+        return capture_frame_with_recovery(
+            device,
+            out_path,
+            frames=frames,
+            discover_usb_path=discover,
+        )
+
+    return camera
+
+
+class _Services:
+    """Adapt the systemctl module to the .stop_unit/.start_unit interface."""
+
+    def stop_unit(self, name: str) -> bool:
+        return systemctl.stop_unit(name)
+
+    def start_unit(self, name: str) -> bool:
+        return systemctl.start_unit(name)
+
+
+def _start_uvicorn(app: Any, port: int) -> tuple[uvicorn.Server, threading.Thread]:
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",  # noqa: S104 — intentional: the rig is on a trusted LAN
+        port=port,
+        log_level="info",
+        access_log=False,
+    )
+    server = uvicorn.Server(config)
+    # Prevent uvicorn from installing its own signal handlers; we own them.
+    server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+
+    thread = threading.Thread(target=server.run, name="uvicorn", daemon=True)
+    thread.start()
+    return server, thread
+
+
+def main() -> int:
+    device = Path(os.environ.get("ARCHIVIST_DEVICE", _DEFAULT_DEVICE))
+    discs_root = Path(os.environ.get("ARCHIVIST_DISCS_ROOT", _DEFAULT_DISCS_ROOT))
+    log_path = Path(os.environ.get("ARCHIVIST_LOG_PATH", _DEFAULT_LOG_PATH))
+    port = int(os.environ.get("ARCHIVIST_PORT", str(_DEFAULT_PORT)))
+    led_base = os.environ.get("ARCHIVIST_LED_BASE", _DEFAULT_LED_BASE)
+    video_device = Path(os.environ.get("ARCHIVIST_VIDEO_DEVICE", _DEFAULT_VIDEO_DEVICE))
+
+    discs_root.mkdir(parents=True, exist_ok=True)
+    _configure_logging(log_path)
+    logger.info("starting archivist — device=%s discs_root=%s port=%d", device, discs_root, port)
+
+    # Camera USB autodiscover — primary; ARCHIVIST_CAMERA_USB_PATH is the fallback
+    # (consumed inside discover_camera_usb_path per D-camera-autodiscover).
+    usb_path = discover_camera_usb_path()
+    if usb_path:
+        logger.info("camera usb bus path: %s", usb_path)
+    else:
+        logger.warning(
+            "camera USB path not resolved — captures will be skipped if ffmpeg cannot open %s",
+            video_device,
+        )
+
+    loop_state = LoopState()
+    app = create_app(loop_state, log_path)
+    server, server_thread = _start_uvicorn(app, port)
+
+    loop = ArchivistLoop(
+        discs_root=discs_root,
+        device=device,
+        drive=_DriveAdapter(device),
+        ripper=CDAudioRipper(),
+        camera=_build_camera(discover_camera_usb_path),
+        led=LEDPanel(led_base),
+        services=_Services(),
+        clock=time.monotonic,
+        sleeper=time.sleep,
+        loop_state=loop_state,
+    )
+
+    shutdown = threading.Event()
+
+    def _sigterm(_signum: int, _frame: FrameType | None) -> None:
+        logger.info("received signal; shutting down")
+        shutdown.set()
+        server.should_exit = True
+
+    signal.signal(signal.SIGTERM, _sigterm)
+    signal.signal(signal.SIGINT, _sigterm)
+
+    poll_interval = 2.0
+    try:
+        while not shutdown.is_set():
+            try:
+                loop.tick()
+            except Exception:
+                logger.exception("tick raised; continuing")
+            shutdown.wait(timeout=poll_interval)
+    finally:
+        server.should_exit = True
+        server_thread.join(timeout=5.0)
+        logger.info("archivist stopped")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
