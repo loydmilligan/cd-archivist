@@ -71,6 +71,11 @@ class LoopState:
     # Sprint-4 / D-manual-mode: "auto" (default, unchanged behaviour) or
     # "manual" (state-machine waits for /api/control/* triggers).
     mode: str = "auto"
+    # Sprint-4 / D-process-ready-trigger: shell command (argv-style;
+    # shlex.split internally) invoked after the atomic READY rename.
+    # Empty string disables the hook (the systemd backup timer is the
+    # safety net).
+    process_ready_hook: str = ""
 
 
 def _tail_log(path: Path, lines: int) -> str:

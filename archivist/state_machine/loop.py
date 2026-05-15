@@ -40,6 +40,7 @@ from archivist.pipeline.disc_id import next_disc_id
 from archivist.pipeline.folder import prepare_disc_folder
 from archivist.pipeline.folder_name import next_disc_folder_name
 from archivist.pipeline.pairing import attach_pairing, make_pairing
+from archivist.pipeline.post_rip_hook import run_process_ready_hook
 from archivist.pipeline.rip import rip_disc
 from archivist.pipeline.rip_progress import parse_cdparanoia_progress
 from archivist.pipeline.source_json import build_source_json
@@ -586,12 +587,21 @@ class ArchivistLoop:
             return
 
         # Only after the move do we write READY — the inbox is now
-        # observable to the importer.
+        # observable to the importer. Use a .tmp + os.replace so the
+        # marker is atomic from the importer's perspective too.
+        ready_tmp = target / "READY.tmp"
         ready_marker = target / "READY"
-        ready_marker.write_text(
+        ready_tmp.write_text(
             f"ready_at={ready_at.isoformat()}\nschema_version=1\n",
             encoding="utf-8",
         )
+        os.replace(ready_tmp, ready_marker)
+
+        # Fire-and-forget post-rip hook (D-process-ready-trigger).
+        # Helper swallows missing-executable / permission errors so the
+        # importer's absence never poisons the state machine.
+        hook_cmd = getattr(self._loop_state, "process_ready_hook", "") if self._loop_state else ""
+        run_process_ready_hook(hook_cmd)
 
         self._cycle = _Cycle()
         self._stabilize_since = None

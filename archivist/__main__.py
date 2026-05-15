@@ -197,6 +197,13 @@ def main() -> int:
         logger.warning("ARCHIVIST_MODE=%r invalid; falling back to auto", initial_mode)
         initial_mode = "auto"
 
+    # Sprint-4 / D-process-ready-trigger: post-rip hook command. Defaults
+    # to the dogfood path; empty string disables.
+    process_ready_hook = os.environ.get(
+        "ARCHIVIST_PROCESS_READY_HOOK",
+        "/srv/cd-music-stack/bin/process-ready-auto",
+    )
+
     logger.info(
         "starting archivist — device=%s inbox=%s working=%s failed=%s mode=%s port=%d",
         device, inbox_dir, working_dir, failed_dir, initial_mode, port,
@@ -213,7 +220,7 @@ def main() -> int:
             video_device,
         )
 
-    loop_state = LoopState(mode=initial_mode)
+    loop_state = LoopState(mode=initial_mode, process_ready_hook=process_ready_hook)
     camera = _build_camera(discover_camera_usb_path)
     led = LEDPanel(led_base)
 
