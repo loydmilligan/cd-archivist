@@ -510,7 +510,7 @@ updated: 2026-05-14T00:00:00.000Z
   - **Acceptance:** New loop test from `test-drive-missing` passes.
     Existing loop tests still pass.
 
-- [ ] {agent: pipeline, depends: test-rip-error-recovery, id: impl-rip-
+- [x] {agent: pipeline, depends: test-rip-error-recovery, id: impl-rip-
   error-recovery} Add `ERROR` to the `State` enum. Modify `_from_rip`:
   wrap `rip_disc` in try/except. On exception OR
   `rip_record.status == "fail"`: write the manifest with `status=

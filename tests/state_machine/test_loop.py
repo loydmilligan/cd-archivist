@@ -432,9 +432,15 @@ def test_rip_status_fail_transitions_to_error(discs_root: Path) -> None:
 
 
 def test_error_state_tray_open_returns_to_idle(discs_root: Path) -> None:
-    """From ERROR, tray-open is the only exit — cleanup and back to IDLE."""
+    """From ERROR, tray-open is the only exit — cleanup and back to IDLE.
+
+    Drive is queried only in IDLE/WAITING/ERROR. STABILIZE/RIP advance
+    on internal conditions and do not pop the statuses list. So two
+    disc-ok pops cover IDLE→WAITING→STABILIZE; the remaining
+    ["tray-open"] is the constant tail that ERROR observes.
+    """
     loop, drive, _, _, _, _, clock = _make_loop(
-        statuses=["disc-ok", "disc-ok", "disc-ok", "tray-open"],
+        statuses=["disc-ok", "disc-ok", "tray-open"],
         discs_root=discs_root,
         rip_result=RuntimeError("boom"),
     )
@@ -442,8 +448,7 @@ def test_error_state_tray_open_returns_to_idle(discs_root: Path) -> None:
     loop.tick()  # WAITING -> STABILIZE
     clock.advance(2.1)
     loop.tick()  # STABILIZE -> RIP
-    loop.tick()  # RIP -> ERROR  (consumes one of the disc-ok statuses)
-    # ERROR state should ignore drive() calls except for the tray-open exit.
+    loop.tick()  # RIP raises → ERROR
     loop.tick()  # ERROR + tray-open → IDLE
     assert loop.state == State.IDLE
 

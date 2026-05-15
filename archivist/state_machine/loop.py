@@ -51,6 +51,9 @@ class State(enum.Enum):
     CAPTURE = "CAPTURE"
     RIP = "RIP"
     EJECT = "EJECT"
+    # Sprint-3 / D-rip-failure-error: terminal state on rip failure.
+    # Exits only on tray-open → IDLE.
+    ERROR = "ERROR"
 
 
 @dataclass
@@ -126,8 +129,11 @@ class ArchivistLoop:
             self._from_rip()
         elif self.state == State.EJECT:
             self._from_eject()
+        elif self.state == State.ERROR:
+            self._from_error()
         # CAPTURE is folded into the STABILIZE→RIP tick; it never sits
-        # as a stable state between ticks.
+        # as a stable state between ticks (changes in impl-capture-after-
+        # eject — captures move post-eject).
 
     def _from_idle(self) -> None:
         status = self._drive()
@@ -168,25 +174,63 @@ class ArchivistLoop:
         self._set_state(State.RIP, disc_id=disc_id)
 
     def _from_rip(self) -> None:
+        """Run the rip; on failure (raise OR status=fail) park in ERROR.
+
+        Sprint-3 / impl-rip-error-recovery: rip failures land the loop in
+        a terminal ERROR state instead of propagating the exception (which
+        used to stop the loop entirely). cdplay is restarted, the
+        manifest records status="rip_failed", and the operator's only
+        exit is to eject the disc (ERROR + tray-open → IDLE).
+        """
         assert self._cycle.disc_dir is not None
-        assert self._cycle.captures is not None
+        # NOTE (sprint-2): self._cycle.captures was set in STABILIZE→RIP.
+        # impl-capture-after-eject (next commit) flips this so captures
+        # are collected post-eject; until then this still expects them.
+        captures_now = list(self._cycle.captures or [])
 
-        rip_record = rip_disc(self._cycle.disc_dir, self._device, ripper=self._ripper)
-        pairing = make_pairing("single_session")
+        rip_record = None
+        rip_error: str | None = None
+        try:
+            rip_record = rip_disc(self._cycle.disc_dir, self._device, ripper=self._ripper)
+        except Exception as exc:
+            rip_error = f"{type(exc).__name__}: {exc}"
+            logger.exception("rip_disc raised; transitioning to ERROR")
 
+        # Either path writes a manifest reflecting what we know.
         manifest_path = self._cycle.disc_dir / "manifest.json"
         manifest = read_manifest(manifest_path)
+
+        if rip_record is not None and rip_record.status != "fail":
+            new_status = "ripped"
+            rips_update = [*manifest.rips, rip_record]
+            last_rip = rip_record.status
+            errors_update = manifest.errors
+        else:
+            new_status = "rip_failed"
+            rips_update = [*manifest.rips, rip_record] if rip_record is not None else manifest.rips
+            last_rip = "fail"
+            errors_update = [*manifest.errors] + ([rip_error] if rip_error else [])
+
         manifest = manifest.model_copy(
             update={
-                "status": "ripped",
-                "captures": [*manifest.captures, *self._cycle.captures],
-                "rips": [*manifest.rips, rip_record],
+                "status": new_status,
+                "captures": [*manifest.captures, *captures_now],
+                "rips": rips_update,
+                "errors": errors_update,
             }
         )
-        manifest = attach_pairing(manifest, pairing)
+        manifest = attach_pairing(manifest, make_pairing("single_session"))
         write_manifest(manifest_path, manifest)
 
-        self._set_state(State.EJECT, last_rip_status=rip_record.status)
+        # Restart cdplay regardless of outcome (paired invariant).
+        if self._cdplay_stopped:
+            self._services.start_unit(_CDPLAY)
+            self._cdplay_stopped = False
+
+        if new_status == "rip_failed":
+            self._set_state(State.ERROR, last_rip_status=last_rip)
+        else:
+            self._set_state(State.EJECT, last_rip_status=last_rip)
 
     def _from_eject(self) -> None:
         try:
@@ -198,6 +242,15 @@ class ArchivistLoop:
         self._cycle = _Cycle()
         self._stabilize_since = None
         self._set_state(State.IDLE, disc_id=None)
+
+    def _from_error(self) -> None:
+        """ERROR is terminal; only tray-open exits back to IDLE."""
+        status = self._drive()
+        if status == "tray-open":
+            self._cycle = _Cycle()
+            self._stabilize_since = None
+            self._set_state(State.IDLE, disc_id=None)
+        # Any other status: stay in ERROR. The operator must eject.
 
     # ------------------------- helpers --------------------------------
 
