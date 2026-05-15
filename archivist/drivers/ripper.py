@@ -52,8 +52,14 @@ class CDAudioRipper:
         out_dir.mkdir(parents=True, exist_ok=True)
         errors: list[str] = []
 
+        # Trailing slash is load-bearing: cdparanoia -B treats the final
+        # arg as a filename PREFIX unless it looks like a directory path.
+        # Without the slash, "/.../audio" → tracks land at "/.../audio*",
+        # one level up. With it, tracks land inside the directory.
+        # Surfaced 2026-05-14, real CM4 rip CD_0004 — files landed at
+        # CD_0004/track*.audio instead of CD_0004/audio/track*.cdda.wav.
         cdp = subprocess.run(
-            ["cdparanoia", "-B", "-d", str(device), "--", "1-", str(out_dir)],
+            ["cdparanoia", "-B", "-d", str(device), "--", "1-", f"{out_dir}/"],
             capture_output=True,
             text=True,
         )
