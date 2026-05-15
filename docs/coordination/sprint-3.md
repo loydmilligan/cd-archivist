@@ -602,7 +602,7 @@ updated: 2026-05-14T00:00:00.000Z
 
 #### Bucket C — review UI
 
-- [ ] {agent: pipeline, depends: test-library-list, depends: test-library-
+- [x] {agent: pipeline, depends: test-library-list, depends: test-library-
   detail, depends: test-library-asset-serving, id: impl-library} Add
   the library browser to `archivist/service/app.py`. `create_app(loop_
   state, log_path, *, discs_root: Path | None = None) -> FastAPI`

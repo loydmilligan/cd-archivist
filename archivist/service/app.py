@@ -19,21 +19,26 @@ Mash Co. voice/visual contract enforced here:
 """
 from __future__ import annotations
 
+import html
 import logging
+import re
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+
+from archivist.models.manifest import Manifest, read_manifest
 
 logger = logging.getLogger(__name__)
 
 _LOG_LINES_CAP = 1000
 _LOG_LINES_DEFAULT = 200
 _STATIC_DIR = Path(__file__).parent / "static"
+_DISC_ID_RE = re.compile(r"^CD_\d{4}$")
 
 
 @dataclass
@@ -65,7 +70,12 @@ def _tail_log(path: Path, lines: int) -> str:
         return "".join(deque(f, maxlen=n))
 
 
-def create_app(loop_state: LoopState, log_path: Path) -> FastAPI:
+def create_app(
+    loop_state: LoopState,
+    log_path: Path,
+    *,
+    discs_root: Path | None = None,
+) -> FastAPI:
     app = FastAPI(title="cd-archivist", docs_url=None, redoc_url=None)
 
     if _STATIC_DIR.is_dir():
@@ -92,7 +102,240 @@ def create_app(loop_state: LoopState, log_path: Path) -> FastAPI:
     def index() -> HTMLResponse:
         return HTMLResponse(_PAGE_HTML)
 
+    # ---------------- library browser (sprint-3 / impl-library) ----------
+
+    if discs_root is not None:
+        _mount_library_routes(app, discs_root)
+
     return app
+
+
+# ============== library browser helpers ==============================
+
+
+def _format_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / 1024 / 1024:.1f} MB"
+
+
+def _rel_time(dt: datetime | None) -> str:
+    if dt is None:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    delta = (datetime.now(UTC) - dt).total_seconds()
+    if delta < 60:
+        return f"{int(delta)}s ago"
+    if delta < 3600:
+        return f"{int(delta // 60)}m ago"
+    if delta < 86400:
+        return f"{int(delta // 3600)}h ago"
+    return f"{int(delta // 86400)}d ago"
+
+
+def _accent_class(manifest: Manifest) -> str:
+    """card--moss / card--amber / card--ember per rip status."""
+    if manifest.status == "rip_failed":
+        return "card--ember"
+    if manifest.rips and manifest.rips[0].status == "success":
+        return "card--moss"
+    if manifest.rips and manifest.rips[0].status == "partial":
+        return "card--amber"
+    # status="ripped" with success was handled above; created / no-rip → amber.
+    return "card--amber"
+
+
+def _resolve_under(root: Path, *parts: str) -> Path | None:
+    """Join parts onto root and reject anything that escapes the root.
+
+    Returns the resolved path if it lives under `root` AND is a real file,
+    else None. The check is path-traversal safe: `..` segments resolve
+    out of the target dir, and an HTTPException(404) is raised by the
+    caller.
+    """
+    try:
+        candidate = (root.joinpath(*parts)).resolve()
+        root_resolved = root.resolve()
+    except (OSError, RuntimeError):
+        return None
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError:
+        return None
+    if not candidate.is_file():
+        return None
+    return candidate
+
+
+def _disc_dir(discs_root: Path, disc_id: str) -> Path | None:
+    if not _DISC_ID_RE.match(disc_id):
+        return None
+    d = discs_root / disc_id
+    if not d.is_dir():
+        return None
+    return d
+
+
+def _mount_library_routes(app: FastAPI, discs_root: Path) -> None:
+    @app.get("/library", response_class=HTMLResponse)
+    def library_list() -> HTMLResponse:
+        return HTMLResponse(_render_library_list(discs_root))
+
+    @app.get("/library/{disc_id}", response_class=HTMLResponse)
+    def library_detail(disc_id: str) -> HTMLResponse:
+        if not _DISC_ID_RE.match(disc_id):
+            raise HTTPException(status_code=404)
+        d = _disc_dir(discs_root, disc_id)
+        if d is None or not (d / "manifest.json").is_file():
+            raise HTTPException(status_code=404)
+        return HTMLResponse(_render_library_detail(d))
+
+    @app.get("/library/{disc_id}/captures/{filename}")
+    def library_capture(disc_id: str, filename: str) -> FileResponse:
+        d = _disc_dir(discs_root, disc_id)
+        if d is None:
+            raise HTTPException(status_code=404)
+        target = _resolve_under(d / "captures", filename)
+        if target is None:
+            raise HTTPException(status_code=404)
+        return FileResponse(target, media_type="image/jpeg")
+
+    @app.get("/library/{disc_id}/audio/{filename}")
+    def library_audio(disc_id: str, filename: str) -> FileResponse:
+        d = _disc_dir(discs_root, disc_id)
+        if d is None:
+            raise HTTPException(status_code=404)
+        target = _resolve_under(d / "audio", filename)
+        if target is None:
+            raise HTTPException(status_code=404)
+        return FileResponse(target, media_type="audio/flac")
+
+
+def _render_library_list(discs_root: Path) -> str:
+    cards: list[str] = []
+    if discs_root.is_dir():
+        # Sort by disc_id descending — newest first.
+        entries = sorted(
+            (p for p in discs_root.iterdir() if _DISC_ID_RE.match(p.name)),
+            key=lambda p: p.name,
+            reverse=True,
+        )
+        for d in entries:
+            mp = d / "manifest.json"
+            if not mp.is_file():
+                continue
+            try:
+                m = read_manifest(mp)
+            except (ValueError, OSError):
+                continue
+            cards.append(_render_library_card(d, m))
+
+    grid = "\n".join(cards) if cards else (
+        '<p class="meta">no discs yet. insert one to start.</p>'
+    )
+    return _LIBRARY_LIST_HTML.replace("{{GRID}}", grid)
+
+
+def _render_library_card(disc_dir: Path, m: Manifest) -> str:
+    disc_id = html.escape(m.disc_id)
+    accent = _accent_class(m)
+    captures_dir = disc_dir / "captures"
+
+    # Thumbnail: first lit capture if present, else first ambient, else
+    # a placeholder.
+    thumb_src: str | None = None
+    if captures_dir.is_dir():
+        lit = sorted(captures_dir.glob("disc_front_lit_*.jpg"))
+        amb = sorted(captures_dir.glob("disc_front_ambient_*.jpg"))
+        any_caps = sorted(captures_dir.glob("*.jpg"))
+        chosen = (lit or amb or any_caps)
+        if chosen:
+            thumb_src = f"/library/{disc_id}/captures/{html.escape(chosen[0].name)}"
+
+    if thumb_src:
+        thumb = f'<img class="thumb" src="{thumb_src}" alt="">'
+    else:
+        thumb = '<div class="thumb-empty">no capture</div>'
+
+    track_count = len(m.rips[0].tracks) if m.rips else 0
+    created = _rel_time(m.created_at)
+    rip_status = m.rips[0].status if m.rips else m.status
+
+    return (
+        f'<a class="card card--lib {accent}" href="/library/{disc_id}">'
+        f'  {thumb}'
+        f'  <div class="card-body">'
+        f'    <p class="eyebrow">{html.escape(rip_status).upper()[:6]}</p>'
+        f'    <h2 class="card-title">{disc_id}</h2>'
+        f'    <p class="meta">'
+        f'      <span>{track_count} tracks</span>'
+        f'      <span class="dot">·</span>'
+        f'      <span>{html.escape(created)}</span>'
+        f'    </p>'
+        f'  </div>'
+        f'</a>'
+    )
+
+
+def _render_library_detail(disc_dir: Path) -> str:
+    manifest = read_manifest(disc_dir / "manifest.json")
+    disc_id = html.escape(manifest.disc_id)
+    accent = _accent_class(manifest)
+
+    # Manifest dump.
+    manifest_json = manifest.model_dump_json(indent=2)
+    manifest_block = (
+        '<pre class="manifest-dump">' + html.escape(manifest_json) + "</pre>"
+    )
+
+    # Captures grid.
+    captures_dir = disc_dir / "captures"
+    capture_files = sorted(captures_dir.glob("*.jpg")) if captures_dir.is_dir() else []
+    cap_imgs = "\n".join(
+        f'<a target="_blank" href="/library/{disc_id}/captures/{html.escape(p.name)}">'
+        f'<img class="thumb" src="/library/{disc_id}/captures/{html.escape(p.name)}" alt=""></a>'
+        for p in capture_files
+    )
+
+    # Audio tracks.
+    audio_dir = disc_dir / "audio"
+    audio_files = sorted(audio_dir.glob("*.flac")) if audio_dir.is_dir() else []
+    track_rows = "\n".join(
+        f'<li class="track">'
+        f'  <span class="track-name">{html.escape(p.name)}</span>'
+        f'  <span class="track-size">{_format_bytes(p.stat().st_size)}</span>'
+        f'  <audio controls preload="none" src="/library/{disc_id}/audio/{html.escape(p.name)}"></audio>'
+        f'</li>'
+        for p in audio_files
+    )
+
+    # Log tail.
+    log_block = ""
+    logs_dir = disc_dir / "logs"
+    if logs_dir.is_dir():
+        log_text = ""
+        for lp in sorted(logs_dir.glob("*.log")):
+            log_text += _tail_log(lp, 200)
+        if log_text:
+            log_block = (
+                '<section class="card log-card">'
+                '<p class="eyebrow">LOG TAIL</p>'
+                '<pre class="log">' + html.escape(log_text) + "</pre>"
+                "</section>"
+            )
+
+    return (
+        _LIBRARY_DETAIL_HTML
+        .replace("{{DISC_ID}}", disc_id)
+        .replace("{{ACCENT}}", accent)
+        .replace("{{MANIFEST}}", manifest_block)
+        .replace("{{CAPTURES}}", cap_imgs or '<p class="meta">no captures.</p>')
+        .replace("{{TRACKS}}", track_rows or '<li class="meta">no audio.</li>')
+        .replace("{{LOG_BLOCK}}", log_block)
+    )
 
 
 _PAGE_HTML = r"""<!doctype html>
@@ -376,6 +619,139 @@ _PAGE_HTML = r"""<!doctype html>
     tick();
     setInterval(tick, 2000);
   </script>
+</body>
+</html>
+"""
+
+
+# Shared library-page styles. Reuses Mash Co. tokens from /static/tokens.css.
+_LIBRARY_STYLES = r"""
+<style>
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: var(--s-7) var(--s-5); }
+  .nav { display: flex; gap: var(--s-4); margin-bottom: var(--s-5);
+         font-family: var(--font-body); font-size: var(--fs-sm); }
+  .nav a { color: var(--fg-muted); text-decoration: none;
+           padding-bottom: 2px; border-bottom: 1px solid transparent; }
+  .nav a.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .eyebrow { font-family: var(--font-body); font-size: var(--fs-xs);
+             letter-spacing: 0.08em; text-transform: uppercase;
+             color: var(--fg-muted); margin: 0 0 var(--s-2) 0; }
+  .page-title { font-family: var(--font-display); font-weight: 700;
+                font-size: 32px; margin: 0 0 var(--s-7) 0; color: var(--fg); }
+  .card { background: var(--surface); border: 1px solid var(--line);
+          border-left: 3px solid var(--accent); border-radius: var(--r-4);
+          padding: var(--s-5); margin-bottom: var(--s-5); }
+  .card--moss { border-left-color: var(--moss); }
+  .card--moss .eyebrow { color: var(--moss); }
+  .card--amber { border-left-color: var(--amber); }
+  .card--amber .eyebrow { color: var(--amber); }
+  .card--ember { border-left-color: var(--ember); }
+  .card--ember .eyebrow { color: var(--ember); }
+  .meta { font-family: var(--font-mono); font-size: var(--fs-sm);
+          color: var(--fg-muted); line-height: 1.6; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+          gap: var(--s-4); }
+  a.card { display: block; text-decoration: none; color: inherit; }
+  a.card:hover { background: var(--surface-2); }
+  .thumb { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+           border-radius: var(--r-3); background: var(--ink-2); }
+  .thumb-empty { display: flex; align-items: center; justify-content: center;
+                 width: 100%; aspect-ratio: 1 / 1; background: var(--ink-2);
+                 color: var(--fg-quiet); border-radius: var(--r-3);
+                 font-family: var(--font-mono); font-size: var(--fs-xs); }
+  .card-body { padding-top: var(--s-3); }
+  .card-title { font-family: var(--font-display); font-weight: 700;
+                font-size: 18px; margin: 0 0 var(--s-2) 0; color: var(--fg); }
+  .dot { margin: 0 6px; color: var(--fg-quiet); }
+  .captures-grid { display: grid; grid-template-columns: repeat(3, 1fr);
+                   gap: var(--s-3); margin-top: var(--s-3); }
+  ul.tracks { list-style: none; padding: 0; margin: var(--s-3) 0 0; }
+  li.track { display: grid; grid-template-columns: 1fr auto;
+             grid-template-areas: "name size" "audio audio";
+             gap: 4px 12px; padding: var(--s-3) 0;
+             border-bottom: 1px solid var(--line);
+             font-family: var(--font-mono); font-size: var(--fs-sm); }
+  li.track .track-name { grid-area: name; color: var(--fg-2); }
+  li.track .track-size { grid-area: size; color: var(--fg-quiet); }
+  li.track audio { grid-area: audio; width: 100%; margin-top: 4px; }
+  pre.manifest-dump, pre.log {
+    font-family: var(--font-mono); font-size: var(--fs-xs);
+    color: var(--fg-muted); background: var(--ink-0);
+    border: 1px solid var(--line); border-radius: var(--r-3);
+    padding: var(--s-3); margin: 0; max-height: 400px; overflow: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .log-card { border-left-color: var(--ink-5); }
+</style>
+"""
+
+
+_LIBRARY_LIST_HTML = r"""<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cd-archivist · library</title>
+  <link rel="stylesheet" href="/static/tokens.css">
+""" + _LIBRARY_STYLES + r"""
+</head>
+<body>
+  <main class="wrap">
+    <nav class="nav">
+      <a href="/">status</a>
+      <a href="/library" class="active">library</a>
+    </nav>
+    <p class="eyebrow">LIBRARY</p>
+    <h1 class="page-title">cd-archivist</h1>
+    <div class="grid">
+      {{GRID}}
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
+_LIBRARY_DETAIL_HTML = r"""<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cd-archivist · {{DISC_ID}}</title>
+  <link rel="stylesheet" href="/static/tokens.css">
+""" + _LIBRARY_STYLES + r"""
+</head>
+<body>
+  <main class="wrap">
+    <nav class="nav">
+      <a href="/">status</a>
+      <a href="/library" class="active">library</a>
+    </nav>
+    <p class="eyebrow">DISC</p>
+    <h1 class="page-title">{{DISC_ID}}</h1>
+
+    <section class="card {{ACCENT}}">
+      <p class="eyebrow">MANIFEST</p>
+      {{MANIFEST}}
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">CAPTURES</p>
+      <div class="captures-grid">
+        {{CAPTURES}}
+      </div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">TRACKS</p>
+      <ul class="tracks">
+        {{TRACKS}}
+      </ul>
+    </section>
+
+    {{LOG_BLOCK}}
+  </main>
 </body>
 </html>
 """

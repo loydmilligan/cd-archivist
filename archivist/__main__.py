@@ -168,7 +168,7 @@ def main() -> int:
         )
 
     loop_state = LoopState()
-    app = create_app(loop_state, log_path)
+    app = create_app(loop_state, log_path, discs_root=discs_root)
     server, server_thread = _start_uvicorn(app, port)
 
     loop = ArchivistLoop(
