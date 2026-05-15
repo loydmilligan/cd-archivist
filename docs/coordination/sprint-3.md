@@ -497,7 +497,7 @@ updated: 2026-05-14T00:00:00.000Z
     suite green. Note in Activity Log: this is the breaking rename
     captured under Contract Changes.
 
-- [ ] {agent: drivers, depends: test-systemctl-scope, id: impl-systemctl-
+- [x] {agent: drivers, depends: test-systemctl-scope, id: impl-systemctl-
   scope} Implement option (a) per `D-cdplay-scope`. `stop_unit(name,
   *, scope="system")` and `start_unit(name, *, scope="system")` gain
   the keyword-only param. Argv: `scope="system"` keeps `["sudo",
