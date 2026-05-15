@@ -334,7 +334,7 @@ updated: 2026-05-14T00:00:00.000Z
     py`. Existing tests that assert "capture before rip" flip to
     "capture after eject". Fails until impl-capture-after-eject.
 
-- [ ] {agent: pipeline, id: test-capture-sequence-update} Update the
+- [x] {agent: pipeline, id: test-capture-sequence-update} Update the
   existing `tests/pipeline/test_capture.py` if any case asserts that
   `capture_disc` runs against a *closed* tray (none should — the
   function is a leaf operation that doesn't know about tray state, the
