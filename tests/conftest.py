@@ -43,6 +43,21 @@ class FakeCompletedProcess:
         self.stderr = stderr
 
 
+def fake_completed_process(
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    args: Any = None,
+) -> FakeCompletedProcess:
+    """Shared helper for building a fake subprocess.CompletedProcess.
+
+    Hoisted out of `tests/drivers/test_ripper.py` per sprint-2 task
+    `tests-pkg` so any test module can import it as
+    `from tests.conftest import fake_completed_process`.
+    """
+    return FakeCompletedProcess(args, returncode=returncode, stdout=stdout, stderr=stderr)
+
+
 class FakeSubprocess:
     """Records subprocess.run / Popen calls and returns scripted results.
 

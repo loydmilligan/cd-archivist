@@ -9,17 +9,7 @@ from pathlib import Path
 import pytest
 
 from archivist.drivers.ripper import CDAudioRipper, RipResult, Ripper
-
-
-class FakeCompletedProcess:
-    """Local stand-in for subprocess.CompletedProcess (the conftest one
-    isn't importable by path because `tests/` is not a package)."""
-
-    def __init__(self, args, returncode=0, stdout="", stderr=""):
-        self.args = args
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
+from tests.conftest import FakeCompletedProcess
 
 CDS_AUDIO = 100  # include/uapi/linux/cdrom.h
 CDS_DATA_1 = 101
