@@ -1103,6 +1103,31 @@ _No ratifications yet._
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-15 — orc — sprint-3 closed
+
+26 of 27 tasks `[x]` (the 1 remaining is the explicitly-optional `test-log-stream`). All three buckets shipped:
+
+- **Bucket A polish** (9 tasks): impl-systemctl-scope, impl-find-unit-scope, impl-drive-missing, impl-rip-stderr-stream, impl-loop-device-missing, impl-rip-error-recovery, impl-log-fallback, impl-last-tick, impl-rip-progress + impl-status-ui (UI side of progress bar / liveness / log follow / ERROR accent).
+- **Bucket B capture-timing redesign** (1 impl): impl-capture-after-eject — capture moves to post-EJECT, manifest write splits into rip-result-now + captures-after.
+- **Bucket C review UI** (1 impl): impl-library — `/library` grid + `/library/CD_NNNN` detail + asset serving with traversal guard.
+- **Bucket D operator review-recapture** (mid-sprint addition per `D-review-recapture-mvp`, 3 commits): test-review-recapture, impl-review-recapture, amendment to impl-library adding "Take a review photo" button + countdown.
+
+**Decision Log entries ratified:** D-cdplay-scope, D-eject-time-capture, D-rip-failure-error, D-review-recapture-mvp.
+
+**Hardware bring-up validation (CD_0018, 2026-05-15):**
+- Real disc end-to-end: WAITING → STABILIZE → RIP → EJECT → CAPTURE → IDLE — full cycle in ~13 minutes.
+- 12 FLACs ripped cleanly into `audio/` (the trailing-slash fix from sprint-2 polish proven on real hardware).
+- 6 captures landed in `captures/` POST-eject, showing the disc face clearly with handwritten label legible ("AFI - Black Sails in the Sunset"). Capture-timing redesign validated.
+- `last_rip_status: "success"` reported by the API. First successful end-to-end rip on the real rig.
+
+**Polish queue items surfaced during validation (carried to sprint-4 backlog):**
+- #11 library page filter by rip status (default success-only)
+- #12 ripper keeps WAVs alongside FLACs (~2x disk usage per disc)
+- #13 `rip_progress` field never populates — parser doesn't match cdparanoia's actual stderr format
+- (Plus the 10 items already in the queue at sprint-3 start, most of which sprint-3 directly addressed.)
+
+**Sprint-4 scope decided** (`project_cd_archivist_sprint4_scope.md` in orc memory): music-pipeline output contract conformance per `docs/ripper-handoff-for-claude-code.md`. The earlier manual-capture-and-album-art design doc is demoted to sprint-5 candidate.
+
 ### 2026-05-15 — pipeline — Bucket D operator review-recapture landed (3 commits)
 
 Sprint-3 mid-sprint amendment per `D-review-recapture-mvp` shipped in
