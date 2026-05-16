@@ -607,6 +607,60 @@ sprint-7 planning. -->
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-16 — drivers — Wave 1 failing tests landed (3 tasks, 3 commits)
+
+All drivers-owned Wave 1 tasks closed; no impl code written. Each
+suite collects cleanly and fails for the right reason — Wave 2 impls
+will satisfy the locked-in contracts.
+
+- **test-fail-fast-detection** (`0f1fa0e`) — new file
+  `tests/drivers/test_ripper_failfast.py` with 5 failing cases per
+  `D-failfast-threshold`. Locks in: per-sector retry counter
+  (default threshold 3); accumulator is per-sector, NOT global
+  (so 4 different sectors at retry=1 each does NOT trigger abort);
+  `ASC=3e` sense code triggers immediate abort regardless of
+  retry threshold; clean rip exits naturally with no `terminate()`
+  call. A `_FakePopen` + `_TerminableIter` pair stand in for
+  `subprocess.Popen`: `.terminate()` flips a flag and the iterator
+  stops yielding (proves the impl stopped reading at the threshold
+  via a sentinel `TAIL_LINE_SHOULD_NEVER_BE_READ` that the iterator
+  must never consume). 5/5 fail today with
+  `TypeError: rip() got an unexpected keyword argument 'retry_threshold'`.
+- **test-partial-output-preserve** (`0ea8195`) — new file
+  `tests/drivers/test_ripper_partial.py` with 5 failing cases for
+  the `RipResult` schema gains (`partial: bool = False`,
+  `successful_tracks: list[int] = []`, `failed_track: int | None = None`)
+  + preservation contract. Cases cover: schema defaults +
+  round-trip; a `_PartialPopen` that writes track01.wav + track02.wav
+  before the 3rd track triggers retry-threshold abort, asserting
+  the corresponding .flac sidecars survive on disk AND that
+  `result.status == "partial"` with `successful_tracks=[1, 2]` and
+  `failed_track=3`; a `_CleanPopen` happy-path that confirms
+  `status="success"` still works with the new fields at their safe
+  defaults (`successful_tracks=[1, 2, 3]`, `partial=False`,
+  `failed_track=None`). 5/5 fail today (schema fields missing +
+  retry_threshold kwarg).
+- **test-cdplay-removed** (`853c8a2`) — new file
+  `tests/state_machine/test_cdplay_decoupled.py` with 4 cases for
+  the cdplay decouple per `D-cdplay-decouple-not-install`. Drives a
+  full IDLE→WAITING→STABILIZE→RIP→EJECT→CAPTURE→IDLE cycle and
+  asserts no `cdplay.service` events on `services.events`; that
+  `drive.eject_calls == [DEVICE]` still holds; that the loop reaches
+  IDLE. 2 fail today (`stop:cdplay.service` + `start:cdplay.service`
+  still fire); 2 pass today (eject + IDLE invariants the decouple
+  must preserve). Reuses `_FakeDrive` / `_FakeServices` / `_FakeCamera`
+  / `_FakeLED` / `_Clock` from `tests/state_machine/test_loop.py`
+  via package import. Documented in the commit body: Wave 2's
+  `impl-cdplay-decouple` will also need to update the legacy
+  `test_loop.py` cases that index `stop:cdplay.service` /
+  `start:cdplay.service` — bundled with the impl per the
+  agent-roster boundary.
+
+Wave 2 queue: `impl-fail-fast-detection`,
+`impl-partial-output-preserve`, `impl-cdplay-decouple` (depends on
+nothing else cross-bucket — drivers' Wave 2 can run as soon as
+pipeline closes their parallel Wave 1).
+
 ### 2026-05-16 — planner — sprint-6 plan drafted
 
 - Drafted from `docs/design/2026-05-16-candidate-disc-kanban-status.md`
