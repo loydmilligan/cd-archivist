@@ -108,7 +108,7 @@ status: draft
 
 #### Bucket B — Kanban surface (pipeline)
 
-- [ ] {agent: pipeline, id: test-disc-card-builder}
+- [x] {agent: pipeline, id: test-disc-card-builder}
   Failing tests for the disc-card data builder.
   `tests/service/test_disc_card_builder.py`:
   (a) walking a fixture `/srv/music/{review,library,archive}/`
@@ -124,7 +124,7 @@ status: draft
   ({success, fail, in_progress, pending} → {green, red, blue, empty})
   renders correctly from a synthetic `Cycle` state.
 
-- [ ] {agent: pipeline, id: test-kanban-api}
+- [x] {agent: pipeline, id: test-kanban-api}
   Failing tests for `GET /api/kanban`.
   `tests/service/test_kanban_endpoint.py`: response shape is
   `{ buckets: { capture: [DiscCard], beets_id: [DiscCard],
@@ -134,7 +134,7 @@ status: draft
   exist; the in-progress disc lands in `capture` with `progress:
   {percent, current_stage}`.
 
-- [ ] {agent: pipeline, id: test-kanban-page-render}
+- [x] {agent: pipeline, id: test-kanban-page-render}
   Failing tests for the kanban HTML page at `GET /`.
   `tests/service/test_kanban_page.py`: page renders 4 column
   headers (Capture, Beets ID, Review, In Library); cards render
@@ -146,7 +146,7 @@ status: draft
 
 #### Bucket B+ — Operator hint controls on a candidate card (pipeline)
 
-- [ ] {agent: pipeline, id: test-operator-hints-api}
+- [x] {agent: pipeline, id: test-operator-hints-api}
   Failing tests for `PATCH /api/disc/<folder>/hints`.
   `tests/service/test_operator_hints.py`:
   (a) PATCH with body `{various_artists: true}` writes
@@ -170,7 +170,7 @@ status: draft
   (g) tracks-array PATCH validates `track_number` is a positive
   int and rejects unknown extra fields (`extra="forbid"`).
 
-- [ ] {agent: pipeline, id: test-operator-hints-card-ui}
+- [x] {agent: pipeline, id: test-operator-hints-card-ui}
   Failing tests for the operator-hints UI block inside the
   expanded card. `tests/service/test_kanban_page.py` additions:
   (h) expanded card renders two checkboxes ("Various Artists",
@@ -197,7 +197,7 @@ status: draft
   (n) collapsed-card badge for the both-on case shows "Mix CD
   ({N} tracks)" with N populated from the same TOC source.
 
-
+- [x] {agent: pipeline, id: test-damaged-card-actions}
   Failing tests for the three damaged-disc actions on a Capture
   card whose rip aborted with `RipStatus.PARTIAL`.
   `tests/service/test_damaged_disc_endpoints.py`:
@@ -214,7 +214,7 @@ status: draft
   merges resulting flacs with existing successful ones,
   appends provenance entries.
 
-- [ ] {agent: pipeline, id: test-review-page-explainer}
+- [x] {agent: pipeline, id: test-review-page-explainer}
   Failing tests for the Review v1 screen at `GET /review`.
   `tests/service/test_review_page_v1.py`: each card in the
   review-folder list shows a "why in review" explanation derived
@@ -606,6 +606,78 @@ sprint-7 planning. -->
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — pipeline — Wave 1 failing tests landed (7 tasks, 7 commits)
+
+All seven pipeline-owned Wave 1 failing-test tasks shipped as atomic
+commits. Each suite collects cleanly and fails for the right reason
+(missing modules, missing `music_root` kwarg on `create_app`, missing
+routes / page markup) — the Wave 1 contract is exactly "these fail
+until Wave 2 impls them." Pre-existing tests unaffected (317 passed
+alongside the new failures; the 12 other failures are drivers' Wave 1
+tests landing in parallel under Buckets A + D + the sprint-5 disc-id
+carryover).
+
+**Bucket B — kanban surface (3):**
+- `561648e` test-disc-card-builder — pins
+  `archivist.service.disc_card_builder` API: `build_kanban_state`,
+  `DiscCard`, `KanbanState`, `track_bar_from_counts`. Directory-walk
+  → bucket mapping, source.json plumbing, LoopState overlay, color-
+  map state labels (`success`/`fail`/`in_progress`/`pending`).
+- `754e0c8` test-kanban-api — pins `GET /api/kanban` shape with four
+  buckets, library retention cap (default 20 per
+  `D-library-retention-v1`, `KANBAN_LIBRARY_RETENTION` env override),
+  newest-first ordering, in-progress overlay with parsed percent +
+  current_stage.
+- `4f0f69b` test-kanban-page-render — pins kanban HTML at `GET /`:
+  four column headers, collapsed-card markup, `aria-expanded`,
+  `<meta name="kanban-poll-ms" content="2000">` per
+  `D-live-update-transport-v1`, Mash tokens (`--ink`, `--ok`,
+  `--warn`, `--info`), dark-first theme.
+
+**Bucket B+ — operator hints (2):**
+- `d7efd83` test-operator-hints-api — pins
+  `PATCH /api/disc/<folder>/hints` contract: toggle writes,
+  album-level text fields, 404 on missing folder, merge semantics
+  (fields absent from body preserved), per-track-number merge on the
+  tracks array, `extra="forbid"` validation on both `OperatorHints`
+  and each `TrackHint`, positive-int `track_number` validation,
+  `DiscCard.operator_hints` surfacing on the kanban API.
+- `3cf82e7` test-operator-hints-card-ui — appends UI tests to
+  `test_kanban_page.py` for the expanded-card hint controls (two
+  checkboxes with `aria-label` + `name=`, two text inputs with
+  `data-disabled-when="burned_cd OR various_artists"`, "Save hints"
+  button targeting the PATCH endpoint), the collapsed-card chip
+  (VA / burned / artist-album text / "Mix CD (N tracks)" /
+  no-chip when empty), and per-track table presence rules
+  (DOM-absent unless both toggles ON, row count from TOC
+  preferred / flac count fallback, `data-show-when="various_artists
+  AND burned_cd"` marker).
+
+**Bucket C — damaged-disc UI + Review v1 (2):**
+- `606829a` test-damaged-card-actions — pins three damaged-disc
+  endpoints: `process-partial` (move failed/→inbox/ + READY +
+  source.json status updates + provenance entry), `redo?confirm=true`
+  (destructive delete behind confirm flag; absent flag returns
+  400/409 + folder preserved), `rerip-tracks` (TOC validation,
+  `archivist.drivers.ripper.partial_rerip` invocation, flac merge
+  alongside successful tracks, provenance entry appended not
+  overwritten). Provenance-entry shape stays loose pending the
+  open `D-source-json-provenance-schema` decision — to be resolved
+  during impl per planner instruction.
+- `6447537` test-review-page-explainer — pins
+  `archivist.service.review_explainer.explain(folder) -> str`
+  precedence (`status.beets_review_reason` → beets-import.log
+  signals → missing disc-id → safe fallback) and the Review v1
+  page contract (per-card "why in review" text + `<details>` block
+  with literal `docker exec cd_beets beet import …` shell snippet;
+  no interactive controls — v1 is read-only, no POST forms
+  targeting `/api/review/`).
+
+Wave 2 impls (`impl-disc-card-builder`, `impl-kanban-api`,
+`impl-kanban-page`, `impl-operator-hints`, `impl-damaged-disc-actions`,
+`impl-review-page-v1`) gated on these tests turning green.
+`D-source-json-provenance-schema` lands during `impl-disc-card-builder`.
 
 ### 2026-05-16 — drivers — Wave 1 failing tests landed (3 tasks, 3 commits)
 
