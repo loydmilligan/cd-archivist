@@ -514,7 +514,7 @@ updated: 2026-05-15T00:00:00.000Z
     apt dep line. `ruff check` clean. The lazy-import means the
     suite passes on CI even when libdiscid isn't installed.
 
-- [ ] {agent: pipeline, depends: test-source-json-identifiers,
+- [x] {agent: pipeline, depends: test-source-json-identifiers,
   depends: impl-disc-id-capture, id: impl-source-json-identifiers}
   Wire `read_disc_id` into the rip pipeline. Two changes:
   (1) `archivist/state_machine/loop.py::_from_stabilize` (or
@@ -542,7 +542,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket B — In-UI beets review
 
-- [ ] {agent: pipeline, depends: install-musicbrainzngs-in-archivist,
+- [x] {agent: pipeline, depends: install-musicbrainzngs-in-archivist,
   id: impl-mb-client} Implement
   `archivist/service/mb_client.py` — a singleton wrapper around
   `musicbrainzngs` with built-in throttling + UA. Module exposes
@@ -570,7 +570,7 @@ updated: 2026-05-15T00:00:00.000Z
     behavior is fully covered by the
     `test-review-candidates-*` suites.
 
-- [ ] {agent: pipeline, depends: impl-mb-client,
+- [x] {agent: pipeline, depends: impl-mb-client,
   depends: test-review-folder-list,
   depends: test-review-candidates-search,
   depends: test-review-candidates-mbid,
@@ -612,7 +612,7 @@ updated: 2026-05-15T00:00:00.000Z
     route registrations stay terse; the handler bodies live in
     `beets_review.py`. `ruff check` clean.
 
-- [ ] {agent: pipeline, depends: impl-review-routes,
+- [x] {agent: pipeline, depends: impl-review-routes,
   depends: test-review-ui-list,
   depends: test-review-ui-detail, id: impl-review-pages}
   Implement the `/review` and `/review/<folder>` HTML pages in
@@ -665,7 +665,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket C — Polish + bug fixes
 
-- [ ] {agent: pipeline, depends: test-wav-cleanup-integration,
+- [x] {agent: pipeline, depends: test-wav-cleanup-integration,
   id: impl-wav-cleanup-fix} Trace and fix the WAV-cleanup bug
   surfaced by the STP rip. Investigation order:
   (1) Confirm the env default — `ARCHIVIST_KEEP_WAVS` is
@@ -696,7 +696,7 @@ updated: 2026-05-15T00:00:00.000Z
     writes only `.flac` files to the inbox folder and to the
     eventual library path.
 
-- [ ] {agent: pipeline, depends: test-library-prefer-beets-cover,
+- [x] {agent: pipeline, depends: test-library-prefer-beets-cover,
   id: impl-library-prefer-beets-cover} Implement the
   thumbnail-preference change in
   `archivist/service/library.py` (the adapter from sprint-4)
@@ -1127,6 +1127,107 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — pipeline — Wave 2 impls landed (6 tasks, 6 commits, 309/309 green)
+
+All 6 pipeline-owned Wave 2 impls shipped as atomic commits in
+dependency-respecting order. Final pipeline test count: 309 passed,
+0 failed (the 5 remaining failures are drivers' disc-id tests in
+drivers' lane).
+
+**Bucket A — disc-id integration (1):**
+- `02eeb57` impl-source-json-identifiers — `build_source_json`
+  gains `mb_disc_id: str | None = None` kwarg; empty/whitespace
+  normalised to None. State machine reads disc-id once at rip
+  start (`_from_stabilize`) via a lazy-imported wrapper around
+  `archivist.drivers.disc_id.read_disc_id` so missing libdiscid
+  doesn't break the loop. Threaded through cycle bookkeeping
+  into the builder at HANDOFF time.
+
+**Bucket B — in-UI beets review (3):**
+- `c065988` impl-mb-client — `archivist/service/mb_client.py`
+  with the singleton `MBClient`. User-Agent set at construction;
+  threading.Lock + monotonic-clock gate enforces ≥1.0s between
+  calls so concurrent FastAPI requests serialise instead of
+  getting throttled by MB's server side. No retry/backoff, no
+  caching — WebServiceError propagates for route handlers to
+  surface as 502.
+- `157da30` impl-review-routes — new `archivist/service/beets_
+  review.py` owns folder discovery + MB candidate transform +
+  beets-import subprocess wrappers. Four endpoints registered
+  in `app.py`:
+  - GET /api/review/folders — aggregates MUSIC_REVIEW_DIR +
+    READY-no-PROCESSING children of MUSIC_INBOX_DIR per
+    D-review-folder-discovery; sorted by mtime descending.
+  - GET /api/review/<folder>/candidates — dispatches on ?search
+    vs ?mbid (400 if both, 400 on invalid UUID); calls the
+    stubbable singleton; transforms responses with tracks_diff
+    computed against the folder's FLAC sizes.
+  - POST /api/review/<folder>/apply — body {mbid} → exact argv
+    [docker, exec, cd_beets, beet, import, -q, --search-id,
+    mbid, /downloads/<folder>], shell=False, timeout=120,
+    409 when LoopState in {RIP, EJECT, CAPTURE}.
+  - POST /api/review/<folder>/use-as-is — same argv shape with
+    -A flag.
+  All 30 endpoint cases green.
+- `7a2536e` impl-review-pages — `/review` list + `/review/
+  <folder>` detail HTML in the same module. Mash Co.-dressed:
+  dark theme, sentence case, eyebrow ≤2 words, no decorative
+  emoji. Candidate cards render confidence as `<progress>` bar;
+  Apply uses `btn--accent`; Use-as-is uses `btn--secondary`
+  (--ink-3 quieter). Track-diff table wraps filenames in
+  `<code>` (monospace) with `class="row--warn"` on >5s deltas
+  (--amber colored). Audio preview per FLAC via new
+  `GET /api/review/<folder>/audio/<filename>` (path-traversal
+  guarded; .flac only). No-JS — search uses same-page
+  `<form method="get">` per the sprint-3/4 contract. All 11
+  page-render cases green.
+
+**Bucket C — polish (2):**
+- `aec8150` impl-wav-cleanup-fix — root cause documented inline
+  in D-wav-cleanup-real-fix: the helper was never called from
+  the state machine. Sprint-4's `cleanup_wavs` had unit-level
+  coverage but zero production callers. Fixed by calling
+  `cleanup_wavs(disc_dir / "audio", keep=_env_truthy(
+  ARCHIVIST_KEEP_WAVS))` inside `_from_rip_sprint4` on the
+  success path, BEFORE `_set_state(EJECT)` so cleanup
+  guaranteed runs before the CAPTURE-phase working→inbox
+  handoff. Cleanup exceptions logged and swallowed. Lesson
+  captured: pure-helper unit tests aren't enough when the
+  helper has zero callers; ship an integration test asserting
+  the caller actually runs it.
+- `012779c` impl-library-prefer-beets-cover — `DiscSummary`
+  gains `library_cover_path`; adapter derives the expected
+  `<library_root>/<artist>/<album>/cover.{jpg,jpeg,png,webp}`
+  path from source.json detected_metadata. Grid thumbnails
+  prefer the library cover via new
+  `GET /library/<disc>/album-cover` (path-traversal guarded);
+  detail page renders two distinct sections (ALBUM ART +
+  PHYSICAL DISC) with sprint-3 review-recapture buttons
+  preserved on the physical-disc section. Legacy CD_NNNN
+  folders never look up a library cover (manifest has no
+  detected_metadata). Also the detail rendering now handles
+  BOTH source.json and manifest.json folders — sprint-5's
+  new-shape folders no longer 500 on the detail page.
+
+**Footprint:**
+  - 3 new modules (`archivist/service/mb_client.py`,
+    `archivist/service/beets_review.py`, plus changes to
+    existing `library.py`).
+  - 6 new routes (`/api/review/folders`,
+    `/api/review/<folder>/{candidates,apply,use-as-is,audio/<filename>}`,
+    `/library/<disc>/album-cover`).
+  - 2 new HTML pages (/review, /review/<folder>) Mash Co.
+    dressed per the SKILL.md voice contract.
+  - 1 state-machine bug fix (cleanup_wavs call site).
+  - 1 ratified Decision Log entry (D-wav-cleanup-real-fix)
+    with the root cause + lesson recorded inline.
+
+`create_app` grew two new optional kwargs: `review_root` and
+`library_root` (both `Path | None = None`). Both are wired in
+`__main__.py` from new env vars `MUSIC_REVIEW_DIR` and
+`MUSIC_LIBRARY_DIR` — wiring lands separately (operator-
+adjacent, not on the Wave 2 pipeline list).
 
 ### 2026-05-16 — pipeline — Wave 1 failing tests landed (10 tasks, 10 commits)
 
