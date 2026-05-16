@@ -95,7 +95,7 @@ updated: 2026-05-15T00:00:00.000Z
 > two Wave 0 tasks are sprint-scope adjacent: they don't gate
 > Wave 1 but should land before sprint-5 closes.
 
-- [ ] {agent: operator, id: install-musicbrainzngs-in-archivist}
+- [x] {agent: operator, id: install-musicbrainzngs-in-archivist}
   **Operator-owned — human-driven, not an agent task.** Add
   `musicbrainzngs` to the cd-archivist runtime venv on the CM4 so
   Bucket B's MB client can import it. Two steps:
@@ -116,7 +116,7 @@ updated: 2026-05-15T00:00:00.000Z
     return 200 (not 500 from a missing-dep import error) for a
     smoke-test query.
 
-- [ ] {agent: operator, id: install-libdiscid-on-cm4}
+- [x] {agent: operator, id: install-libdiscid-on-cm4}
   **Operator-owned — human-driven, not an agent task.** The
   `discid` Python package shells to libdiscid (a small C library
   that reads CD-TOCs and computes the MusicBrainz disc-id hash).
@@ -191,7 +191,7 @@ updated: 2026-05-15T00:00:00.000Z
     reboot); the previous tmux-launched process is stopped to
     avoid double-binding `/dev/sr0`. Does NOT gate Wave 1.
 
-- [ ] {agent: operator, id: update-mash-co-readme-products-in-scope}
+- [x] {agent: operator, id: update-mash-co-readme-products-in-scope}
   **Operator-owned — human-driven, cross-repo task.** Mash Co.
   Design System's `README.md` "Products in scope" section still
   doesn't mention cd-archivist (sprint-3 + sprint-4 both used
@@ -1130,6 +1130,61 @@ _No ratifications yet._
 
 - _None._
 
+## Sprint-6 Candidates
+
+<!-- Items captured mid-sprint-5 that should be picked up at sprint-6 planning. -->
+
+- **Candidate-disc kanban status page** — replace single-line status surface
+  with a card-per-disc kanban (Capture → Beets ID → ??? → Review / Library),
+  per-track bar (green/empty/red/blue), and a Review screen explaining why
+  each card is in review. Design brief:
+  `docs/design/2026-05-16-candidate-disc-kanban-status.md`. Owner: pipeline.
+- **`cdplay.service` missing on CM4** — state machine calls `systemctl
+  start/stop cdplay.service` pre- and post-rip; both fail with `exit 5:
+  Unit cdplay.service not found`. Observed STP rip (2026-05-15) and RATM
+  rip (2026-05-16). Either install the unit or remove the dependency.
+  Owner: operator + pipeline.
+- **Damaged-disc UI options (first-class sprint-6 scope)** — when a
+  rip fails or is stopped mid-flight, the disc card must offer three
+  explicit actions: (1) **process partial as-is** (route the
+  cleanly-ripped tracks through the rest of the pipeline with
+  `source.json.status.partial=True`), (2) **redo entire capture**
+  (discard + restart), (3) **pick tracks to (re-)rip** (checkbox list
+  of every track from the TOC, pre-selected by success/failure state;
+  cdparanoia re-runs against the selected range and merges with
+  existing successful flacs). Full spec in the kanban brief's
+  "Damaged-disc handling" section. Subsumes generic "partial-rip data
+  loss" framing.
+
+- **Damaged-disc detection (engine side)** — RATM (2026-05-16) failed twice in a row:
+  first rip stalled on track 8 for ~25 min then bailed; second attempt
+  same disc failed at track 6. Both times the partial output (clean
+  tracks 1–N-1) was discarded and the operator got no actionable
+  surface. An "elegant" path covers:
+  1. **Fail-fast detection.** When cdparanoia retries the same sector
+     >N times, stop the rip immediately instead of grinding for 25 min.
+     Threshold candidates: 3 retries on a single sector, or any
+     "Target hardware fault" sense code.
+  2. **Preserve partial output.** Whatever flacs ripped cleanly land in
+     `failed/<disc-folder>/` with `rip.log`, `source.json` (marked
+     `status.rip_success=False`, `status.partial=True`, list of
+     successful track indices), and the disc photo. Nothing is
+     auto-deleted.
+  3. **Operator surface.** Failed-disc card in the kanban (Review or a
+     new "Damaged" bucket) shows: which tracks succeeded, which failed,
+     where the partial files live, and three actions — **retry full
+     disc**, **import partial as-is** (route the clean tracks through
+     beets and accept the gap), or **abandon**.
+  4. **Retry hints.** Surface read-speed reduction option ("retry at
+     4x") and prompt to clean the disc before retry.
+  5. **No `cdplay.service` dependency.** Today the post-rip handler
+     calls `systemctl start cdplay.service` which doesn't exist on the
+     CM4 — eject and recovery should work without that unit.
+
+  Subsumes the prior "partial-rip data loss" line. Builds on the
+  kanban brief (`docs/design/2026-05-16-candidate-disc-kanban-status.md`
+  Q3) and the cdplay.service item above. Owner: drivers + pipeline.
+
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. Format:
@@ -1143,6 +1198,25 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — operator — Wave 0 + Bucket C #4 landed (3 tasks ticked)
+
+- `install-musicbrainzngs-in-archivist`: pip install -e '.[dev]' on
+  the CM4 venv at `/home/mmariani/Projects/cd-archivist/.venv`; verified
+  `import musicbrainzngs` returns cleanly. Path note: the systemd-unit's
+  aspirational `/srv/cd-archivist` path does not yet exist; current
+  venv lives under `/home/mmariani/Projects/cd-archivist/`.
+- `install-libdiscid-on-cm4`: `sudo apt-get install -y libdiscid0` →
+  `libdiscid 0.6.4` reports cleanly via
+  `discid.LIBDISCID_VERSION_STRING`. Unblocks `read_disc_id` (sprint-5
+  `efd3fba`) at runtime on the real rig.
+- `update-mash-co-readme-products-in-scope`: added a `cd-archivist`
+  row to the Products in scope table in
+  `~/Projects/Mash Co. Design System/README.md` between the Orc Tower
+  and SRMPW rows; "Active consumer" status reflects sprint-3/4/5 use
+  of Mash Co. tokens in library + manual-mode + in-UI review pages.
+- Still open: `install-archivist-systemd-unit` (#3) — pending until
+  current in-flight rip finishes (don't double-bind /dev/sr0).
 
 ### 2026-05-16 — pipeline — stretch impl-process-ready-strip-marker landed (Option A, 310/310 green)
 
