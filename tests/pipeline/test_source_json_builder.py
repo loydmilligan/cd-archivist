@@ -279,3 +279,65 @@ def test_timestamps_carry_offsets(tmp_path: Path) -> None:
     # the timestamp.
     assert '"inserted_at":' in blob
     assert "Z\"" not in blob
+
+
+# -------- (g) sprint-5 / test-source-json-identifiers ---------------
+
+
+def _build_kwargs(tmp_path: Path) -> dict:
+    """Shared kwargs scaffold for the identifier-population cases."""
+    return {
+        "disc_dir": _make_disc_dir(tmp_path),
+        "ripper_name": "cd-archivist",
+        "ripper_version": "0.1.0",
+        "hostname": "cm4",
+        "drive_info": _DriveInfo(),
+        "rip_record": _ripper_rec(),
+        "capture_result": _CaptureResult(
+            photo_path=None, photo_device="usb-microdia",
+        ),
+        "ready_at": _timestamps_happy().rip_finished_at,
+        "timestamps": _timestamps_happy(),
+    }
+
+
+def test_mb_disc_id_populates_identifiers(tmp_path: Path) -> None:
+    """`mb_disc_id="abc123..."` lands in identifiers.musicbrainz_disc_id."""
+    from archivist.pipeline.source_json import build_source_json
+
+    kwargs = _build_kwargs(tmp_path)
+    kwargs["capture_result"] = _CaptureResult(
+        photo_path=kwargs["disc_dir"] / "disc-photo.jpg", photo_device="cam",
+    )
+    s = build_source_json(mb_disc_id="abc123base64deadbeef", **kwargs)
+    assert s.identifiers.musicbrainz_disc_id == "abc123base64deadbeef"
+
+
+def test_no_mb_disc_id_keeps_field_null(tmp_path: Path) -> None:
+    """Existing sprint-4 default: identifiers.musicbrainz_disc_id is null."""
+    from archivist.pipeline.source_json import build_source_json
+
+    kwargs = _build_kwargs(tmp_path)
+    kwargs["capture_result"] = _CaptureResult(
+        photo_path=kwargs["disc_dir"] / "disc-photo.jpg", photo_device="cam",
+    )
+    s = build_source_json(mb_disc_id=None, **kwargs)
+    assert s.identifiers.musicbrainz_disc_id is None
+    # Regression: builder still works without the new kwarg at all.
+    s2 = build_source_json(**kwargs)
+    assert s2.identifiers.musicbrainz_disc_id is None
+
+
+def test_blank_mb_disc_id_treated_as_none(tmp_path: Path) -> None:
+    """libdiscid emits an empty string on a marginal read — defend."""
+    from archivist.pipeline.source_json import build_source_json
+
+    kwargs = _build_kwargs(tmp_path)
+    kwargs["capture_result"] = _CaptureResult(
+        photo_path=kwargs["disc_dir"] / "disc-photo.jpg", photo_device="cam",
+    )
+    for blank in ("", "   ", "\n", "\t  "):
+        s = build_source_json(mb_disc_id=blank, **kwargs)
+        assert s.identifiers.musicbrainz_disc_id is None, (
+            f"blank value {blank!r} should map to None"
+        )
