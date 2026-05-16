@@ -272,7 +272,7 @@ status: draft
 
 #### Bucket B — Kanban surface (pipeline)
 
-- [ ] {agent: pipeline, depends: test-disc-card-builder, id: impl-disc-card-builder}
+- [x] {agent: pipeline, depends: test-disc-card-builder, id: impl-disc-card-builder}
   Implement `archivist/service/disc_card_builder.py::
   build_kanban_state(music_root: Path, loop_state: LoopState | None)
   -> KanbanState`. Walks
@@ -283,14 +283,14 @@ status: draft
   None, track_bar: list[TrackState], progress: Progress | None,
   archived: bool, partial: bool, failed_tracks: list[int]}`.
 
-- [ ] {agent: pipeline, depends: test-kanban-api, id: impl-kanban-api}
+- [x] {agent: pipeline, depends: test-kanban-api, id: impl-kanban-api}
   Add `GET /api/kanban` to `archivist/service/app.py`. Calls
   `build_kanban_state`, returns JSON. Library bucket capped at
   `KANBAN_LIBRARY_RETENTION` env (default 20, newest first).
   Backward-compat: keep `GET /api/status` returning the old
   payload for any consumers; new endpoint is additive.
 
-- [ ] {agent: pipeline, depends: test-kanban-page-render, id: impl-kanban-page}
+- [x] {agent: pipeline, depends: test-kanban-page-render, id: impl-kanban-page}
   Replace `GET /`'s single-line HTML with the kanban page.
   Four column layout, Mash Co. tokens (`--ink` for default text,
   `--info` for capture, `--ok` for success states, `--warn` for
@@ -305,7 +305,7 @@ status: draft
 
 #### Bucket B+ — Operator hint controls on a candidate card (pipeline)
 
-- [ ] {agent: pipeline, depends: test-operator-hints-api, depends: test-operator-hints-card-ui, id: impl-operator-hints}
+- [x] {agent: pipeline, depends: test-operator-hints-api, depends: test-operator-hints-card-ui, id: impl-operator-hints}
   Implement operator-hints capture. Three pieces:
   - **Model:** extend `archivist/models/source.py` with
     `TrackHint(track_number: int, artist: str | None = None,
@@ -349,7 +349,7 @@ status: draft
 
 #### Bucket C — Damaged-disc UI actions (pipeline)
 
-- [ ] {agent: pipeline, depends: test-damaged-card-actions, id: impl-damaged-disc-actions}
+- [x] {agent: pipeline, depends: test-damaged-card-actions, id: impl-damaged-disc-actions}
   Three endpoints + the corresponding card UI controls:
   - `POST /api/disc/<folder>/process-partial` — moves
     `failed/<folder>/` to `inbox/<folder>/`, writes `READY`,
@@ -375,7 +375,7 @@ status: draft
   checkbox list (one checkbox per TOC track, pre-checked for
   failed tracks). The "pick tracks" button submits the form.
 
-- [ ] {agent: pipeline, depends: test-review-page-explainer, id: impl-review-page-v1}
+- [x] {agent: pipeline, depends: test-review-page-explainer, id: impl-review-page-v1}
   Implement the Review v1 screen at `GET /review` (replaces or
   augments the current `/review` list). Each card has:
   - **Why in review** — derived from
@@ -482,7 +482,26 @@ on a single sector OR any Target hardware fault sense code) gets
 finalized during `impl-fail-fast-detection` and documented here.
 Test spec is parameterized; drivers picks the exact numbers.
 
-### 2026-05-16 — D-source-json-provenance-schema — **OPEN** (pipeline drafts during impl)
+### 2026-05-16 — D-source-json-provenance-schema — flat `provenance: list[ProvenanceEntry]`
+
+**Resolved during `impl-operator-hints` / `impl-damaged-disc-actions`.**
+`source.json.provenance` is a flat top-level list (not nested under
+`tracks[*].provenance`). Each entry:
+
+- `attempt_id`: uuid4 hex string
+- `tracks`: 1-indexed track numbers the attempt produced
+- `started_at` / `ended_at`: optional ISO-8601 timestamps
+
+Rationale: a flat list makes "show me everything that happened to
+this disc" trivial (single iteration); the per-track view ("which
+attempt produced track 6?") is one set-membership check away. The
+nested-per-track shape would have made the timeline view harder
+without materially helping the per-track lookup. Pinned by the
+`ProvenanceEntry` pydantic model in `archivist/models/source.py`;
+consumed by both `process-partial` (one entry covering the
+preserved flacs) and `rerip-tracks` (one entry per re-rip attempt).
+
+<!-- Original OPEN placeholder superseded by the resolved entry above. -->
 
 Open decision. The exact shape of per-track provenance in
 `source.json` (one `attempt_id` per rip attempt, plus a
@@ -606,6 +625,93 @@ sprint-7 planning. -->
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — pipeline — Wave 2 impls landed (6 tasks, 6 commits)
+
+All six pipeline-owned Wave 2 impls shipped as atomic commits in
+dependency-respecting order. Pipeline test count: 60/60 of the new
+sprint-6 surface green, 398 passed across the whole suite. Ruff
+clean on every touched file.
+
+**Bucket B — kanban surface (3):**
+- `1565805` impl-disc-card-builder — new
+  `archivist/service/disc_card_builder.py` with `DiscCard`,
+  `KanbanState`, `build_kanban_state`, `track_bar_from_counts`.
+  Recursive walk of `music_root/{review,library,archive}/` finds
+  disc folders (source.json OR ≥1 .flac), surfaces source.json
+  field plumbing (disc_id, photo_path, timestamps, partial,
+  failed_tracks, operator_hints), overlays `LoopState` for active
+  rip with parsed `progress: {percent, current_stage}`, applies
+  `KANBAN_LIBRARY_RETENTION` (default 20) newest-mtime-first.
+  Per-track bar emits state labels; CSS owns the color map.
+- `b8feef8` impl-kanban-api — `GET /api/kanban` route gated behind
+  new `create_app(music_root=...)` kwarg; `GET /api/status`
+  preserved unchanged for backward compat.
+- `1614313` impl-kanban-page — replaces `GET /`'s single-line
+  status with the 4-column kanban HTML (Capture / Beets ID /
+  Review / In Library). `aria-expanded` toggles, Mash tokens
+  (`--ink` / `--ok` / `--warn` / `--info` / `--meat-red`), dark
+  theme, `<meta name="kanban-poll-ms" content="2000">` per
+  D-live-update-transport-v1. Per-track bar as
+  `<span class="track-cell track-cell--{state}">`. Folded in the
+  Bucket B+ operator-hints UI block (next).
+
+**Bucket B+ — operator hints (1 commit covers both impl tasks):**
+- `168aff1` impl-operator-hints — `TrackHint` + `OperatorHints` +
+  `ProvenanceEntry` pydantic models added to
+  `archivist/models/source.py` (extra="forbid"); additive `status.
+  partial` / `status.failed_tracks` / `status.beets_review_reason`
+  fields landed at the same time so the rest of Wave 2 has the
+  vocabulary it needs (drivers' contract change covered by the
+  same shape). New `archivist/service/operator_hints.py` with the
+  `PATCH /api/disc/<folder>/hints` route using
+  `model_dump(exclude_unset=True)` for both top-level and per-track
+  merge semantics; atomic source.json write via `.tmp` + os.replace;
+  404 on missing folder; 422 on validation. Kanban-page expanded
+  card got the two checkboxes + two text inputs + the per-track
+  table (DOM-absent unless both toggles ON) + the collapsed-card
+  chip (Mix CD / VA / burned / album / none) — landed in
+  `impl-kanban-page` to keep the UI work in one commit.
+
+**Bucket C — damaged-disc UI + Review v1 (2):**
+- `c20878f` impl-damaged-disc-actions — new
+  `archivist/service/damaged_disc.py` with three POST routes:
+  `process-partial` (move failed/→inbox/ + READY + status updates
+  + provenance entry), `redo?confirm=true` (destructive delete
+  behind the confirm flag), `rerip-tracks` (TOC validation, call
+  into `archivist.drivers.ripper.partial_rerip`, append provenance
+  entry, merge new flacs into the existing folder). `partial_rerip`
+  added as a stub at the end of `archivist/drivers/ripper.py` so
+  the service-side endpoint can be mock-patched today; drivers'
+  `impl-partial-output-preserve` replaces the stub with the real
+  cdparanoia call.
+- `bb2bf6a` impl-review-page-v1 — new
+  `archivist/service/review_explainer.py::explain(folder)->str`
+  with the priority chain `status.beets_review_reason` →
+  beets-import.log signals (weak match / AcoustID empty) → missing
+  `musicbrainz_disc_id` → safe fallback. New
+  `archivist/service/review_page_v1.py` renders the read-only `/review`
+  page with the explainer text + `<details>` manual-steps block
+  (literal `docker exec -it cd_beets beet import …` snippet) +
+  disc photo + beets web UI link. `_mount_review_routes` gained a
+  `use_v1_page: bool` kwarg threaded through from `create_app`
+  (set automatically when `music_root` is set) so sprint-5's
+  `/review/<folder>` detail page stays in place during the
+  transition.
+
+**Open decisions resolved:**
+- `D-source-json-provenance-schema` → flat
+  `provenance: list[ProvenanceEntry]` with
+  `{attempt_id (uuid4 hex), tracks (1-indexed), started_at?,
+  ended_at?}`. Rationale: flat list makes the timeline view trivial;
+  per-track lookup is one set-membership check away. Recorded in
+  the Decision Log.
+
+**Cross-lane note:** drivers landed `impl-cdplay-decouple` (4158481)
+and `impl-fail-fast-detection` (c8c9707) in parallel; full suite
+398/398 green at the end. drivers' `impl-partial-output-preserve`
+remains outstanding (the `partial_rerip` stub stays in place until
+they ship it).
 
 ### 2026-05-16 — pipeline — Wave 1 failing tests landed (7 tasks, 7 commits)
 
