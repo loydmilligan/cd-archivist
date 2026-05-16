@@ -144,9 +144,40 @@ status: draft
   name="kanban-poll-ms">` tag for test assertion); Mash Co.
   tokens applied (`--ink`, `--ok`, `--warn`, `--info`).
 
-#### Bucket C — Damaged-disc UI actions (pipeline)
+#### Bucket B+ — Operator hint controls on a candidate card (pipeline)
 
-- [ ] {agent: pipeline, id: test-damaged-card-actions}
+- [ ] {agent: pipeline, id: test-operator-hints-api}
+  Failing tests for `PATCH /api/disc/<folder>/hints`.
+  `tests/service/test_operator_hints.py`:
+  (a) PATCH with body `{various_artists: true}` writes
+  `source.json.operator_hints.various_artists=true` and returns the
+  full updated `operator_hints` object;
+  (b) PATCH with `{burned_cd: true, artist: "Foo", album: "Bar"}`
+  writes all three; the API does NOT enforce mutual exclusivity
+  between toggles and text fields (the UI does — the server
+  trusts what it's given);
+  (c) PATCH on a non-existent folder returns 404;
+  (d) PATCH preserves existing `operator_hints` fields when only
+  partial body is sent (merge semantics, not overwrite);
+  (e) The kanban card builder surfaces `operator_hints` on the
+  `DiscCard` so the UI can render the label.
+
+- [ ] {agent: pipeline, id: test-operator-hints-card-ui}
+  Failing tests for the operator-hints UI block inside the
+  expanded card. `tests/service/test_kanban_page.py` additions:
+  (f) expanded card renders two checkboxes ("Various Artists",
+  "Burned CD") with `aria-label` + `name` attributes;
+  (g) expanded card renders two text inputs (Artist, Album) that
+  are `disabled` when either checkbox is checked (UI gating —
+  the rendered HTML carries a `data-disabled-when="burned_cd OR
+  various_artists"` attribute for the front-end to act on);
+  (h) the "Save hints" button targets the new PATCH endpoint;
+  (i) when `operator_hints` is non-empty on a collapsed card, a
+  small badge surfaces it ("VA" for various-artists,
+  "burned" for burned_cd, the artist/album text otherwise) so
+  the operator can find labeled cards without expanding.
+
+
   Failing tests for the three damaged-disc actions on a Capture
   card whose rip aborted with `RipStatus.PARTIAL`.
   `tests/service/test_damaged_disc_endpoints.py`:
@@ -251,6 +282,36 @@ status: draft
   name="kanban-poll-ms" content="2000">` for testability.
   Per-track bar: a flexbox row of `<span class="track-cell
   track-cell--{state}">` segments, one per track.
+
+#### Bucket B+ — Operator hint controls on a candidate card (pipeline)
+
+- [ ] {agent: pipeline, depends: test-operator-hints-api, depends: test-operator-hints-card-ui, id: impl-operator-hints}
+  Implement operator-hints capture. Three pieces:
+  - **Model:** extend `archivist/models/source.py` with
+    `OperatorHints(various_artists: bool = False, burned_cd: bool
+    = False, artist: str | None = None, album: str | None =
+    None)`. Mount it on `Source` as `operator_hints:
+    OperatorHints = field(default_factory=OperatorHints)`.
+    `extra="forbid"` preserved.
+  - **API:** new `PATCH /api/disc/<folder>/hints` in
+    `archivist/service/app.py`. Merge-update semantics: only the
+    fields present in the request body are written. Body is
+    validated against the `OperatorHints` model. Writes
+    `source.json` in place (atomic write via temp + rename).
+  - **UI:** in the expanded card body, render the two checkboxes
+    + two text fields per the test spec. JS handler disables the
+    text inputs when either checkbox is checked. "Save hints"
+    button POSTs the form (PATCH via `fetch` + `method:
+    "PATCH"`). On 200, the page refetches `/api/kanban` to pick
+    up the new state. Collapsed-card label rendering: a small
+    Mash Co. `chip` element next to the status line — content
+    derived from `operator_hints` per the test spec.
+
+  Note: this feature is purely for archivist-internal labeling.
+  It does NOT feed beets. A future sprint (sprint-7+) may wire
+  `operator_hints.artist` / `.album` into a beets `--set
+  artist=X --set album=Y` import hint, but that's out of scope
+  here.
 
 #### Bucket C — Damaged-disc UI actions (pipeline)
 
@@ -421,9 +482,19 @@ Optional. Records each rip attempt's `attempt_id`, the track indices
 it produced, and the start/end timestamps. Populated by `partial_rerip`
 calls. Absent on disks that ripped successfully on the first pass.
 
+### 2026-05-16 — `source.json.operator_hints` — operator-supplied identification fields
+
+New optional block:
+`operator_hints: {various_artists: bool=false, burned_cd: bool=false,
+artist: str|None=null, album: str|None=null}`. Defaults are all
+no-op (no chip rendered, no behavior change). Used purely for
+archivist-internal card labeling; does NOT feed beets in sprint-6.
+
 ### 2026-05-16 — new endpoints
 
 - `GET /api/kanban` — kanban state for the UI.
+- `PATCH /api/disc/<folder>/hints` — merge-update operator_hints on
+  a disc's `source.json`.
 - `POST /api/disc/<folder>/process-partial` — accept partial rip.
 - `POST /api/disc/<folder>/redo` — discard partial rip.
 - `POST /api/disc/<folder>/rerip-tracks` — re-rip selected tracks.
