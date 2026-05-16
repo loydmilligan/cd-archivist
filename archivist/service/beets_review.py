@@ -1,4 +1,4 @@
-"""In-UI beets review handlers (sprint-5 / Bucket B).
+"""In-UI beets review handlers + page renderers (sprint-5 / Bucket B).
 
 Module owns the /api/review/* surface per
 docs/design/2026-05-16-in-ui-beets-review.md and the route-test
@@ -409,3 +409,268 @@ def handle_use_as_is(
         "status": "applied",
         "library_path": _parse_library_path(stdout),
     }
+
+
+# ============== HTML page rendering ================================
+# Sprint-5 / impl-review-pages. Mash Co. dressed; no JS for filtering
+# or candidate selection — same-page `<form method="get">` reload.
+
+import html as _html
+
+
+def _esc(s: Any) -> str:
+    if s is None:
+        return ""
+    return _html.escape(str(s))
+
+
+_BASE_STYLES = r"""
+<style>
+  html, body { margin: 0; background: var(--bg); color: var(--fg);
+               font-family: var(--font-body); }
+  .wrap { max-width: 960px; margin: 0 auto; padding: var(--s-7) var(--s-5); }
+  .nav { display: flex; gap: var(--s-4); margin-bottom: var(--s-5);
+         font-family: var(--font-body); font-size: var(--fs-sm); }
+  .nav a { color: var(--fg-muted); text-decoration: none;
+           padding-bottom: 2px; border-bottom: 1px solid transparent; }
+  .nav a.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .eyebrow { font-family: var(--font-body); font-size: var(--fs-xs);
+             letter-spacing: 0.08em; text-transform: uppercase;
+             color: var(--fg-muted); margin: 0 0 var(--s-2) 0; }
+  .page-title { font-family: var(--font-display); font-weight: 700;
+                font-size: 32px; margin: 0 0 var(--s-7) 0; color: var(--fg); }
+  .card { background: var(--surface); border: 1px solid var(--line);
+          border-left: 3px solid var(--accent); border-radius: var(--r-4);
+          padding: var(--s-5); margin-bottom: var(--s-4); }
+  .meta { font-family: var(--font-mono); font-size: var(--fs-sm);
+          color: var(--fg-muted); line-height: 1.6; }
+  .empty-hint { font-family: var(--font-body); color: var(--ink-3);
+                font-size: var(--fs-md); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: var(--s-4); }
+  a.card { display: block; text-decoration: none; color: inherit; }
+  .card-title { font-family: var(--font-display); font-weight: 700;
+                font-size: 18px; margin: 0 0 var(--s-2) 0; color: var(--fg); }
+  .chip { display: inline-block; font-family: var(--font-body);
+          font-size: var(--fs-xs); padding: 2px 8px; border-radius: var(--r-full);
+          background: var(--surface-2); color: var(--fg-muted); }
+  .btn { display: inline-block; font-family: var(--font-body);
+         font-size: var(--fs-sm); padding: 8px 14px;
+         border-radius: var(--r-3); border: 1px solid var(--line);
+         color: var(--fg); background: var(--surface-2);
+         text-decoration: none; cursor: pointer; }
+  .btn--accent { background: var(--accent); color: var(--bg);
+                 border-color: var(--accent); }
+  .btn--secondary { background: var(--ink-3); color: var(--bg);
+                    border-color: var(--ink-3); }
+  .search-form { display: flex; gap: var(--s-3); flex-wrap: wrap;
+                 margin: 0 0 var(--s-5) 0; }
+  .search-form input { font-family: var(--font-body); font-size: var(--fs-sm);
+                       padding: 6px 10px; border-radius: var(--r-2);
+                       border: 1px solid var(--line); background: var(--surface);
+                       color: var(--fg); min-width: 220px; }
+  table.tracks-diff { width: 100%; border-collapse: collapse;
+                      font-family: var(--font-mono); font-size: var(--fs-sm);
+                      margin-top: var(--s-3); }
+  table.tracks-diff td, table.tracks-diff th { padding: 6px 10px;
+                                               border-bottom: 1px solid var(--line);
+                                               text-align: left; }
+  tr.row--warn td { color: var(--amber); }
+  td.col-file code { font-family: var(--font-mono); }
+  progress { width: 100%; height: 6px; }
+  audio { width: 100%; margin-top: 4px; }
+</style>
+"""
+
+
+def _page_shell(title: str, body_inner: str) -> str:
+    return (
+        '<!doctype html>'
+        '<html lang="en" data-theme="dark">'
+        '<head>'
+        '<meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<title>cd-archivist · {_esc(title)}</title>'
+        '<link rel="stylesheet" href="/static/tokens.css">'
+        + _BASE_STYLES +
+        '</head>'
+        '<body>'
+        '<main class="wrap">'
+        '<nav class="nav">'
+        '<a href="/">status</a>'
+        '<a href="/library">library</a>'
+        '<a href="/review" class="active">review</a>'
+        '</nav>'
+        + body_inner +
+        '</main>'
+        '</body></html>'
+    )
+
+
+def render_review_list(folders: list[dict]) -> str:
+    if not folders:
+        body = (
+            '<p class="eyebrow">REVIEW</p>'
+            '<h1 class="page-title">cd-archivist</h1>'
+            '<p class="empty-hint">nothing to review. discs land here when '
+            'beets quiet-mode misses an auto-match.</p>'
+        )
+        return _page_shell("review", body)
+
+    cards: list[str] = []
+    for f in folders:
+        name = _esc(f["name"])
+        chip = ""
+        if f.get("source") == "inbox-stuck":
+            chip = '<span class="chip" data-source="inbox-stuck">inbox-stuck</span>'
+        else:
+            chip = '<span class="chip" data-source="review">review</span>'
+        cards.append(
+            f'<a class="card" href="/review/{name}">'
+            f'  <p class="eyebrow">{chip}</p>'
+            f'  <h2 class="card-title">{name}</h2>'
+            f'  <p class="meta">{f["audio_count"]} tracks</p>'
+            f'  <p><span class="btn btn--accent">review now</span></p>'
+            f'</a>'
+        )
+    body = (
+        '<p class="eyebrow">REVIEW</p>'
+        '<h1 class="page-title">cd-archivist</h1>'
+        '<div class="grid">' + "\n".join(cards) + '</div>'
+    )
+    return _page_shell("review", body)
+
+
+def _render_candidate_card(folder_name: str, c: dict) -> str:
+    mbid = _esc(c.get("mbid"))
+    score = c.get("score") or 0
+    rows: list[str] = []
+    for row in c.get("tracks_diff", []):
+        delta = row.get("delta_seconds") or 0
+        proposed_len = row.get("proposed_length_seconds")
+        cls = "row--warn" if row.get("delta_warning") else ""
+        rows.append(
+            f'<tr class="{cls}">'
+            f'<td class="col-file"><code>{_esc(row.get("file"))}</code></td>'
+            f'<td>{_esc(row.get("proposed_title") or "—")}</td>'
+            f'<td>{_esc(proposed_len if proposed_len is not None else "—")}</td>'
+            f'<td>{_esc(delta)}</td>'
+            f'</tr>'
+        )
+    diff_table = (
+        '<table class="tracks-diff">'
+        '<thead><tr><th>file</th><th>proposed title</th>'
+        '<th>length (s)</th><th>delta (s)</th></tr></thead>'
+        '<tbody>' + "\n".join(rows) + '</tbody></table>'
+    )
+    return (
+        '<section class="card">'
+        f'<p class="eyebrow">CANDIDATE</p>'
+        f'<h3 class="card-title">{_esc(c.get("artist"))} — {_esc(c.get("title"))}</h3>'
+        f'<p class="meta">{_esc(c.get("year") or "year unknown")} · '
+        f'{_esc(c.get("label") or "label unknown")} · '
+        f'{_esc(c.get("catalog_no") or "no catalog #")} · '
+        f'{c.get("track_count", 0)} tracks · '
+        f'<code>{mbid}</code></p>'
+        f'<progress max="100" value="{score}"></progress> '
+        f'<span class="meta">{score}% confidence</span>'
+        '<details><summary class="meta">track diff</summary>'
+        f'{diff_table}'
+        '</details>'
+        f'<form method="post" action="/api/review/{_esc(folder_name)}/apply" '
+        f'style="display:inline; margin-right: var(--s-3);">'
+        f'<input type="hidden" name="mbid" value="{mbid}">'
+        f'<button class="btn btn--accent" type="submit">apply</button>'
+        '</form>'
+        '</section>'
+    )
+
+
+def render_review_detail(
+    folder_name: str,
+    folder_path: Path,
+    candidates: list[dict],
+) -> str:
+    # Audio preview row — one <audio> per FLAC in the folder.
+    audio_blocks: list[str] = []
+    for flac in sorted(folder_path.glob("*.flac")):
+        audio_blocks.append(
+            f'<div class="meta"><code>{_esc(flac.name)}</code>'
+            f'<audio controls preload="none" '
+            f'src="/api/review/{_esc(folder_name)}/audio/{_esc(flac.name)}"></audio>'
+            f'</div>'
+        )
+    audio_section = (
+        '<section class="card">'
+        '<p class="eyebrow">AUDIO</p>'
+        + "\n".join(audio_blocks) +
+        '</section>'
+    )
+
+    # Search controls (no-JS — same-page <form method="get">).
+    controls = (
+        f'<form class="search-form" method="get" action="/review/{_esc(folder_name)}">'
+        '<input name="search" placeholder="artist + album" />'
+        '<button class="btn btn--accent" type="submit">search MB</button>'
+        '</form>'
+        f'<form class="search-form" method="get" action="/review/{_esc(folder_name)}">'
+        '<input name="mbid" placeholder="MusicBrainz release ID" />'
+        '<button class="btn" type="submit">fetch by ID</button>'
+        '</form>'
+    )
+
+    # Candidate cards or empty hint.
+    if candidates:
+        cards_html = "\n".join(
+            _render_candidate_card(folder_name, c) for c in candidates
+        )
+    else:
+        cards_html = (
+            '<p class="empty-hint">no candidates yet — search by text '
+            'or paste a MusicBrainz release ID to start.</p>'
+        )
+
+    # Use-as-is (quieter — last resort).
+    use_as_is = (
+        '<section class="card">'
+        '<p class="eyebrow">LAST RESORT</p>'
+        '<p class="meta">tag with directory name only — no metadata.</p>'
+        f'<form method="post" action="/api/review/{_esc(folder_name)}/use-as-is">'
+        '<button class="btn btn--secondary" type="submit">use as-is</button>'
+        '</form>'
+        '</section>'
+    )
+
+    body = (
+        f'<p class="eyebrow">REVIEW</p>'
+        f'<h1 class="page-title">{_esc(folder_name)}</h1>'
+        + audio_section
+        + controls
+        + cards_html
+        + use_as_is
+    )
+    return _page_shell(folder_name, body)
+
+
+def render_review_detail_handler(
+    folder_name: str,
+    *,
+    review_root: Path | None,
+    inbox_root: Path | None,
+    search: str | None,
+    mbid: str | None,
+) -> str:
+    resolved = find_folder(folder_name, review_root, inbox_root)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail=f"folder not found: {folder_name}")
+    folder_path, _source = resolved
+
+    candidates: list[dict] = []
+    if search or mbid:
+        result = handle_candidates(
+            folder_name,
+            review_root=review_root, inbox_root=inbox_root,
+            search=search, mbid=mbid,
+        )
+        candidates = result.get("candidates", [])
+    return render_review_detail(folder_name, folder_path, candidates)

@@ -205,6 +205,38 @@ def _mount_review_routes(
             inbox_root=inbox_root,
         ))
 
+    @app.get("/api/review/{folder}/audio/{filename}")
+    def api_review_audio(folder: str, filename: str) -> FileResponse:
+        resolved = beets_review.find_folder(folder, review_root, inbox_root)
+        if resolved is None:
+            raise HTTPException(status_code=404)
+        folder_path, _ = resolved
+        target = _resolve_under(folder_path, filename)
+        if target is None or not target.name.endswith(".flac"):
+            raise HTTPException(status_code=404)
+        return FileResponse(target, media_type="audio/flac")
+
+    # --------- HTML page routes (impl-review-pages) ----------------
+
+    @app.get("/review", response_class=HTMLResponse)
+    def review_list() -> HTMLResponse:
+        folders = beets_review.list_review_folders(review_root, inbox_root)
+        return HTMLResponse(beets_review.render_review_list(folders))
+
+    @app.get("/review/{folder}", response_class=HTMLResponse)
+    def review_detail(
+        folder: str,
+        search: str | None = None,
+        mbid: str | None = None,
+    ) -> HTMLResponse:
+        return HTMLResponse(beets_review.render_review_detail_handler(
+            folder,
+            review_root=review_root,
+            inbox_root=inbox_root,
+            search=search,
+            mbid=mbid,
+        ))
+
 
 def _mount_control_routes(
     app: FastAPI,
