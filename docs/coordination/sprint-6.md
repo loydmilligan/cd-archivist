@@ -253,7 +253,7 @@ status: draft
   `ARCHIVIST_RIP_RETRY_THRESHOLD`. Document threshold + rationale
   in a new decision-log entry `D-failfast-threshold`.
 
-- [ ] {agent: drivers, depends: test-partial-output-preserve, id: impl-partial-output-preserve}
+- [x] {agent: drivers, depends: test-partial-output-preserve, id: impl-partial-output-preserve}
   Implement partial preservation. After fail-fast abort:
   (1) successfully-completed flacs stay in the working dir;
   (2) the `_RipResult` returned has

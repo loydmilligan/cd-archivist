@@ -31,6 +31,14 @@ class RipRecord(BaseModel):
     status: Literal["success", "partial", "fail"]
     tracks: list[str]
     errors: list[str] = []
+    # Sprint-6 / impl-partial-output-preserve additions. Default-safe so
+    # legacy manifests (sprint-1..5) parse cleanly. Populated by the
+    # ripper when fail-fast aborts mid-rip; `archivist/pipeline/rip.py`'s
+    # `rip_disc` is responsible for copying these from RipResult into
+    # this RipRecord (pipeline's lane).
+    partial: bool = False
+    successful_tracks: list[int] = []
+    failed_track: int | None = None
 
 
 class PairingRecord(BaseModel):

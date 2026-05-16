@@ -66,6 +66,10 @@ class State(enum.Enum):
     ERROR = "ERROR"
     # Sprint-4 / D-waiting-remove-state: post-EJECT gate on physical removal.
     WAITING_REMOVE = "WAITING_REMOVE"
+    # Sprint-6 / impl-partial-output-preserve: routes a fail-fast partial
+    # rip through eject+photo-capture+source.json+failed_dir move (mirrors
+    # the success path's photo step but lands in failed/ instead of inbox/).
+    STABILIZE_PARTIAL = "STABILIZE_PARTIAL"
 
 
 @dataclass
@@ -241,6 +245,8 @@ class ArchivistLoop:
             self._from_error()
         elif self.state == State.WAITING_REMOVE:
             self._from_waiting_remove()
+        elif self.state == State.STABILIZE_PARTIAL:
+            self._from_stabilize_partial()
 
     def _from_idle(self) -> None:
         status = self._drive()
@@ -409,6 +415,20 @@ class ArchivistLoop:
         failed = (rip_record is None) or (rip_record.status == "fail")
         last_rip = "fail" if failed else rip_record.status
 
+        # Sprint-6 / impl-partial-output-preserve: fail-fast partials get
+        # the photo-capture step (so the damaged-disc UI has visual
+        # context for the partial recovery) before the failed_dir move.
+        # `rip_record.partial` is set by the ripper when it SIGTERMed
+        # cdparanoia; pipeline's rip_disc() copies the field through
+        # from RipResult → RipRecord. Until pipeline lands that copy,
+        # `getattr(...False)` keeps this branch dormant (partial rips
+        # fall through to the success path).
+        is_failfast_partial = (
+            not failed
+            and rip_record is not None
+            and getattr(rip_record, "partial", False)
+        )
+
         if failed:
             # Write FAILED marker, source.json (failure shape), then move
             # folder to failed_dir.
@@ -422,6 +442,16 @@ class ArchivistLoop:
                 logger.exception("failed→failed_dir move failed; folder left in working_dir")
 
             self._set_state(State.ERROR, last_rip_status=last_rip)
+            return
+
+        if is_failfast_partial:
+            # Eject the tray so the photo-capture step in
+            # _from_stabilize_partial sees the disc, then route to
+            # STABILIZE_PARTIAL.
+            self._drive.eject(self._device)
+            self._cycle.timestamps.ejected_at = datetime.now().astimezone()
+            self._sleeper(_EJECT_SETTLE_SECONDS)
+            self._set_state(State.STABILIZE_PARTIAL, last_rip_status=last_rip)
             return
 
         # Sprint-5 / impl-wav-cleanup-fix: clean up source WAVs as soon
@@ -595,6 +625,85 @@ class ArchivistLoop:
         self._cycle = _Cycle()
         self._stabilize_since = None
         self._set_state(State.WAITING_REMOVE, disc_id=None)
+
+    def _from_stabilize_partial(self) -> None:
+        """Fail-fast partial: photo-capture + source.json + failed_dir move.
+
+        Sprint-6 / impl-partial-output-preserve. Mirrors the success
+        path's photo-capture step (so the damaged-disc UI has visual
+        context for the partial recovery), then writes source.json and
+        moves the folder into `failed_dir/` — preserving the partial
+        FLACs + rip.log + photo + source.json for operator triage.
+
+        Differs from the success path's _from_capture_sprint4 in two
+        ways: (1) the final destination is `failed_dir/`, not the
+        inbox handoff; (2) no READY marker is written. The state
+        transitions to ERROR; tray-open from there returns to IDLE
+        (same as the existing failed-rip recovery).
+
+        TODO (cross-agent, pipeline): `archivist/pipeline/source_json.py`
+        does not yet read `rip_record.partial` / `successful_tracks` /
+        `failed_track` and populate `source.status.partial` /
+        `status.failed_tracks` accordingly. Until that lands, the
+        source.json written here has `rip_success=False` (correct,
+        because status != "success") but `partial=False` and
+        `failed_tracks=[]` (incorrect — should reflect the abort).
+        The driver-side fields are populated on RipResult / RipRecord;
+        only the builder→Status mapping is missing.
+        """
+        assert self._cycle.disc_dir is not None
+        disc_dir = self._cycle.disc_dir
+
+        # Capture the disc photo (best-effort — same posture as the
+        # success path; LED dance lives inside capture_disc). We don't
+        # need the per-burst CaptureRecord list (only `_from_capture`
+        # in the success path writes it to the manifest); the canonical
+        # photo copy below is what we care about for the failed_dir
+        # folder's visual context.
+        capture_error: str | None = None
+        try:
+            capture_disc(
+                disc_dir,
+                camera=self._camera,
+                led=self._led,
+            )
+        except Exception as exc:
+            capture_error = f"capture failed: {type(exc).__name__}: {exc}"
+            logger.exception("capture_disc raised in STABILIZE_PARTIAL; continuing")
+
+        photo_path: Path | None = None
+        try:
+            photo_path = copy_canonical_photo(disc_dir)
+        except Exception as exc:
+            capture_error = capture_error or f"copy_canonical_photo: {exc}"
+            logger.exception("copy_canonical_photo raised in STABILIZE_PARTIAL")
+
+        self._cycle.capture_result = _CaptureResult(
+            photo_path=photo_path,
+            photo_device=str(self._device) if photo_path else None,
+            error=capture_error,
+        )
+        if photo_path is not None:
+            self._cycle.timestamps.photo_captured_at = datetime.now().astimezone()
+
+        # Write source.json. The builder reads `rip_record` (which now
+        # carries partial/successful_tracks/failed_track) — pipeline's
+        # source_json.py update will surface those fields under
+        # source.status.partial / status.failed_tracks.
+        self._write_source_json_for_cycle(disc_dir)
+
+        # Move folder into failed_dir/ (NOT inbox). No READY marker.
+        try:
+            target = self._failed_dir / disc_dir.name
+            self._failed_dir.mkdir(parents=True, exist_ok=True)
+            os.replace(disc_dir, target)
+        except OSError:
+            logger.exception(
+                "STABILIZE_PARTIAL working→failed_dir move failed; "
+                "folder left in working_dir"
+            )
+
+        self._set_state(State.ERROR, last_rip_status="partial")
 
     def _from_waiting_remove(self) -> None:
         """Gate re-rip on physical disc removal (D-waiting-remove-state)."""
