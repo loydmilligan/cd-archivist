@@ -138,6 +138,9 @@ def create_app(
 
         mount_operator_hints_routes(app, music_root=music_root)
 
+        from archivist.service.damaged_disc import mount_damaged_disc_routes
+        mount_damaged_disc_routes(app, music_root=music_root)
+
     @app.get("/api/log")
     def api_log(lines: int = Query(_LOG_LINES_DEFAULT, ge=0)) -> PlainTextResponse:
         return PlainTextResponse(_tail_log(log_path, lines))
