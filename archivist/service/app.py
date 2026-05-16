@@ -106,6 +106,7 @@ def create_app(
     loop: Any | None = None,
     review_root: Path | None = None,
     library_root: Path | None = None,
+    music_root: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="cd-archivist", docs_url=None, redoc_url=None)
 
@@ -125,6 +126,14 @@ def create_app(
                 "mode": loop_state.mode,
             }
         )
+
+    if music_root is not None:
+        from archivist.service.disc_card_builder import build_kanban_state
+
+        @app.get("/api/kanban")
+        def api_kanban() -> JSONResponse:
+            state = build_kanban_state(music_root, loop_state=loop_state)
+            return JSONResponse(state.to_dict())
 
     @app.get("/api/log")
     def api_log(lines: int = Query(_LOG_LINES_DEFAULT, ge=0)) -> PlainTextResponse:
