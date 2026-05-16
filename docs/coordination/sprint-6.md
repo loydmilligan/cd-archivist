@@ -97,7 +97,7 @@ status: draft
   ASC=3e (Target hardware fault) sense code — agent picks final
   numbers during impl and documents in `D-failfast-threshold`.
 
-- [ ] {agent: drivers, id: test-partial-output-preserve}
+- [x] {agent: drivers, id: test-partial-output-preserve}
   Failing tests for partial-rip preservation.
   `tests/drivers/test_ripper_partial.py`: when fail-fast aborts at
   track N, the previously-successful tracks 1..N-1 are NOT deleted;
