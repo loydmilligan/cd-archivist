@@ -159,7 +159,8 @@ sudo apt install -y \
   flac \
   ffmpeg \
   v4l-utils \
-  eject
+  eject \
+  libdiscid0
 ```
 
 Per-binary breakdown (which driver calls what, and which apt package
@@ -175,6 +176,7 @@ ships it):
 | `systemctl` | `archivist/drivers/systemctl.py` (`stop_unit` / `start_unit` / `find_unit_scope`) | `systemd` | Base system; always present on the CM4. |
 | `sudo` | `archivist/drivers/systemctl.py` (`scope="system"` argv) + `archivist/drivers/camera.py` (USB unbind/rebind recovery) | `sudo` | Base system. Requires the NOPASSWD sudoers fragment — see § "NOPASSWD sudo fragment" below. |
 | `sh` / `tee` | `archivist/drivers/camera.py::_rebind_usb` (`sudo sh -c 'echo $usb_path | sudo tee /sys/bus/usb/drivers/usb/{unbind,bind}'`) | `dash` / `coreutils` | Base system; always present. |
+| `libdiscid` (C lib) | `archivist/drivers/disc_id.py` (`read_disc_id` via the `discid` Python pkg) | `libdiscid0` | **Sprint-5 dep.** Per `D-disc-id-libdiscid`, reads the MusicBrainz disc-id (CDDB-style TOC hash) off the disc at rip start so the music-pipeline importer can resolve burned copies of commercial pressings (where AcoustID's audio fingerprint misses). Paired with the `discid>=1.2` Python package in `pyproject.toml`. Failure mode is `None` — never raises — so missing this dep degrades gracefully (no disc-id captured, importer falls back to AcoustID + manual review). |
 
 Operator workflow tooling (beets / Navidrome / Jellyfin) is in a
 separate stack — see the sprint-4 Wave 0 migration notes. Not invoked

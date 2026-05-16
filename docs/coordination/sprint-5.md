@@ -494,7 +494,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket A — MusicBrainz disc-id capture at rip time
 
-- [ ] {agent: drivers, depends: test-disc-id-capture, id: impl-disc-id-capture}
+- [x] {agent: drivers, depends: test-disc-id-capture, id: impl-disc-id-capture}
   Implement `archivist/drivers/disc_id.py::read_disc_id(device:
   Path) -> str | None`. Lazy-import `discid` at function entry
   (so the module loads even on dev machines without libdiscid);
@@ -1330,6 +1330,44 @@ venv as part of Wave 0 prep). Mash Co. invariants asserted in the
 review-UI assertions match the SKILL.md voice rules (sentence
 case, eyebrow ≤2 words, dark-first, no decorative emoji, --accent
 for primary CTAs, --ink-3 for secondary, --amber for warning rows).
+
+### 2026-05-16 — drivers — Wave 2 impl-disc-id-capture landed
+
+Single drivers task; closes drivers' sprint-5 scope.
+
+- **impl-disc-id-capture** (this commit) — new module
+  `archivist/drivers/disc_id.py` exposing
+  `read_disc_id(device: Path) -> str | None`. Lazy-imports `discid`
+  at function entry so the module loads even on dev boxes without
+  libdiscid. Catches (in order): `ImportError` on the package itself
+  → `None` + WARNING with a remediation hint naming
+  `libdiscid0` / `cm4-setup.md`; `discid.DiscError` (no disc in drive)
+  → `None` + INFO log; `OSError` (drive busy etc.) → `None` + WARNING
+  with exception + device path; broad-except guard catches anything
+  else the runtime might surface (RuntimeError, ValueError,
+  MemoryError, …) → `None` + WARNING. Never raises — the rip path
+  can't be poisoned by a flaky libdiscid. Returns
+  `getattr(disc, "id", None)` on success.
+- `pyproject.toml` — `discid>=1.2` added to
+  `[project].dependencies` (alongside pydantic / requests / fastapi /
+  uvicorn).
+- `docs/operations/cm4-setup.md` § "Runtime apt dependencies":
+  `libdiscid0` added to the single `sudo apt install -y …` block;
+  new row in the per-binary breakdown table noting the C library
+  paired with the `discid>=1.2` Python package, the
+  `D-disc-id-libdiscid` rationale (burned CDs vs AcoustID), and the
+  `None`-on-failure graceful-degradation posture.
+
+Verified: `pytest tests/drivers/test_disc_id.py` → 5/5 PASS; full
+drivers suite 77/77 PASS; `ruff check archivist/drivers/disc_id.py
+tests/drivers/test_disc_id.py` clean. (Two pre-existing ruff errors
+in pipeline-owned files — `service/beets_review.py:418` and
+`state_machine/loop.py:607` — are not in this commit's scope.)
+
+Unblocks: pipeline's `impl-source-json-identifiers` (wires
+`read_disc_id` into `_from_stabilize`/`_from_rip`, stashes the result
+on the `Cycle` dataclass, threads it through to
+`build_source_json(mb_disc_id=...)`).
 
 ### 2026-05-15 — drivers — Wave 1 failing tests landed (1 task, 1 commit)
 
