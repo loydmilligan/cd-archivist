@@ -251,6 +251,8 @@ def main() -> int:
     )
     if legacy_roots:
         logger.info("library legacy roots: %s", [str(p) for p in legacy_roots])
+    music_root_env = os.environ.get("MUSIC_ROOT")
+    music_root = Path(music_root_env) if music_root_env else inbox_dir.parent
     app = create_app(
         loop_state, log_path,
         discs_root=inbox_dir,
@@ -258,6 +260,7 @@ def main() -> int:
         recapture_camera=camera,
         recapture_led=led,
         loop=loop,
+        music_root=music_root,
     )
     server, server_thread = _start_uvicorn(app, port)
 
