@@ -100,6 +100,7 @@ def create_app(
     log_path: Path,
     *,
     discs_root: Path | None = None,
+    legacy_discs_roots: tuple[Path, ...] = (),
     recapture_camera: Callable[..., Any] | None = None,
     recapture_led: Any | None = None,
     loop: Any | None = None,
@@ -139,6 +140,7 @@ def create_app(
             loop_state=loop_state,
             recapture_camera=recapture_camera,
             recapture_led=recapture_led,
+            legacy_discs_roots=legacy_discs_roots,
         )
 
     _mount_control_routes(app, loop_state=loop_state, loop=loop)
@@ -270,13 +272,19 @@ def _resolve_under(root: Path, *parts: str) -> Path | None:
     return candidate
 
 
-def _disc_dir(discs_root: Path, disc_id: str) -> Path | None:
+def _disc_dir(
+    discs_root: Path,
+    disc_id: str,
+    *,
+    legacy_roots: tuple[Path, ...] = (),
+) -> Path | None:
     if not _VALID_DISC_FOLDER_RE.match(disc_id):
         return None
-    d = discs_root / disc_id
-    if not d.is_dir():
-        return None
-    return d
+    for root in (discs_root, *legacy_roots):
+        d = root / disc_id
+        if d.is_dir():
+            return d
+    return None
 
 
 def _mount_library_routes(
@@ -286,18 +294,21 @@ def _mount_library_routes(
     loop_state: "LoopState",
     recapture_camera: Callable[..., Any] | None = None,
     recapture_led: Any | None = None,
+    legacy_discs_roots: tuple[Path, ...] = (),
 ) -> None:
     @app.get("/library", response_class=HTMLResponse)
     def library_list(status: str = "success") -> HTMLResponse:
         if status not in ("success", "failed", "all"):
             status = "success"
-        return HTMLResponse(_render_library_list(discs_root, status=status))
+        return HTMLResponse(
+            _render_library_list(discs_root, status=status, legacy_roots=legacy_discs_roots)
+        )
 
     @app.get("/library/{disc_id}", response_class=HTMLResponse)
     def library_detail(disc_id: str) -> HTMLResponse:
         if not _VALID_DISC_FOLDER_RE.match(disc_id):
             raise HTTPException(status_code=404)
-        d = _disc_dir(discs_root, disc_id)
+        d = _disc_dir(discs_root, disc_id, legacy_roots=legacy_discs_roots)
         if d is None:
             raise HTTPException(status_code=404)
         if not (d / "manifest.json").is_file() and not (d / "source.json").is_file():
@@ -306,7 +317,7 @@ def _mount_library_routes(
 
     @app.get("/library/{disc_id}/captures/{filename}")
     def library_capture(disc_id: str, filename: str) -> FileResponse:
-        d = _disc_dir(discs_root, disc_id)
+        d = _disc_dir(discs_root, disc_id, legacy_roots=legacy_discs_roots)
         if d is None:
             raise HTTPException(status_code=404)
         target = _resolve_under(d / "captures", filename)
@@ -316,7 +327,7 @@ def _mount_library_routes(
 
     @app.get("/library/{disc_id}/audio/{filename}")
     def library_audio(disc_id: str, filename: str) -> FileResponse:
-        d = _disc_dir(discs_root, disc_id)
+        d = _disc_dir(discs_root, disc_id, legacy_roots=legacy_discs_roots)
         if d is None:
             raise HTTPException(status_code=404)
         target = _resolve_under(d / "audio", filename)
@@ -327,7 +338,7 @@ def _mount_library_routes(
     @app.get("/library/{disc_id}/photo")
     def library_photo(disc_id: str) -> FileResponse:
         """Serve the canonical disc-photo.jpg (sprint-4 new-shape folders)."""
-        d = _disc_dir(discs_root, disc_id)
+        d = _disc_dir(discs_root, disc_id, legacy_roots=legacy_discs_roots)
         if d is None:
             raise HTTPException(status_code=404)
         target = _resolve_under(d, "disc-photo.jpg")
@@ -337,7 +348,7 @@ def _mount_library_routes(
 
     @app.get("/library/{disc_id}/review/{filename}")
     def library_review_asset(disc_id: str, filename: str) -> FileResponse:
-        d = _disc_dir(discs_root, disc_id)
+        d = _disc_dir(discs_root, disc_id, legacy_roots=legacy_discs_roots)
         if d is None:
             raise HTTPException(status_code=404)
         target = _resolve_under(d / "review", filename)
@@ -357,7 +368,7 @@ def _mount_library_routes(
                 ),
             )
         # (c) disc-existence + (d) id-shape.
-        d = _disc_dir(discs_root, disc_id)
+        d = _disc_dir(discs_root, disc_id, legacy_roots=legacy_discs_roots)
         if d is None:
             raise HTTPException(status_code=404)
         if recapture_camera is None or recapture_led is None:
@@ -374,17 +385,30 @@ def _mount_library_routes(
         return JSONResponse(payload)
 
 
-def _render_library_list(discs_root: Path, *, status: str = "success") -> str:
+def _render_library_list(
+    discs_root: Path,
+    *,
+    status: str = "success",
+    legacy_roots: tuple[Path, ...] = (),
+) -> str:
     from archivist.service.library import read_disc_summary
 
     cards: list[str] = []
-    if discs_root.is_dir():
+    seen: set[str] = set()
+    # Scan inbox (new sprint-4 disc folders) + legacy roots (sprint-1-3
+    # CD_NNNN folders that live outside the music-pipeline inbox). Newer
+    # folders (by name sort) win on dedupe.
+    for root in (discs_root, *legacy_roots):
+        if not root.is_dir():
+            continue
         entries = sorted(
-            (p for p in discs_root.iterdir() if _VALID_DISC_FOLDER_RE.match(p.name)),
+            (p for p in root.iterdir() if _VALID_DISC_FOLDER_RE.match(p.name)),
             key=lambda p: p.name,
             reverse=True,
         )
         for d in entries:
+            if d.name in seen:
+                continue
             summary = read_disc_summary(d)
             if summary is None:
                 continue
@@ -392,6 +416,7 @@ def _render_library_list(discs_root: Path, *, status: str = "success") -> str:
                 continue
             if status == "failed" and summary.rip_success:
                 continue
+            seen.add(d.name)
             cards.append(_render_summary_card(d, summary))
 
     grid = "\n".join(cards) if cards else (

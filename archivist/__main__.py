@@ -239,10 +239,22 @@ def main() -> int:
         loop_state=loop_state,
     )
 
-    # /library reads from the inbox (where READY-marked folders live).
+    # /library reads from the inbox (where READY-marked folders live) plus
+    # any legacy disc roots from ARCHIVIST_LEGACY_DISCS_ROOTS (colon-separated
+    # paths, like $PATH). Sprint-1-3 wrote to ~/cd-archivist-data/discs/ —
+    # those folders aren't in the new inbox but should still surface in /library.
+    legacy_raw = os.environ.get("ARCHIVIST_LEGACY_DISCS_ROOTS", "")
+    legacy_roots = tuple(
+        Path(os.path.expanduser(p.strip()))
+        for p in legacy_raw.split(":")
+        if p.strip()
+    )
+    if legacy_roots:
+        logger.info("library legacy roots: %s", [str(p) for p in legacy_roots])
     app = create_app(
         loop_state, log_path,
         discs_root=inbox_dir,
+        legacy_discs_roots=legacy_roots,
         recapture_camera=camera,
         recapture_led=led,
         loop=loop,
