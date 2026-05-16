@@ -228,7 +228,7 @@ status: draft
 
 #### Bucket D — cdplay.service decouple (drivers)
 
-- [ ] {agent: drivers, id: test-cdplay-removed}
+- [x] {agent: drivers, id: test-cdplay-removed}
   Failing tests confirming the state machine no longer calls
   `systemctl start/stop cdplay.service`.
   `tests/state_machine/test_cdplay_decoupled.py`: spy on the
