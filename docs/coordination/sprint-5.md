@@ -211,7 +211,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket A — MusicBrainz disc-id capture at rip time
 
-- [ ] {agent: drivers, id: test-disc-id-capture} Failing tests for
+- [x] {agent: drivers, id: test-disc-id-capture} Failing tests for
   the new `archivist/drivers/disc_id.py::read_disc_id(device:
   Path) -> str | None`. The function wraps `libdiscid` via the
   `discid` Python package: open the drive, read the TOC, return
