@@ -250,8 +250,12 @@ def test_waiting_disc_ok_to_stabilize_sets_timer(discs_root: Path) -> None:
 
 def test_stabilize_past_2s_advances_to_rip(discs_root: Path) -> None:
     """Sprint-3 / test-capture-after-eject: STABILIZE→RIP no longer runs
-    capture inline; only stop_unit + folder prep happen here. Capture
-    runs after EJECT (settle window so the open tray is visible)."""
+    capture inline; only folder prep happens here. Capture runs after
+    EJECT (settle window so the open tray is visible).
+
+    Sprint-6 / impl-cdplay-decouple: STABILIZE→RIP no longer calls
+    `services.stop_unit(cdplay.service)` either — the eject path opens
+    the tray which releases the drive on its own."""
     loop, _, _, services, camera, led, clock = _make_loop(
         statuses=["disc-ok"], discs_root=discs_root
     )
@@ -261,10 +265,11 @@ def test_stabilize_past_2s_advances_to_rip(discs_root: Path) -> None:
     clock.advance(2.1)
     loop.tick()  # STABILIZE -> RIP
     assert loop.state == State.RIP
-    assert "stop:cdplay.service" in services.events
     # No capture has fired yet — capture is post-eject now.
     assert camera.calls == 0
     assert led.events == []
+    # cdplay calls are gone (sprint-6 / impl-cdplay-decouple).
+    assert services.events == []
 
 
 def test_rip_writes_first_manifest_and_advances_to_eject(discs_root: Path) -> None:
@@ -290,7 +295,10 @@ def test_rip_writes_first_manifest_and_advances_to_eject(discs_root: Path) -> No
 
 
 def test_eject_then_capture_then_idle(discs_root: Path) -> None:
-    """EJECT → CAPTURE → IDLE. Captures fire AFTER eject + cdplay restart."""
+    """EJECT → CAPTURE → IDLE. Captures fire AFTER eject.
+
+    Sprint-6 / impl-cdplay-decouple: the paired cdplay restart is
+    gone; eject is the only post-rip side effect."""
     sleeper_calls: list[float] = []
     loop, drive, _, services, camera, led, clock = _make_loop(
         statuses=["disc-ok", "disc-ok", "disc-ok", "disc-ok",
@@ -302,16 +310,14 @@ def test_eject_then_capture_then_idle(discs_root: Path) -> None:
     loop.tick()  # WAITING -> STABILIZE
     clock.advance(2.1)
     loop.tick()  # STABILIZE -> RIP
-    loop.tick()  # RIP -> EJECT (eject + cdplay restart + settle sleep)
+    loop.tick()  # RIP -> EJECT (eject + settle sleep)
     assert loop.state == State.EJECT
     # eject already happened in the RIP→EJECT transition body or in EJECT→CAPTURE.
     loop.tick()  # EJECT -> CAPTURE
     assert loop.state == State.CAPTURE
     assert drive.eject_calls == [DEVICE]
-    # cdplay restart is paired with the stop.
-    assert services.events.index("stop:cdplay.service") < services.events.index(
-        "start:cdplay.service"
-    )
+    # No service calls fire during a normal rip cycle anymore.
+    assert services.events == []
     # Settle sleep fired with EJECT_SETTLE_SECONDS=3.0 between eject and capture.
     assert 3.0 in sleeper_calls
 
@@ -379,13 +385,14 @@ def test_capture_failure_preserves_rip_record(discs_root: Path) -> None:
     assert any("camera" in e.lower() or "capture" in e.lower() for e in manifest.errors)
 
 
-def test_rip_exception_still_restarts_cdplay(discs_root: Path) -> None:
+def test_rip_exception_transitions_to_error(discs_root: Path) -> None:
     """Sprint-3 / test-rip-error-recovery: rip_disc raising transitions to
-    ERROR, restarts cdplay, and surfaces the failure in the manifest.
+    ERROR and surfaces the failure in the manifest.
 
-    Crash recovery invariant: cdplay must never be left stopped. The
-    exception is caught by the loop and the rig parks in ERROR until
-    the operator ejects.
+    Sprint-6 / impl-cdplay-decouple: the historic crash-recovery
+    "cdplay must never be left stopped" invariant no longer applies —
+    we never stop cdplay in the first place. The exception-→-ERROR
+    transition itself is the only thing under test now.
     """
     loop, _, _, services, _, _, clock = _make_loop(
         statuses=["disc-ok"],
@@ -399,11 +406,8 @@ def test_rip_exception_still_restarts_cdplay(discs_root: Path) -> None:
     loop.tick()  # RIP raises internally → caught → ERROR
 
     assert loop.state == State.ERROR
-    assert "stop:cdplay.service" in services.events
-    assert "start:cdplay.service" in services.events
-    assert services.events.index("stop:cdplay.service") < services.events.index(
-        "start:cdplay.service"
-    )
+    # No service calls fire — cdplay is decoupled (sprint-6).
+    assert services.events == []
 
     # Manifest reflects the failure.
     manifest = read_manifest(discs_root / "CD_0001" / "manifest.json")
@@ -426,7 +430,8 @@ def test_rip_status_fail_transitions_to_error(discs_root: Path) -> None:
     loop.tick()  # RIP -> ERROR (status=fail short-circuit)
 
     assert loop.state == State.ERROR
-    assert "start:cdplay.service" in services.events
+    # cdplay calls gone (sprint-6 / impl-cdplay-decouple).
+    assert services.events == []
     manifest = read_manifest(discs_root / "CD_0001" / "manifest.json")
     assert manifest.status == "rip_failed"
 

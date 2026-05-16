@@ -11,14 +11,17 @@ STABILIZE→RIP; the captures get attached when RIP→EJECT writes the
 final manifest).
 
 Invariants the impl preserves:
-  - cdplay.service stop/start are paired via try/finally — even an
-    exception inside RIP triggers the restart before it re-raises.
-    cdplay must never be left stopped.
   - LED is restored (delegated to `capture_disc`'s own finally).
   - `prepare_disc_folder` is idempotent and runs exactly once per
     cycle.
   - `next_disc_id` reserves the id by mkdir-ing inside its lockfile
     so concurrent loops on the same root cannot collide.
+
+Sprint-6 / impl-cdplay-decouple: the `cdplay.service` stop/start
+calls were stripped. The eject path opens the tray, which releases
+the drive on its own — there's no playback feature to coordinate
+with. The `services` adapter is still accepted by the constructor
+for future systemd units; the loop just doesn't call into it today.
 """
 from __future__ import annotations
 
@@ -49,7 +52,6 @@ logger = logging.getLogger(__name__)
 
 _STABILIZE_SECONDS = 2.0
 _EJECT_SETTLE_SECONDS = 3.0
-_CDPLAY = "cdplay.service"
 
 
 class State(enum.Enum):
@@ -163,7 +165,6 @@ class ArchivistLoop:
 
         self.state: State = State.IDLE
         self._stabilize_since: float | None = None
-        self._cdplay_stopped: bool = False
         self._cycle = _Cycle()
         # Sprint-3 / impl-loop-device-missing: log "device-missing" once
         # per disconnect; reset when the device comes back so the next
@@ -176,18 +177,7 @@ class ArchivistLoop:
 
     def tick(self) -> State:
         self._heartbeat()
-        try:
-            self._advance()
-        except Exception:
-            # Crash recovery: if we stopped cdplay but haven't restarted
-            # it, do so now before the exception escapes. The player must
-            # never be left stopped.
-            if self._cdplay_stopped:
-                try:
-                    self._services.start_unit(_CDPLAY)
-                finally:
-                    self._cdplay_stopped = False
-            raise
+        self._advance()
         return self.state
 
     # ------------------------- transitions ----------------------------
@@ -215,22 +205,9 @@ class ArchivistLoop:
         if expected is None or self.state != expected:
             return  # no-op
         self._pending_trigger = trigger
-        try:
-            self._advance()
-        except Exception:
-            if self._cdplay_stopped:
-                try:
-                    self._services.start_unit(_CDPLAY)
-                finally:
-                    self._cdplay_stopped = False
-            raise
+        self._advance()
 
     def _do_reset(self) -> None:
-        if self._cdplay_stopped:
-            try:
-                self._services.start_unit(_CDPLAY)
-            finally:
-                self._cdplay_stopped = False
         self._cycle = _Cycle()
         self._stabilize_since = None
         self._pending_trigger = None
@@ -303,11 +280,9 @@ class ArchivistLoop:
                 return
 
         # Claim the drive, then move to RIP. Capture runs post-eject now
-        # (D-eject-time-capture).
-        if not self._services.stop_unit(_CDPLAY):
-            logger.warning("stop_unit(%s) returned False — proceeding with rip", _CDPLAY)
-        self._cdplay_stopped = True
-
+        # (D-eject-time-capture). Sprint-6 / impl-cdplay-decouple: no
+        # `cdplay.service` stop/start anymore — the eject path opens the
+        # tray, which releases the drive on its own.
         if self._sprint4_mode:
             folder_name = next_disc_folder_name(self._inbox_dir)
             disc_dir = self._working_dir / folder_name
@@ -410,9 +385,6 @@ class ArchivistLoop:
         write_manifest(manifest_path, manifest)
 
         if new_status == "rip_failed":
-            if self._cdplay_stopped:
-                self._services.start_unit(_CDPLAY)
-                self._cdplay_stopped = False
             self._set_state(State.ERROR, last_rip_status=last_rip)
             return
 
@@ -449,9 +421,6 @@ class ArchivistLoop:
             except OSError:
                 logger.exception("failed→failed_dir move failed; folder left in working_dir")
 
-            if self._cdplay_stopped:
-                self._services.start_unit(_CDPLAY)
-                self._cdplay_stopped = False
             self._set_state(State.ERROR, last_rip_status=last_rip)
             return
 
@@ -509,19 +478,16 @@ class ArchivistLoop:
             logger.exception("build/write source.json failed; continuing")
 
     def _from_eject(self) -> None:
-        """Eject the disc, restart cdplay (paired invariant), then settle.
+        """Eject the disc, then settle.
 
-        Sprint-3: eject + cdplay-restart happen here; then a settle sleep
-        (EJECT_SETTLE_SECONDS) covers the 2–4s the tray takes to physically
-        open before CAPTURE fires next tick.
+        Sprint-3: eject + paired cdplay-restart happened here; then a
+        settle sleep (EJECT_SETTLE_SECONDS) covers the 2–4s the tray
+        takes to physically open before CAPTURE fires next tick.
+        Sprint-6 / impl-cdplay-decouple: cdplay restart is gone — the
+        eject driver is the only post-rip side effect.
         """
         if self._cycle.timestamps.ejected_at is None:
-            try:
-                self._drive.eject(self._device)
-            finally:
-                if self._cdplay_stopped:
-                    self._services.start_unit(_CDPLAY)
-                    self._cdplay_stopped = False
+            self._drive.eject(self._device)
             self._cycle.timestamps.ejected_at = datetime.now().astimezone()
             self._sleeper(_EJECT_SETTLE_SECONDS)
 

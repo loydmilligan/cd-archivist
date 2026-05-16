@@ -392,7 +392,7 @@ status: draft
 
 #### Bucket D — cdplay.service decouple (drivers)
 
-- [ ] {agent: drivers, depends: test-cdplay-removed, id: impl-cdplay-decouple}
+- [x] {agent: drivers, depends: test-cdplay-removed, id: impl-cdplay-decouple}
   Remove the `systemctl start cdplay.service` /
   `systemctl stop cdplay.service` calls from
   `archivist/state_machine/loop.py`. The eject path uses the
