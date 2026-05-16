@@ -102,6 +102,9 @@ class _Cycle:
     capture_result: _CaptureResult = field(default_factory=_CaptureResult)
     rip_error: str | None = None
     rip_record: Any = None
+    # Sprint-5 / D-disc-id-libdiscid: captured once at rip start
+    # (before tray-open) and threaded through into source.json.
+    disc_id_mb: str | None = None
 
 
 class ArchivistLoop:
@@ -312,8 +315,14 @@ class ArchivistLoop:
             for sub in ("captures", "audio", "logs", "review"):
                 (disc_dir / sub).mkdir(parents=True, exist_ok=True)
             ts = _Timestamps(inserted_at=datetime.now().astimezone())
+            # Sprint-5: read MusicBrainz disc-id once at rip start (while
+            # the disc is still in the drive). Lazy-imported so the loop
+            # works even when libdiscid + the drivers helper aren't
+            # installed (e.g. dev machines without the apt package).
+            mb_disc_id = _read_mb_disc_id(self._device)
             self._cycle = _Cycle(
                 disc_id=folder_name, disc_dir=disc_dir, timestamps=ts,
+                disc_id_mb=mb_disc_id,
             )
             self._set_state(State.RIP, disc_id=folder_name)
             return
@@ -480,6 +489,7 @@ class ArchivistLoop:
                 capture_result=self._cycle.capture_result,
                 ready_at=now,
                 timestamps=ts,
+                mb_disc_id=self._cycle.disc_id_mb,
             )
             write_source_json(disc_dir / "source.json", source)
         except Exception:
@@ -651,6 +661,25 @@ ArchivistLoop._TRIGGER_STATES = {
     "eject": State.RIP,
     "capture": State.EJECT,
 }
+
+
+def _read_mb_disc_id(device: Path) -> str | None:
+    """Best-effort wrapper around `archivist.drivers.disc_id.read_disc_id`.
+
+    Lazy-import so the absence of the drivers helper (e.g. dev machines
+    without libdiscid installed) doesn't break the loop. Any exception
+    returns None and logs at debug — D-disc-id-libdiscid commits the
+    library to "best-effort, never blocks the rip".
+    """
+    try:
+        from archivist.drivers.disc_id import read_disc_id
+    except ImportError:
+        return None
+    try:
+        return read_disc_id(device)
+    except Exception:
+        logger.debug("read_disc_id raised; treating as None", exc_info=True)
+        return None
 
 
 def run(loop: ArchivistLoop, *, poll_interval: float = 2.0) -> None:

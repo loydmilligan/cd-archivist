@@ -97,7 +97,14 @@ def build_source_json(
     capture_result: Any,
     ready_at: datetime,
     timestamps: Any,
+    mb_disc_id: str | None = None,
 ) -> SourceJson:
+    # Sprint-5 / D-disc-id-libdiscid: normalise empty/whitespace to None
+    # (libdiscid emits an empty result on a marginal read).
+    if mb_disc_id is not None:
+        stripped = mb_disc_id.strip()
+        mb_disc_id = stripped if stripped else None
+
     rip_success = bool(getattr(rip_record, "status", "") == "success")
     photo_success = bool(getattr(capture_result, "photo_path", None) is not None)
     ready = rip_success  # photo failure does NOT block READY (handoff contract)
@@ -134,7 +141,7 @@ def build_source_json(
             read_offset=getattr(drive_info, "read_offset", None),
         ),
         audio=_audio_summary(disc_dir),
-        identifiers=Identifiers(),  # all-null until sprint-5 brings libdiscid
+        identifiers=Identifiers(musicbrainz_disc_id=mb_disc_id),
         detected_metadata=DetectedMetadata(),  # all-null per D-source-json-v1
         physical_disc=PhysicalDisc(
             photo="disc-photo.jpg" if photo_success else None,
