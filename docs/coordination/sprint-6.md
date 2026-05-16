@@ -242,7 +242,7 @@ status: draft
 
 #### Bucket A — Engine-side fail-fast + partial preservation (drivers)
 
-- [ ] {agent: drivers, depends: test-fail-fast-detection, id: impl-fail-fast-detection}
+- [x] {agent: drivers, depends: test-fail-fast-detection, id: impl-fail-fast-detection}
   Implement retry-threshold detection in
   `archivist/drivers/ripper.py`. Watch cdparanoia stderr for
   `scsi_read error: sector=X length=Y retry=N` lines; when N
