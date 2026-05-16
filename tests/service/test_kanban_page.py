@@ -187,3 +187,246 @@ def test_active_rip_renders_capture_card_with_progress(
     assert "disc-000077" in html
     # Progress bar / percentage surfaced in collapsed view.
     assert "70" in html
+
+
+# ============== test-operator-hints-card-ui (Bucket B+) ==================
+#
+# Additions for the expanded card's hint controls + collapsed-card chip.
+# Per Contract Changes: operator_hints with toggles + album-level
+# artist/album + per-track tracks[]. Per-track table is present in the
+# DOM only when both toggles are ON; "absent — not just hidden".
+
+
+def _patch_hints(client: TestClient, folder_name: str, body: dict) -> None:
+    resp = client.patch(f"/api/disc/{folder_name}/hints", json=body)
+    assert resp.status_code == 200, resp.text
+
+
+# ---------------- (h) two checkbox controls ------------------------------
+
+
+def test_expanded_card_renders_hint_checkboxes(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-h1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+
+    html = client.get("/").text
+    # Each checkbox carries name= matching the PATCH body shape and an
+    # accessible label.
+    assert 'name="various_artists"' in html
+    assert 'name="burned_cd"' in html
+    assert 'type="checkbox"' in html
+    assert 'aria-label="Various Artists"' in html
+    assert 'aria-label="Burned CD"' in html
+
+
+# ---------------- (i) text inputs with data-disabled-when ----------------
+
+
+def test_expanded_card_renders_artist_album_text_inputs(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-i1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+
+    html = client.get("/").text
+    assert 'name="artist"' in html
+    assert 'name="album"' in html
+    # Front-end disables these when either toggle is checked.
+    assert 'data-disabled-when="burned_cd OR various_artists"' in html
+
+
+# ---------------- (j) save-hints button targets PATCH endpoint -----------
+
+
+def test_save_hints_button_targets_patch_endpoint(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-j1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+
+    html = client.get("/").text
+    # Form / button references the PATCH route. We don't pin verb-in-HTML
+    # specifics (forms POST in raw HTML; JS handler issues PATCH) — we
+    # require the endpoint URL to be present.
+    assert f"/api/disc/{folder.name}/hints" in html
+    assert "Save hints" in html
+
+
+# ---------------- (k) collapsed-card chip rendering ----------------------
+
+
+def test_collapsed_card_chip_various_artists_only(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-k1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+    _patch_hints(client, folder.name, {"various_artists": True})
+
+    html = client.get("/").text
+    # Chip on the collapsed card shows the VA label.
+    assert "VA" in html
+
+
+def test_collapsed_card_chip_burned_only(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-k2"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+    _patch_hints(client, folder.name, {"burned_cd": True})
+
+    html = client.get("/").text
+    assert "burned" in html.lower()
+
+
+def test_collapsed_card_chip_album_text_when_no_toggles(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-k3"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+    _patch_hints(client, folder.name, {"artist": "Foo", "album": "Bar"})
+
+    html = client.get("/").text
+    # Chip shows the artist/album text when no toggle is set.
+    assert "Foo" in html
+    assert "Bar" in html
+
+
+def test_collapsed_card_no_chip_when_hints_empty(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-k4"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+    # No PATCH — hints stay defaulted.
+
+    html = client.get("/").text
+    # No chip text — assert the marker class is absent for this card.
+    # (We don't pin the marker class name; we pin behavior: none of the
+    # toggle labels surface for a hint-less card.)
+    # The folder name appears once (in the card title) but neither
+    # "VA" nor "burned" should surface as a chip.
+    # Coarse: count chip-marker tokens — when hints are empty no chip
+    # element renders. The page-level markup may still mention these
+    # tokens elsewhere; this assertion is scoped to the card.
+    assert 'data-chip="va"' not in html
+    assert 'data-chip="burned"' not in html
+
+
+# ---------------- (l) per-track rows only when both toggles ON -----------
+
+
+def test_per_track_table_absent_when_only_va(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-l1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+    _patch_hints(client, folder.name, {"various_artists": True})
+
+    html = client.get("/").text
+    # Per-track inputs are absent from the DOM when only one toggle is on.
+    assert 'name="track-1-artist"' not in html
+    assert 'name="track-1-title"' not in html
+
+
+def test_per_track_table_absent_when_only_burned(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-l2"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+    _patch_hints(client, folder.name, {"burned_cd": True})
+
+    html = client.get("/").text
+    assert 'name="track-1-artist"' not in html
+
+
+def test_per_track_table_present_when_both_on(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-l3"
+    _write_flac(folder / "01.flac")
+    _write_flac(folder / "02.flac")
+    _write_source(folder, track_count=2)
+    _patch_hints(client, folder.name, {
+        "various_artists": True, "burned_cd": True,
+    })
+
+    html = client.get("/").text
+    # One row per track, with artist + title inputs named per spec.
+    assert 'name="track-1-artist"' in html
+    assert 'name="track-1-title"' in html
+    assert 'name="track-2-artist"' in html
+    assert 'name="track-2-title"' in html
+    # Container also carries the show-when marker for the JS handler.
+    assert 'data-show-when="various_artists AND burned_cd"' in html
+
+
+# ---------------- (m) TOC-vs-audio-count fallback for row count ----------
+
+
+def test_per_track_table_row_count_from_toc_when_present(
+    client: TestClient, music_root: Path,
+) -> None:
+    """When source.json carries the TOC track count (audio.track_count > 0),
+    the row count comes from that source — preferred over the on-disk
+    audio file count."""
+    folder = music_root / "review" / "2026-05-16_1200_disc-m1"
+    # Seed with track_count=4 in source.json but only 1 flac on disk.
+    _write_flac(folder / "01.flac")
+    _write_source(folder, track_count=4)
+    _patch_hints(client, folder.name, {
+        "various_artists": True, "burned_cd": True,
+    })
+
+    html = client.get("/").text
+    assert 'name="track-4-artist"' in html
+    # Fifth track must NOT render — TOC count is 4.
+    assert 'name="track-5-artist"' not in html
+
+
+def test_per_track_table_row_count_falls_back_to_audio_file_count(
+    client: TestClient, music_root: Path,
+) -> None:
+    """When the TOC is absent (audio.track_count == 0 — pre-rip or legacy),
+    the row count comes from the count of flacs in the folder."""
+    folder = music_root / "review" / "2026-05-16_1200_disc-m2"
+    _write_flac(folder / "01.flac")
+    _write_flac(folder / "02.flac")
+    _write_flac(folder / "03.flac")
+    # TOC absent: track_count=0.
+    _write_source(folder, track_count=0)
+    _patch_hints(client, folder.name, {
+        "various_artists": True, "burned_cd": True,
+    })
+
+    html = client.get("/").text
+    assert 'name="track-1-artist"' in html
+    assert 'name="track-3-artist"' in html
+    assert 'name="track-4-artist"' not in html
+
+
+# ---------------- (n) collapsed-card badge — mix-CD count ----------------
+
+
+def test_collapsed_card_chip_mix_cd_count_when_both_on(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-n1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder, track_count=8)
+    _patch_hints(client, folder.name, {
+        "various_artists": True, "burned_cd": True,
+    })
+
+    html = client.get("/").text
+    # Per spec: "Mix CD ({N} tracks)" — N sourced from TOC (track_count).
+    assert "Mix CD (8 tracks)" in html
