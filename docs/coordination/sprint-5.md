@@ -1107,6 +1107,32 @@ _No ratifications yet._
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
 
+### 2026-05-15 — drivers — Wave 1 failing tests landed (1 task, 1 commit)
+
+Light sprint for drivers — single test task closed.
+
+- **test-disc-id-capture** (`3fdaa02`) — new file
+  `tests/drivers/test_disc_id.py` with 5 failing tests for
+  `archivist.drivers.disc_id.read_disc_id(device) -> str | None` per
+  `D-disc-id-libdiscid`. Covers the happy path (libdiscid reads TOC →
+  returns the disc-id string), `discid.DiscError` (empty drive) →
+  `None` + INFO log, `OSError` (drive busy) → `None` + WARNING with
+  exception + device path, `ImportError` on the `discid` package
+  itself → `None` + WARNING with a remediation hint pointing at
+  `cm4-setup.md` / `libdiscid`, and the never-raises invariant under
+  RuntimeError / ValueError / MemoryError. A `_install_fake_discid`
+  helper installs a synthetic `discid` module in `sys.modules` so the
+  impl's lazy-import resolves to it. Target function is imported
+  lazily inside `_read_disc_id()` so the test module collects cleanly
+  (5/5 fail as `ModuleNotFoundError`).
+
+Existing 72 sprint-1..4 driver tests still PASS. `ruff check
+tests/drivers/test_disc_id.py` clean.
+
+Wave 2 queue: `impl-disc-id-capture` (1 task — lazy-import
+discid, add `discid>=1.2` to `pyproject.toml`, document
+`libdiscid0` in `cm4-setup.md` § "Runtime apt dependencies").
+
 ### 2026-05-15 — planner — sprint-5 plan drafted
 
 Three buckets per the sprint scope decision:
