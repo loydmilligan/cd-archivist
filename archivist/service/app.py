@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -104,6 +104,8 @@ def create_app(
     recapture_camera: Callable[..., Any] | None = None,
     recapture_led: Any | None = None,
     loop: Any | None = None,
+    review_root: Path | None = None,
+    library_root: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="cd-archivist", docs_url=None, redoc_url=None)
 
@@ -144,7 +146,64 @@ def create_app(
         )
 
     _mount_control_routes(app, loop_state=loop_state, loop=loop)
+    _mount_review_routes(
+        app,
+        loop_state=loop_state,
+        review_root=review_root,
+        inbox_root=discs_root,
+    )
     return app
+
+
+def _mount_review_routes(
+    app: FastAPI,
+    *,
+    loop_state: "LoopState",
+    review_root: Path | None,
+    inbox_root: Path | None,
+) -> None:
+    """Sprint-5 / impl-review-routes: /api/review/* surface."""
+    from archivist.service import beets_review
+
+    @app.get("/api/review/folders")
+    def api_review_folders() -> JSONResponse:
+        return JSONResponse(beets_review.handle_folder_list(review_root, inbox_root))
+
+    @app.get("/api/review/{folder}/candidates")
+    def api_review_candidates(
+        folder: str,
+        search: str | None = None,
+        mbid: str | None = None,
+    ) -> JSONResponse:
+        return JSONResponse(beets_review.handle_candidates(
+            folder,
+            review_root=review_root,
+            inbox_root=inbox_root,
+            search=search,
+            mbid=mbid,
+        ))
+
+    @app.post("/api/review/{folder}/apply")
+    async def api_review_apply(folder: str, request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        return JSONResponse(beets_review.handle_apply(
+            folder, payload,
+            loop_state=loop_state,
+            review_root=review_root,
+            inbox_root=inbox_root,
+        ))
+
+    @app.post("/api/review/{folder}/use-as-is")
+    def api_review_use_as_is(folder: str) -> JSONResponse:
+        return JSONResponse(beets_review.handle_use_as_is(
+            folder,
+            loop_state=loop_state,
+            review_root=review_root,
+            inbox_root=inbox_root,
+        ))
 
 
 def _mount_control_routes(
