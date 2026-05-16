@@ -234,7 +234,7 @@ updated: 2026-05-15T00:00:00.000Z
     in `archivist/drivers/disc_id.py` (new file) — sibling to
     `drive.py`.
 
-- [ ] {agent: pipeline, id: test-source-json-identifiers} Failing
+- [x] {agent: pipeline, id: test-source-json-identifiers} Failing
   tests extending `tests/pipeline/test_source_json_builder.py`.
   When `read_disc_id()` returns a non-`None` string at rip
   start, `build_source_json(...)` populates
@@ -258,7 +258,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket B — In-UI beets review (per `docs/design/2026-05-16-in-ui-beets-review.md`)
 
-- [ ] {agent: pipeline, id: test-review-folder-list} Failing tests
+- [x] {agent: pipeline, id: test-review-folder-list} Failing tests
   for `GET /api/review/folders`. The endpoint aggregates folders
   needing operator review from TWO sources per
   `D-review-folder-discovery`: (i) every direct child of
@@ -288,7 +288,7 @@ updated: 2026-05-15T00:00:00.000Z
     `tests/service/test_review_endpoints.py`. Six cases. Fails
     until `impl-review-routes`.
 
-- [ ] {agent: pipeline, id: test-review-candidates-search} Failing
+- [x] {agent: pipeline, id: test-review-candidates-search} Failing
   tests for `GET /api/review/<folder>/candidates?search=...` —
   the MusicBrainz text-search path. Tests stub the
   `musicbrainzngs` module (the singleton from
@@ -311,7 +311,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Six cases in `tests/service/test_review_
     endpoints.py`. Fails until `impl-review-routes`.
 
-- [ ] {agent: pipeline, id: test-review-candidates-mbid} Failing
+- [x] {agent: pipeline, id: test-review-candidates-mbid} Failing
   tests for `GET /api/review/<folder>/candidates?mbid=...` —
   the direct-lookup path. Tests stub the same
   `musicbrainzngs` module: (a) `?mbid=<valid-mbid>` →
@@ -328,7 +328,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Four cases in `tests/service/test_review_
     endpoints.py`. Fails until `impl-review-routes`.
 
-- [ ] {agent: pipeline, id: test-review-apply} Failing tests for
+- [x] {agent: pipeline, id: test-review-apply} Failing tests for
   `POST /api/review/<folder>/apply` body `{"mbid": "..."}`. The
   endpoint shells to `subprocess.run(["docker","exec",
   "cd_beets","beet","import","-q","--search-id",mbid,
@@ -353,7 +353,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Seven cases in `tests/service/test_review_
     endpoints.py`. Fails until `impl-review-routes`.
 
-- [ ] {agent: pipeline, id: test-review-use-as-is} Failing tests
+- [x] {agent: pipeline, id: test-review-use-as-is} Failing tests
   for `POST /api/review/<folder>/use-as-is`. Body empty.
   Endpoint shells to `subprocess.run(["docker","exec",
   "cd_beets","beet","import","-A", f"/downloads/{folder}"],
@@ -368,7 +368,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** Five cases in `tests/service/test_review_
     endpoints.py`. Fails until `impl-review-routes`.
 
-- [ ] {agent: pipeline, id: test-review-ui-list} Failing tests
+- [x] {agent: pipeline, id: test-review-ui-list} Failing tests
   for `GET /review` HTML page (sibling to `/library`). Mash Co.
   dressed: dark theme, sentence case throughout, eyebrow
   pattern at the top of the page, grid of cards. Tests in
@@ -391,7 +391,7 @@ updated: 2026-05-15T00:00:00.000Z
   - **Acceptance:** New file `tests/service/test_review_pages.
     py`. Five cases. Fails until `impl-review-pages`.
 
-- [ ] {agent: pipeline, id: test-review-ui-detail} Failing tests
+- [x] {agent: pipeline, id: test-review-ui-detail} Failing tests
   for `GET /review/<folder>` HTML page. Header with folder
   name + audio summary; search controls (text + "search MB"
   button, MBID input + "fetch by ID" button); empty candidate
@@ -424,7 +424,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Bucket C — Polish + bug fixes
 
-- [ ] {agent: pipeline, id: test-wav-cleanup-integration} Failing
+- [x] {agent: pipeline, id: test-wav-cleanup-integration} Failing
   REGRESSION test for the sprint-4 `impl-wav-cleanup` bug. The
   STP rip on the dogfood rig left `.wav` files alongside
   `.flac` files in the imported library, which means the
@@ -454,7 +454,7 @@ updated: 2026-05-15T00:00:00.000Z
     crowding becomes an issue — author's call). Fails until
     `impl-wav-cleanup-fix`.
 
-- [ ] {agent: pipeline, id: test-library-prefer-beets-cover} Failing
+- [x] {agent: pipeline, id: test-library-prefer-beets-cover} Failing
   tests for the `/library/<disc>` thumbnail-preference change.
   Sprint-4 ALREADY writes `source.json.detected_metadata.
   {album_artist,album,year}` after beets tagging (via the
@@ -1106,6 +1106,76 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — pipeline — Wave 1 failing tests landed (10 tasks, 10 commits)
+
+All 10 pipeline-owned Wave 1 tests shipped as atomic commits. Each
+file is in the documented red state; impl phase will turn each green.
+
+**Bucket A (1):**
+- `e1801a3` test-source-json-identifiers — 3 cases appended to
+  `tests/pipeline/test_source_json_builder.py`. New `mb_disc_id`
+  kwarg on `build_source_json`; populates
+  `identifiers.musicbrainz_disc_id`. Blank/whitespace strings map
+  to None (defends against libdiscid emitting empty on marginal
+  reads). Sprint-4's 6 cases continue to pass.
+
+**Bucket B — review endpoints (1 file, 28 cases):**
+- `ce7e7b4` `tests/service/test_review_endpoints.py` bundles five
+  test tasks:
+  - test-review-folder-list (6): empty roots; review folder
+    surfaces with source='review'; inbox READY-no-PROCESSING with
+    source='inbox-stuck'; READY+PROCESSING excluded; no-READY
+    excluded; legacy folder with null source_json.
+  - test-review-candidates-search (6): search_releases called with
+    query + limit=5; empty list; response transformation;
+    tracks_diff with delta_warning; unknown folder 404;
+    WebServiceError → 502.
+  - test-review-candidates-mbid (4): get_release_by_id with the
+    correct `includes`; UUID validation; ResponseError → 404;
+    search+mbid mutually exclusive → 400.
+  - test-review-apply (7): happy path, exact argv lock,
+    beets nonzero → 500, TimeoutExpired → 504, busy-state
+    parametrized 409, unknown folder 404, missing/invalid mbid 400.
+  - test-review-use-as-is (5): happy path, -A flag argv,
+    failure, busy 409, unknown 404.
+
+**Bucket B — review UI (1 file, 11 cases):**
+- `b1dde3a` `tests/service/test_review_pages.py`:
+  - test-review-ui-list (5): empty-state with --ink-3, two-card
+    grid, Mash Co. invariants (data-theme=dark, eyebrow class,
+    no emoji, no ALL-CAPS, --accent CTA), inbox-stuck
+    distinction, nav-back-to-library link.
+  - test-review-ui-detail (6): page-shell render with no
+    candidates, candidate card rendered on ?search=, Mash Co.
+    invariants, monospace filename column + row--warn class,
+    unknown-folder 404, one <audio controls> per FLAC.
+
+**Bucket C (2):**
+- `79631f8` test-wav-cleanup-integration — 3 cases in new file
+  `tests/state_machine/test_wav_cleanup_integration.py` that
+  reproduce the STP failure mode end-to-end through the state
+  machine (FakeRipper materializes BOTH track*.cdda.wav AND
+  track*.cdda.flac). Default cycle MUST land only .flac in
+  inbox; ARCHIVIST_KEEP_WAVS=1 preserves both; tick-by-tick
+  invariant: inbox never holds a .wav at ANY tick (cleanup
+  must run BEFORE the working→inbox handoff). Root cause
+  documentation lands in `D-wav-cleanup-real-fix` during impl.
+- `2483189` test-library-prefer-beets-cover — 6 cases in new
+  file `tests/service/test_library_covers.py`. New
+  `library_root` kwarg on create_app; `/library/<disc>/album-
+  cover` endpoint; thumbnail prefers beets cover when
+  available; legacy CD_NNNN never resolves a library cover;
+  detail page renders both "album art" and "physical disc"
+  sections.
+
+**Footprint:** 10 new failing test files + edits to one existing
+file. No production code touched. New deps consumed: the test
+files import `musicbrainzngs` (already installed in the local
+venv as part of Wave 0 prep). Mash Co. invariants asserted in the
+review-UI assertions match the SKILL.md voice rules (sentence
+case, eyebrow ≤2 words, dark-first, no decorative emoji, --accent
+for primary CTAs, --ink-3 for secondary, --amber for warning rows).
 
 ### 2026-05-15 — drivers — Wave 1 failing tests landed (1 task, 1 commit)
 
