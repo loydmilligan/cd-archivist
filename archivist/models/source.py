@@ -111,6 +111,50 @@ class Status(_Forbid):
     ready: bool
     warnings: list[str] = []
     errors: list[str] = []
+    # Sprint-6 / Contract Changes: partial-rip preservation. Drivers'
+    # impl-partial-output-preserve populates these when a rip aborts.
+    partial: bool = False
+    failed_tracks: list[int] = []
+    # Sprint-6: the Review v1 explainer reads this when the post-rip
+    # hook chose to write a structured reason. Optional + free-form.
+    beets_review_reason: str | None = None
+
+
+class TrackHint(_Forbid):
+    """Per-track operator hint for the mix-CD-on-burned-disc case."""
+
+    track_number: int
+    artist: str | None = None
+    title: str | None = None
+
+
+class OperatorHints(_Forbid):
+    """Sprint-6 operator-supplied identification fields (Bucket B+).
+
+    Captured by `PATCH /api/disc/<folder>/hints`; sprint-7 wires the
+    values into beets search hints. Defaults are all no-op.
+    """
+
+    various_artists: bool = False
+    burned_cd: bool = False
+    artist: str | None = None
+    album: str | None = None
+    tracks: list[TrackHint] = []
+
+
+class ProvenanceEntry(_Forbid):
+    """Sprint-6 / D-source-json-provenance-schema.
+
+    One entry per rip attempt. `attempt_id` is a uuid4 hex; `tracks`
+    lists the track numbers (1-indexed) the attempt produced. Optional
+    timestamps stay loose so partial-rerip in either driver or service
+    can populate what it has.
+    """
+
+    attempt_id: str
+    tracks: list[int]
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
 
 class SourceJson(_Forbid):
@@ -124,6 +168,8 @@ class SourceJson(_Forbid):
     physical_disc: PhysicalDisc
     files: list[FileEntry]
     status: Status
+    operator_hints: OperatorHints = OperatorHints()
+    provenance: list[ProvenanceEntry] = []
 
 
 def read_source_json(path: Path) -> SourceJson:

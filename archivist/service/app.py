@@ -129,11 +129,14 @@ def create_app(
 
     if music_root is not None:
         from archivist.service.disc_card_builder import build_kanban_state
+        from archivist.service.operator_hints import mount_operator_hints_routes
 
         @app.get("/api/kanban")
         def api_kanban() -> JSONResponse:
             state = build_kanban_state(music_root, loop_state=loop_state)
             return JSONResponse(state.to_dict())
+
+        mount_operator_hints_routes(app, music_root=music_root)
 
     @app.get("/api/log")
     def api_log(lines: int = Query(_LOG_LINES_DEFAULT, ge=0)) -> PlainTextResponse:
