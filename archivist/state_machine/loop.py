@@ -41,7 +41,7 @@ from archivist.pipeline.folder import prepare_disc_folder
 from archivist.pipeline.folder_name import next_disc_folder_name
 from archivist.pipeline.pairing import attach_pairing, make_pairing
 from archivist.pipeline.post_rip_hook import run_process_ready_hook
-from archivist.pipeline.rip import rip_disc
+from archivist.pipeline.rip import cleanup_wavs, rip_disc
 from archivist.pipeline.rip_progress import parse_cdparanoia_progress
 from archivist.pipeline.source_json import build_source_json
 
@@ -455,6 +455,19 @@ class ArchivistLoop:
             self._set_state(State.ERROR, last_rip_status=last_rip)
             return
 
+        # Sprint-5 / impl-wav-cleanup-fix: clean up source WAVs as soon
+        # as the rip succeeds — BEFORE the EJECT/CAPTURE handoff so the
+        # inbox-stuck importer never sees them. Sprint-4's cleanup helper
+        # was correct but never called from the state machine; STP rip
+        # leaked WAVs because of this missing call site.
+        try:
+            keep = _env_truthy(os.environ.get("ARCHIVIST_KEEP_WAVS", ""))
+            audio_dir = disc_dir / "audio"
+            if audio_dir.is_dir():
+                cleanup_wavs(audio_dir, keep=keep)
+        except (OSError, FileNotFoundError):
+            logger.exception("cleanup_wavs raised; continuing")
+
         # Manual mode: hold in RIP unless advance("eject") is pending
         # (operator's stated intent: "rip then advance to eject").
         if self._is_manual() and not self._consume_trigger("eject"):
@@ -661,6 +674,11 @@ ArchivistLoop._TRIGGER_STATES = {
     "eject": State.RIP,
     "capture": State.EJECT,
 }
+
+
+def _env_truthy(value: str) -> bool:
+    """Standard env-var truthiness: '1', 'true', 'yes' (case-insensitive)."""
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _read_mb_disc_id(device: Path) -> str | None:

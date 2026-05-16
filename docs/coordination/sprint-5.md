@@ -921,23 +921,44 @@ once the operator stops being co-located with the rig.
 
 ### 2026-05-15 — D-wav-cleanup-real-fix — root cause + fix for the STP rip's leaked WAVs
 
-**Proposed.** Sprint-4's `impl-wav-cleanup` shipped with
-unit-level coverage, but the STP rip on the dogfood CM4 left
-`.wav` files alongside `.flac` in the imported library folder.
-Three candidate failure modes: (a)
-`ARCHIVIST_KEEP_WAVS` truthy-check bug (case sensitivity, wrong
-default); (b) wrong call site (cleanup invoked against a stale
-path, or invoked outside the success path); (c) timing
-(cleanup runs AFTER the `os.replace` handoff so the
-music-pipeline importer sees the WAVs). The
-`test-wav-cleanup-integration` test reproduces the actual
-failure mode at the state-machine level; the impl task roots
-out which of (a)-(c) was the cause and fixes it. **The
-decision-log entry is left intentionally open at planning
-time** — the impl agent fills in the root cause + fix during
-Wave 2; the entry as ratified will document what was actually
-broken (operator forensics for the next time a similar
-"helper-shipped-but-not-running" symptom appears).
+**Ratified.** Root cause identified during `impl-wav-cleanup-fix`:
+**(b) wrong call site — the helper was never invoked from the
+state machine at all.** Sprint-4's `cleanup_wavs(audio_dir, *,
+keep=False)` shipped with green unit tests, but no caller in
+`archivist/state_machine/loop.py` ever invoked it. The
+state-machine's `_from_rip_sprint4` wrote `rip.log` and routed
+success/failure to EJECT or the failed-marker path, but skipped
+the cleanup step entirely. So every successful rip on the
+dogfood rig left both `track*.cdda.wav` and `track*.cdda.flac`
+in `<working>/<folder>/audio/`, and the subsequent
+`os.replace(working/folder → inbox/folder)` carried both kinds
+forward — beets then imported both into the library.
+
+Failure modes (a) [env-var truthy bug] and (c) [post-handoff
+timing] were ruled out by inspection during impl: the env-var
+check would still have a default-False path that ran cleanup;
+the cleanup-after-handoff variant would still have left a
+single failed rip's worth of WAVs at most, not the steady-state
+behaviour seen on every rip.
+
+**Fix:** call `cleanup_wavs(disc_dir / "audio", keep=...)`
+inside `_from_rip_sprint4` on the success path, BEFORE
+`_set_state(State.EJECT, ...)`. This guarantees the cleanup
+runs before the CAPTURE-phase `os.replace` handoff, so the
+inbox-stuck importer never sees `.wav`. New tiny helper
+`_env_truthy("1" | "true" | "yes" | "on", case-insensitive)`
+reads `ARCHIVIST_KEEP_WAVS`; exceptions during cleanup are
+logged and swallowed (rip succeeded; missing audio dir or stat
+failures must not poison the state machine).
+
+**Lesson:** unit tests for a helper aren't enough when the
+helper has zero callers — the sprint-4 `tests/pipeline/test_
+wav_cleanup.py` cases all passed because they invoked
+`cleanup_wavs` directly. The sprint-5 integration test exercises
+the full state-machine path and catches the missing-caller bug
+at the right layer. Going forward, any new "pure helper" that
+ships should include at least one integration test asserting
+the caller actually runs it.
 
 **One-off operator cleanup:** `find /srv/music/library -name
 '*.wav' -delete` removes the already-leaked WAVs from the STP
