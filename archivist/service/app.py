@@ -170,6 +170,7 @@ def create_app(
         loop_state=loop_state,
         review_root=review_root,
         inbox_root=discs_root,
+        use_v1_page=music_root is not None,
     )
     return app
 
@@ -180,8 +181,16 @@ def _mount_review_routes(
     loop_state: "LoopState",
     review_root: Path | None,
     inbox_root: Path | None,
+    use_v1_page: bool = False,
 ) -> None:
-    """Sprint-5 / impl-review-routes: /api/review/* surface."""
+    """Sprint-5 / impl-review-routes: /api/review/* surface.
+
+    Sprint-6 / impl-review-page-v1: when `use_v1_page` is set, the
+    `/review` HTML page renders the read-only Review v1 surface with
+    the why-in-review explainer + manual-steps shell snippet; the
+    sprint-5 `/review/<folder>` detail page is left in place for
+    operators still mid-cycle on the old workflow.
+    """
     from archivist.service import beets_review
 
     @app.get("/api/review/folders")
@@ -239,6 +248,11 @@ def _mount_review_routes(
 
     @app.get("/review", response_class=HTMLResponse)
     def review_list() -> HTMLResponse:
+        if use_v1_page:
+            from archivist.service.review_page_v1 import render_review_v1
+            return HTMLResponse(render_review_v1(
+                review_root=review_root, inbox_root=inbox_root,
+            ))
         folders = beets_review.list_review_folders(review_root, inbox_root)
         return HTMLResponse(beets_review.render_review_list(folders))
 
