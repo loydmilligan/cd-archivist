@@ -147,6 +147,9 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
+        if music_root is not None:
+            from archivist.service.kanban_page import render_kanban_page
+            return HTMLResponse(render_kanban_page(music_root, loop_state))
         return HTMLResponse(_PAGE_HTML)
 
     # ---------------- library browser (sprint-3 / impl-library) ----------
