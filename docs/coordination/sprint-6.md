@@ -160,22 +160,42 @@ status: draft
   (d) PATCH preserves existing `operator_hints` fields when only
   partial body is sent (merge semantics, not overwrite);
   (e) The kanban card builder surfaces `operator_hints` on the
-  `DiscCard` so the UI can render the label.
+  `DiscCard` so the UI can render the label;
+  (f) PATCH with `{tracks: [{track_number: 1, artist: "A",
+  title: "T"}, {track_number: 3, title: "T3"}]}` writes
+  per-track hints; merge semantics extend to the tracks array
+  (a track_number entry already present is updated in place;
+  a new track_number is appended; tracks not in the patch body
+  are preserved unchanged);
+  (g) tracks-array PATCH validates `track_number` is a positive
+  int and rejects unknown extra fields (`extra="forbid"`).
 
 - [ ] {agent: pipeline, id: test-operator-hints-card-ui}
   Failing tests for the operator-hints UI block inside the
   expanded card. `tests/service/test_kanban_page.py` additions:
-  (f) expanded card renders two checkboxes ("Various Artists",
+  (h) expanded card renders two checkboxes ("Various Artists",
   "Burned CD") with `aria-label` + `name` attributes;
-  (g) expanded card renders two text inputs (Artist, Album) that
+  (i) expanded card renders two text inputs (Artist, Album) that
   are `disabled` when either checkbox is checked (UI gating —
   the rendered HTML carries a `data-disabled-when="burned_cd OR
   various_artists"` attribute for the front-end to act on);
-  (h) the "Save hints" button targets the new PATCH endpoint;
-  (i) when `operator_hints` is non-empty on a collapsed card, a
+  (j) the "Save hints" button targets the new PATCH endpoint;
+  (k) when `operator_hints` is non-empty on a collapsed card, a
   small badge surfaces it ("VA" for various-artists,
   "burned" for burned_cd, the artist/album text otherwise) so
-  the operator can find labeled cards without expanding.
+  the operator can find labeled cards without expanding;
+  (l) **per-track rows only when both toggles ON.** When
+  `various_artists=true AND burned_cd=true`, the expanded card
+  renders a per-track table with one row per TOC track. Each
+  row has two text inputs: `track-<N>-artist` and
+  `track-<N>-title`. When either toggle is OFF, the per-track
+  table is absent from the DOM (not just hidden — absent, per
+  `data-show-when="various_artists AND burned_cd"`);
+  (m) track count for the per-track rows is sourced from the
+  TOC stored in `source.json` (preferred) or from the count of
+  audio files in `audio/` (fallback when TOC absent);
+  (n) collapsed-card badge for the both-on case shows "Mix CD
+  ({N} tracks)" with N populated from the same TOC source.
 
 
   Failing tests for the three damaged-disc actions on a Capture
@@ -288,30 +308,44 @@ status: draft
 - [ ] {agent: pipeline, depends: test-operator-hints-api, depends: test-operator-hints-card-ui, id: impl-operator-hints}
   Implement operator-hints capture. Three pieces:
   - **Model:** extend `archivist/models/source.py` with
-    `OperatorHints(various_artists: bool = False, burned_cd: bool
-    = False, artist: str | None = None, album: str | None =
-    None)`. Mount it on `Source` as `operator_hints:
-    OperatorHints = field(default_factory=OperatorHints)`.
-    `extra="forbid"` preserved.
+    `TrackHint(track_number: int, artist: str | None = None,
+    title: str | None = None, extra="forbid")` and
+    `OperatorHints(various_artists: bool = False, burned_cd:
+    bool = False, artist: str | None = None, album: str | None
+    = None, tracks: list[TrackHint] =
+    field(default_factory=list), extra="forbid")`. Mount it on
+    `Source` as `operator_hints: OperatorHints =
+    field(default_factory=OperatorHints)`.
   - **API:** new `PATCH /api/disc/<folder>/hints` in
     `archivist/service/app.py`. Merge-update semantics: only the
-    fields present in the request body are written. Body is
-    validated against the `OperatorHints` model. Writes
-    `source.json` in place (atomic write via temp + rename).
+    fields present in the request body are written. The `tracks`
+    array uses per-track-number merge (entry with matching
+    `track_number` is updated in place; new track_number is
+    appended; existing entries not in the patch body are
+    preserved). Body is validated against the `OperatorHints`
+    model. Writes `source.json` in place (atomic write via
+    temp + rename).
   - **UI:** in the expanded card body, render the two checkboxes
-    + two text fields per the test spec. JS handler disables the
-    text inputs when either checkbox is checked. "Save hints"
-    button POSTs the form (PATCH via `fetch` + `method:
-    "PATCH"`). On 200, the page refetches `/api/kanban` to pick
-    up the new state. Collapsed-card label rendering: a small
+    + two text fields per the test spec. When `various_artists
+    AND burned_cd` are both checked, also render a per-track
+    table populated from the TOC (preferred) or audio-file count
+    (fallback). Each row has Artist + Title text inputs named
+    `track-<N>-{artist|title}`. The JS handler disables Artist /
+    Album when either checkbox is on, and toggles the per-track
+    table's presence in the DOM based on the both-on condition.
+    "Save hints" button serializes the full form (toggles +
+    album-level fields + all per-track rows) into a single PATCH
+    body. On 200, the page refetches `/api/kanban` to pick up
+    the new state. Collapsed-card label rendering: a small
     Mash Co. `chip` element next to the status line — content
-    derived from `operator_hints` per the test spec.
+    derived from `operator_hints` per the test spec
+    (both-on case shows "Mix CD ({N} tracks)").
 
-  Note: this feature is purely for archivist-internal labeling.
-  It does NOT feed beets. A future sprint (sprint-7+) may wire
-  `operator_hints.artist` / `.album` into a beets `--set
-  artist=X --set album=Y` import hint, but that's out of scope
-  here.
+  Note: this sprint captures the data. The downstream use —
+  feeding `operator_hints.artist` / `.album` / `.tracks[*]` into
+  beets search queries (`beet import --set artist=X --set
+  album=Y`, or per-track search via `musicbrainzngs`) — lands
+  in sprint-7. See Sprint-7 Candidates for the wiring task.
 
 #### Bucket C — Damaged-disc UI actions (pipeline)
 
@@ -485,10 +519,19 @@ calls. Absent on disks that ripped successfully on the first pass.
 ### 2026-05-16 — `source.json.operator_hints` — operator-supplied identification fields
 
 New optional block:
-`operator_hints: {various_artists: bool=false, burned_cd: bool=false,
-artist: str|None=null, album: str|None=null}`. Defaults are all
-no-op (no chip rendered, no behavior change). Used purely for
-archivist-internal card labeling; does NOT feed beets in sprint-6.
+`operator_hints: {
+  various_artists: bool=false,
+  burned_cd: bool=false,
+  artist: str|None=null,
+  album: str|None=null,
+  tracks: [{track_number: int, artist: str|None, title: str|None}]=[]
+}`.
+Defaults are all no-op (no chip rendered, no behavior change). `tracks`
+is populated only when both `various_artists=true AND burned_cd=true`
+(mix-CD-on-burned-disc case — each track's source artist/title is the
+only metadata that can identify it). Used in sprint-6 purely for
+archivist-internal card labeling; sprint-7 wires the album-level
+artist/album AND per-track entries into beets search hints.
 
 ### 2026-05-16 — new endpoints
 
@@ -514,6 +557,23 @@ response body changes from text status to the kanban HTML page.
 
 <!-- Items captured during sprint-6 that should be picked up at
 sprint-7 planning. -->
+
+- **Wire `operator_hints` into beets search.** Sprint-6 captures the
+  data; sprint-7 uses it. Three integration paths:
+  (a) album-level hints (`artist` + `album` populated, `burned_cd`
+  off) → invoke `beet import --set artist="X" --set album="Y"
+  /downloads/<folder>` instead of plain `beet import`, which lets
+  beets weight the MB search toward those values.
+  (b) burned 1:1 album with hints → same as (a), with the
+  understanding that the disc-id may already produce a clean
+  auto-match; the hints are a tiebreaker.
+  (c) burned mix CD with per-track hints → per-track
+  `musicbrainzngs` recording search using `artist:"X" AND
+  recording:"Y"`, write the resolved metadata into each flac's
+  tags before invoking beets in `--singletons` mode. This bypasses
+  the chroma + empty-MB-fallback failure mode entirely (the flac
+  now has tags, so beets' fallback path produces a real search
+  query). Owner: pipeline.
 
 - **In-UI beets candidate selection (Review v2).** Web wrapper for
   beets candidate selection — picks an MBID and triggers
