@@ -85,7 +85,7 @@ status: draft
 
 #### Bucket A — Engine-side fail-fast + partial preservation (drivers)
 
-- [ ] {agent: drivers, id: test-fail-fast-detection}
+- [x] {agent: drivers, id: test-fail-fast-detection}
   Failing tests for cdparanoia retry-threshold detection.
   `tests/drivers/test_ripper_failfast.py`:
   (a) feed a synthetic stderr stream with N retries on the same sector
