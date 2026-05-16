@@ -739,7 +739,7 @@ updated: 2026-05-15T00:00:00.000Z
 
 #### Stretch (only if Wave 2 finishes early)
 
-- [ ] {agent: pipeline, id: impl-process-ready-strip-marker}
+- [x] {agent: pipeline, id: impl-process-ready-strip-marker}
   _Stretch — Bucket C #3._ The `process-ready-auto` script in
   `/srv/cd-music-stack/bin/` renames `READY → PROCESSING` to
   claim a folder, then moves the folder to `review/` or
@@ -997,6 +997,22 @@ cover — they keep showing `disc-photo.jpg` as the thumbnail.
 This is fine; the legacy folders were ripped before beets
 integration and aren't in the library anyway.
 
+### 2026-05-16 — D-processing-marker-cosmetic — review-folder UI ignores the PROCESSING marker file
+
+**Locked.** `process-ready-auto` claims an inbox folder by
+renaming `READY → PROCESSING`, then moves the folder into
+`MUSIC_REVIEW_DIR` or `archive/` if beets falls back. The
+`PROCESSING` marker travels along with the folder, which is
+harmless but cluttery: a moved-with-marker folder could otherwise
+render as "N+1 tracks" in the review UI. Sprint-5 stretch shipped
+Option A (in-repo): the review-folder list and detail views count
+audio strictly via the `*.flac` glob, and that contract is now
+pinned by `test_folder_list_review_folder_ignores_processing_marker`.
+Option B (`rm PROCESSING` inside `process-ready-auto` at
+`/srv/cd-music-stack/`) remains available as an operator-side
+cleanup; it doesn't require cd-archivist coordination and can
+land any time.
+
 ## Ratification Log
 
 <!-- Same shape as Decision Log; entries land here when a
@@ -1127,6 +1143,22 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — pipeline — stretch impl-process-ready-strip-marker landed (Option A, 310/310 green)
+
+Locked the cosmetic-marker contract for the review source. The
+existing `*.flac` glob in `_audio_count_and_duration` already
+excluded the `PROCESSING` marker file naturally, so no production
+code needed to change — but the behavior was implicit, undocumented,
+and one glob-widening away from regressing. Added a regression test
+(`test_folder_list_review_folder_ignores_processing_marker`) that
+seeds `track01.flac + PROCESSING` in `MUSIC_REVIEW_DIR` and asserts
+`audio_count == 1` and `source == "review"`. Test passes; pipeline
+suite now 310/310 (drivers' 5 disc-id failures remain in drivers'
+lane). Decision captured under `D-processing-marker-cosmetic`
+(Option A shipped; Option B — `rm PROCESSING` inside
+`process-ready-auto` — remains an operator-side cleanup that can
+land any time without coupling to cd-archivist).
 
 ### 2026-05-16 — pipeline — Wave 2 impls landed (6 tasks, 6 commits, 309/309 green)
 

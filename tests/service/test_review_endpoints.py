@@ -135,6 +135,24 @@ def test_folder_list_review_folder_surfaces(
     assert isinstance(entry["source_json"], dict)
 
 
+def test_folder_list_review_folder_ignores_processing_marker(
+    client: TestClient, music_roots: tuple[Path, Path],
+) -> None:
+    """A review folder that still carries the PROCESSING marker (because
+    process-ready-auto moved it without stripping the file) must report
+    audio_count based on real audio only — the marker is cosmetic clutter,
+    not a track. See D-processing-marker-cosmetic."""
+    review_root, _ = music_roots
+    folder = review_root / "2026-05-16_1230_disc-000099"
+    _write_flac(folder / "track01.flac")
+    (folder / "PROCESSING").write_text("claimed\n")
+
+    body = client.get("/api/review/folders").json()
+    entry = next(f for f in body["folders"] if f["name"] == folder.name)
+    assert entry["source"] == "review"
+    assert entry["audio_count"] == 1
+
+
 def test_folder_list_inbox_ready_no_processing_surfaces(
     client: TestClient, music_roots: tuple[Path, Path],
 ) -> None:
