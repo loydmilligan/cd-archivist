@@ -679,6 +679,79 @@ Wave 2 impls (`impl-disc-card-builder`, `impl-kanban-api`,
 `impl-review-page-v1`) gated on these tests turning green.
 `D-source-json-provenance-schema` lands during `impl-disc-card-builder`.
 
+### 2026-05-16 — drivers — Wave 2 impls landed (3 tasks, 3 commits)
+
+All drivers-owned Wave 2 tasks closed. Drivers + state-machine
+suites: 134/134 PASS. `ruff check` clean on touched code. The 30
+failures elsewhere in `pytest tests/` are pipeline's in-flight Wave
+2 reds (service / pipeline territory), not regressions from this
+bucket.
+
+- **impl-cdplay-decouple** (`4158481`, Bucket D) — D-cdplay-decouple-
+  not-install. Stripped every `systemctl start/stop cdplay.service`
+  callsite from `archivist/state_machine/loop.py`: the `_CDPLAY`
+  constant, `_cdplay_stopped` instance attribute, the
+  except-and-restart blocks in `tick()` / `advance()` / `_do_reset()`,
+  the `stop_unit(_CDPLAY)` before RIP, both `start_unit(_CDPLAY)`
+  paths in `_from_rip*` (rip_failed), and the paired restart in
+  `_from_eject`. The `systemctl` driver wrapper itself stays for
+  future units. Also updated 4 legacy `tests/state_machine/test_loop.py`
+  cases that asserted cdplay events: dropped the assertions, added
+  `assert services.events == []` to lock in the new contract; renamed
+  `test_rip_exception_still_restarts_cdplay` →
+  `test_rip_exception_transitions_to_error`. The pipeline-owned
+  `test_failed_marker.py::test_cdplay_restarted_on_failure` was left
+  untouched — its `len(starts) >= len(stops)` assertion is trivially
+  true when both are empty. The 4 new `test_cdplay_decoupled.py`
+  cases (Wave 1) now all PASS.
+- **impl-fail-fast-detection** (`c8c9707`, Bucket A) —
+  D-failfast-threshold. `CDAudioRipper.rip(...)` now watches
+  cdparanoia stderr in real time and SIGTERMs the subprocess on
+  per-sector retry-threshold-crossed OR ASC=3e Target hardware
+  fault. Threshold default = 3 (env-overridable via
+  `ARCHIVIST_RIP_RETRY_THRESHOLD`); rationale: cdparanoia's own
+  retry budget is ~20 per sector before it gives up, so 3 is the
+  elbow between "transient surface scratch" (recovers on its own
+  by retry 1–2) and "unrecoverable damage" (about to grind for
+  ~25 min — the actual observed RATM smoke wait in sprint-5).
+  Counter is per-sector (`dict[int, int]`), so e.g. four sectors
+  at retry=1 each does NOT trip a threshold-3 abort. ASC=3e is
+  checked independently and fires regardless of retry counter.
+  `_run_cdparanoia_streaming` return type expanded to
+  `(returncode, captured_lines, aborted, failed_track)` so the
+  caller can build a partial RipResult; `RipResult` schema gained
+  `partial / successful_tracks / failed_track` with safe defaults
+  on the same commit (the schema is shared between fail-fast and
+  partial preservation). `test_ripper_failfast.py` 5/5, plus
+  21/21 across all three ripper test files.
+- **impl-partial-output-preserve** (`0cd0452`, Bucket A) — completes
+  the partial-rip preservation contract. (1) `RipRecord` (in
+  `archivist/models/manifest.py`) gains the same partial /
+  successful_tracks / failed_track fields, defaulted-safe, as the
+  manifest-side mirror of the RipResult fields. (2)
+  `archivist/state_machine/loop.py` adds `State.STABILIZE_PARTIAL`
+  + a `_from_stabilize_partial` handler + the routing-from-RIP
+  branch in `_from_rip_sprint4`. The partial path: eject + settle
+  → capture photo (same LED dance as success) → copy_canonical_photo
+  → write source.json → move folder into `failed_dir/` (NOT inbox)
+  → transition to ERROR. From ERROR, the existing tray-open recovery
+  returns to IDLE. (3) **Cross-agent TODOs** documented in the
+  handler docstring + commit body: pipeline must update
+  `archivist/pipeline/rip.py::rip_disc` to copy partial /
+  successful_tracks / failed_track from RipResult → RipRecord, and
+  `archivist/pipeline/source_json.py::build_source_json` must read
+  rip_record.partial / failed_track / etc. to populate
+  `source.status.partial` / `status.failed_tracks`. Until those
+  pipeline-side hops land, the STABILIZE_PARTIAL routing stays
+  dormant (rip_record.partial is always False through the loss
+  hop in rip_disc) and source.json on a partial disc has
+  `partial=False` / `failed_tracks=[]` (incorrect, will fix when
+  pipeline lands). The driver-side fields are fully populated on
+  RipResult and RipRecord — only the data-forwarding hop is pending.
+
+Wave 2 complete on the drivers side. Wave 3 is operator-driven
+smoke per the sprint cadence (no pytest tasks).
+
 ### 2026-05-16 — drivers — Wave 1 failing tests landed (3 tasks, 3 commits)
 
 All drivers-owned Wave 1 tasks closed; no impl code written. Each
