@@ -143,6 +143,7 @@ def create_app(
             recapture_camera=recapture_camera,
             recapture_led=recapture_led,
             legacy_discs_roots=legacy_discs_roots,
+            library_root=library_root,
         )
 
     _mount_control_routes(app, loop_state=loop_state, loop=loop)
@@ -386,13 +387,17 @@ def _mount_library_routes(
     recapture_camera: Callable[..., Any] | None = None,
     recapture_led: Any | None = None,
     legacy_discs_roots: tuple[Path, ...] = (),
+    library_root: Path | None = None,
 ) -> None:
     @app.get("/library", response_class=HTMLResponse)
     def library_list(status: str = "success") -> HTMLResponse:
         if status not in ("success", "failed", "all"):
             status = "success"
         return HTMLResponse(
-            _render_library_list(discs_root, status=status, legacy_roots=legacy_discs_roots)
+            _render_library_list(
+                discs_root, status=status, legacy_roots=legacy_discs_roots,
+                library_root=library_root,
+            )
         )
 
     @app.get("/library/{disc_id}", response_class=HTMLResponse)
@@ -404,7 +409,31 @@ def _mount_library_routes(
             raise HTTPException(status_code=404)
         if not (d / "manifest.json").is_file() and not (d / "source.json").is_file():
             raise HTTPException(status_code=404)
-        return HTMLResponse(_render_library_detail(d))
+        return HTMLResponse(_render_library_detail(d, library_root=library_root))
+
+    @app.get("/library/{disc_id}/album-cover")
+    def library_album_cover(disc_id: str) -> FileResponse:
+        """Sprint-5 / D-library-cover-preference: serve the beets-fetched
+        cover from `<library_root>/<album_artist>/<album>/cover.{...}`.
+        """
+        from archivist.service.library import read_disc_summary
+        d = _disc_dir(discs_root, disc_id, legacy_roots=legacy_discs_roots)
+        if d is None:
+            raise HTTPException(status_code=404)
+        summary = read_disc_summary(d, library_root=library_root)
+        if summary is None or summary.library_cover_path is None:
+            raise HTTPException(status_code=404)
+        target = summary.library_cover_path
+        # Path-traversal guard: ensure it lives under library_root.
+        if library_root is not None:
+            try:
+                target.resolve().relative_to(library_root.resolve())
+            except ValueError:
+                raise HTTPException(status_code=404) from None
+        if not target.is_file():
+            raise HTTPException(status_code=404)
+        media = "image/png" if target.suffix.lower() == ".png" else "image/jpeg"
+        return FileResponse(target, media_type=media)
 
     @app.get("/library/{disc_id}/captures/{filename}")
     def library_capture(disc_id: str, filename: str) -> FileResponse:
@@ -481,6 +510,7 @@ def _render_library_list(
     *,
     status: str = "success",
     legacy_roots: tuple[Path, ...] = (),
+    library_root: Path | None = None,
 ) -> str:
     from archivist.service.library import read_disc_summary
 
@@ -500,7 +530,7 @@ def _render_library_list(
         for d in entries:
             if d.name in seen:
                 continue
-            summary = read_disc_summary(d)
+            summary = read_disc_summary(d, library_root=library_root)
             if summary is None:
                 continue
             if status == "success" and not summary.rip_success:
@@ -548,10 +578,14 @@ def _render_summary_card(disc_dir: Path, summary: Any) -> str:
         rip_status_label = "FAILED"
 
     thumb: str
-    if summary.thumbnail is not None:
-        # Route the thumbnail through whichever asset-serving endpoint
-        # applies. New-shape folders serve disc-photo.jpg via /library/.../
-        # but legacy folders serve via /library/.../captures/.
+    # Sprint-5 / D-library-cover-preference: when the beets-fetched
+    # library cover exists, prefer it over disc-photo.jpg.
+    if summary.library_cover_path is not None:
+        thumb_url = f"/library/{disc_id}/album-cover"
+        thumb = f'<img class="thumb" src="{thumb_url}" alt="">'
+    elif summary.thumbnail is not None:
+        # New-shape folders serve disc-photo.jpg via /library/<id>/photo;
+        # legacy folders serve via /library/<id>/captures/<file>.
         if summary.is_legacy:
             thumb_url = f"/library/{disc_id}/captures/{html.escape(summary.thumbnail.name)}"
         else:
@@ -619,16 +653,57 @@ def _render_library_card(disc_dir: Path, m: Manifest) -> str:
     )
 
 
-def _render_library_detail(disc_dir: Path) -> str:
-    manifest = read_manifest(disc_dir / "manifest.json")
-    disc_id = html.escape(manifest.disc_id)
-    accent = _accent_class(manifest)
+def _render_library_detail(
+    disc_dir: Path,
+    *,
+    library_root: Path | None = None,
+) -> str:
+    from archivist.service.library import read_disc_summary
 
-    # Manifest dump.
-    manifest_json = manifest.model_dump_json(indent=2)
+    summary = read_disc_summary(disc_dir, library_root=library_root)
+    is_new_shape = summary is not None and not summary.is_legacy
+
+    if is_new_shape:
+        from archivist.models.source import read_source_json
+        source = read_source_json(disc_dir / "source.json")
+        disc_id = html.escape(source.disc.folder_name)
+        accent = "card--moss" if source.status.rip_success else "card--ember"
+        dump = source.model_dump_json(indent=2)
+    else:
+        manifest = read_manifest(disc_dir / "manifest.json")
+        disc_id = html.escape(manifest.disc_id)
+        accent = _accent_class(manifest)
+        dump = manifest.model_dump_json(indent=2)
+
     manifest_block = (
-        '<pre class="manifest-dump">' + html.escape(manifest_json) + "</pre>"
+        '<pre class="manifest-dump">' + html.escape(dump) + "</pre>"
     )
+
+    # Sprint-5 / D-library-cover-preference: distinct "album art" +
+    # "physical disc" sections when the new-shape folder has a beets-
+    # fetched cover. Legacy folders keep the original layout.
+    album_art_section = ""
+    if summary is not None and summary.library_cover_path is not None:
+        album_art_section = (
+            '<section class="card">'
+            f'<p class="eyebrow">ALBUM ART</p>'
+            f'<img class="thumb thumb--lg" '
+            f'src="/library/{disc_id}/album-cover" alt="album art">'
+            '</section>'
+        )
+
+    # Physical disc — disc-photo.jpg lives at the disc-folder root for
+    # sprint-4+ folders. Sprint-3 review-recapture buttons remain in
+    # the existing review section below.
+    physical_disc_section = ""
+    if (disc_dir / "disc-photo.jpg").is_file():
+        physical_disc_section = (
+            '<section class="card">'
+            f'<p class="eyebrow">PHYSICAL DISC</p>'
+            f'<img class="thumb thumb--lg" '
+            f'src="/library/{disc_id}/photo" alt="disc photo">'
+            '</section>'
+        )
 
     # Captures grid.
     captures_dir = disc_dir / "captures"
@@ -686,6 +761,8 @@ def _render_library_detail(disc_dir: Path) -> str:
         _LIBRARY_DETAIL_HTML
         .replace("{{DISC_ID}}", disc_id)
         .replace("{{ACCENT}}", accent)
+        .replace("{{ALBUM_ART}}", album_art_section)
+        .replace("{{PHYSICAL_DISC}}", physical_disc_section)
         .replace("{{MANIFEST}}", manifest_block)
         .replace("{{CAPTURES}}", cap_imgs or '<p class="meta">no captures.</p>')
         .replace("{{REVIEW_IMGS}}", review_imgs)
@@ -1117,6 +1194,9 @@ _LIBRARY_DETAIL_HTML = r"""<!doctype html>
     </nav>
     <p class="eyebrow">DISC</p>
     <h1 class="page-title">{{DISC_ID}}</h1>
+
+    {{ALBUM_ART}}
+    {{PHYSICAL_DISC}}
 
     <section class="card {{ACCENT}}">
       <p class="eyebrow">MANIFEST</p>
