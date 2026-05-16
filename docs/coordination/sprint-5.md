@@ -139,7 +139,7 @@ updated: 2026-05-15T00:00:00.000Z
     Wave 1; install any time after `impl-disc-id-capture`
     lands.
 
-- [ ] {agent: operator, id: install-archivist-systemd-unit}
+- [x] {agent: operator, id: install-archivist-systemd-unit}
   **Operator-owned — human-driven, not an agent task.** Resolve
   the long-running `D-systemd-defer` (sprint-2) decision: install
   cd-archivist as a systemd user service on the CM4 so it
@@ -1144,6 +1144,22 @@ _No ratifications yet._
   Unit cdplay.service not found`. Observed STP rip (2026-05-15) and RATM
   rip (2026-05-16). Either install the unit or remove the dependency.
   Owner: operator + pipeline.
+- **Beets interactive traceback-spam on tag-less flacs (UI blocker)** —
+  observed 2026-05-16 attempting `docker exec -it cd_beets beet import
+  --singletons /review/<folder>/` on the burned-mix-CD rip. chroma's
+  AcoustID lookup returns "No matching recordings found" → beets falls
+  back to MB metadata search → flacs have no tags → empty query → MB
+  returns HTTP 400 → full traceback printed per track in an infinite
+  loop, burying the `[S]kip, Use as-is, Enter search, ...` prompt. Even
+  abort (`b`) gets eaten by the noise. Hard blocker for sprint-6's
+  in-UI review v2 (web wrapper for beets candidate selection): the
+  underlying CLI substrate must produce a clean prompt before any UI
+  can wrap it. Mitigation paths: (a) suppress MB-search fallback when
+  source.json indicates no embedded tags; (b) bypass beets' interactive
+  path entirely — query MusicBrainz directly via `musicbrainzngs` (per
+  `D-mb-query-direct-not-beets`) and only invoke `beet import` once a
+  human picks an MBID. Owner: pipeline.
+
 - **Damaged-disc UI options (first-class sprint-6 scope)** — when a
   rip fails or is stopped mid-flight, the disc card must offer three
   explicit actions: (1) **process partial as-is** (route the
@@ -1215,8 +1231,40 @@ _No ratifications yet._
   `~/Projects/Mash Co. Design System/README.md` between the Orc Tower
   and SRMPW rows; "Active consumer" status reflects sprint-3/4/5 use
   of Mash Co. tokens in library + manual-mode + in-UI review pages.
-- Still open: `install-archivist-systemd-unit` (#3) — pending until
-  current in-flight rip finishes (don't double-bind /dev/sr0).
+- `install-archivist-systemd-unit`: killed the tmux-launched archivist
+  (PID 536124); wrote `~/.config/systemd/user/cd-archivist.service`
+  with paths adjusted from the sprint-5 draft to match the actual
+  runtime (`WorkingDirectory=/home/mmariani/Projects/cd-archivist`,
+  `ExecStart=/home/mmariani/Projects/cd-archivist/.venv/bin/python -m
+  archivist` — the draft's `/srv/cd-archivist` is aspirational and
+  doesn't exist yet). Added `MUSIC_REVIEW_DIR` + `MUSIC_LIBRARY_DIR`
+  env vars (sprint-5 contract additions). `systemctl --user
+  daemon-reload && enable --now` succeeded; `loginctl enable-linger`
+  set so the unit survives logout. Status: `active (running)` since
+  14:05:01, PID 754050. **All four operator tasks now ticked.**
+
+### 2026-05-16 — finding — beets interactive import unusable on tag-less flacs
+
+- Attempted manual `docker exec -it cd_beets beet import --singletons
+  /review/2026-05-16_1344_disc-000001_20260516-135755/` on the
+  17-track burned mix CD.
+- chroma's AcoustID lookup returned "No matching recordings found"
+  for every track (tracks are likely from sources not in AcoustID's
+  DB, common for burned mix CDs with DJ edits / fades).
+- Beets then fell back to MusicBrainz metadata search; because the
+  flacs have **zero embedded tags** (cdparanoia + flac --best writes
+  no tag fields), the search query was empty (`query=&`) and MB
+  returned HTTP 400 per track.
+- Per-track HTTPError tracebacks printed in an infinite loop, burying
+  the interactive `[S]kip, Use as-is, Enter search, ...` prompt. Even
+  `b` (aBort) couldn't be reached. Required SIGINT.
+- **Impact:** sprint-6 in-UI review v2 (web wrapper for beets
+  candidate selection) is blocked on this; the underlying CLI substrate
+  must produce a clean prompt before a UI can wrap it.
+- Captured in Sprint-6 Candidates above (mitigation paths: suppress
+  empty-tag MB fallback in chroma config, or bypass beets' interactive
+  path entirely and use `musicbrainzngs` direct queries per
+  `D-mb-query-direct-not-beets`).
 
 ### 2026-05-16 — pipeline — stretch impl-process-ready-strip-marker landed (Option A, 310/310 green)
 
