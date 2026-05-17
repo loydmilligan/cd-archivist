@@ -259,3 +259,77 @@ def test_track_bar_all_pending_when_no_progress() -> None:
         total=3, successful=[], failed=[], in_progress=None,
     )
     assert bar == ["pending", "pending", "pending"]
+
+
+# ============== test-fix-phantom-audio (sprint-6.5 Bucket A) ==============
+#
+# Regression-pin the bug observed live on cda.mattmariani.com on
+# 2026-05-16: build_kanban_state walked into each disc folder's
+# `audio/` (and `captures/`, `logs/`, `review/`) subdirectory and
+# treated them as their own disc folders. Every real disc surfaced
+# 4-5 times.
+
+
+def _seed_full_disc_layout(parent: Path, name: str) -> Path:
+    """Mirror the production on-disk layout for one disc."""
+    folder = parent / name
+    (folder / "audio").mkdir(parents=True)
+    (folder / "captures").mkdir()
+    (folder / "logs").mkdir()
+    (folder / "review").mkdir()
+    _write_flac(folder / "audio" / "track01.flac")
+    _write_flac(folder / "audio" / "track02.flac")
+    (folder / "captures" / "disc-photo.jpg").write_bytes(b"\xff\xd8\xff\xe0")
+    (folder / "logs" / "rip.log").write_text("ok\n")
+    (folder / "review" / ".gitkeep").write_text("")
+    _write_source(folder, _base_source_json(name, track_count=2))
+    return folder
+
+
+def test_full_disc_layout_produces_exactly_one_card(music_root: Path) -> None:
+    folder = _seed_full_disc_layout(
+        music_root / "review", "2026-05-16_1408_disc-000123",
+    )
+    state = build_kanban_state(music_root, loop_state=None)
+    review_cards = state.buckets["review"]
+    assert len(review_cards) == 1, (
+        f"expected exactly one card; got {len(review_cards)}: "
+        f"{[c.folder for c in review_cards]}"
+    )
+    assert review_cards[0].folder == folder.name
+
+
+def test_subdirs_audio_captures_logs_review_not_treated_as_discs(
+    music_root: Path,
+) -> None:
+    """The four well-known disc-internal subdirs must never surface as
+    cards in their own right — neither when source.json exists at the
+    parent nor when it doesn't."""
+    _seed_full_disc_layout(music_root / "review", "disc-α")
+    state = build_kanban_state(music_root, loop_state=None)
+    names = {c.folder for c in state.buckets["review"]}
+    for forbidden in ("audio", "captures", "logs", "review"):
+        assert forbidden not in names, (
+            f"subdir name {forbidden!r} leaked into kanban as a card"
+        )
+
+
+def test_card_audio_count_reflects_flac_count_not_subdir_count(
+    music_root: Path,
+) -> None:
+    """The card's per-track bar (audio count) must come from .flac
+    files under the disc folder, not from a recursive count of
+    subdirectories."""
+    folder = _seed_full_disc_layout(
+        music_root / "review", "disc-β",
+    )
+    # Add a third flac so the count is unambiguous (3, not 2/4/etc.).
+    _write_flac(folder / "audio" / "track03.flac")
+    payload = json.loads((folder / "source.json").read_text())
+    payload["audio"]["track_count"] = 0  # force the flac-fallback path
+    (folder / "source.json").write_text(json.dumps(payload))
+
+    state = build_kanban_state(music_root, loop_state=None)
+    card = state.buckets["review"][0]
+    # Length of the per-track bar is the audio count (flac fallback).
+    assert len(card.track_bar) == 3
