@@ -107,10 +107,15 @@ def test_right_drawer_uses_css_transform_for_slide_in(
     client: TestClient,
 ) -> None:
     """The drawer slides in via CSS transform (not display:none) so the
-    transition can be animated."""
+    transition can be animated. Sprint-7 / impl-css-migration moved the
+    rule from the inline <style> block onto /static/css/cda.css; the
+    assertion follows the CSS to its new home."""
     html = client.get("/").text
     assert "right-drawer" in html
-    assert "transform" in html
+    cda = client.get("/static/css/cda.css").text
+    assert "transform" in cda
+    # The drawer-right rule itself defines a transform (slide-out state).
+    assert ".drawer--right" in cda
 
 
 # ============== (b) drive-status template (default body) ================

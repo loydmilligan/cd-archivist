@@ -576,7 +576,49 @@ def _render_column(
     )
 
 
-def _render_header_bar(stats: dict, links: dict) -> str:
+def _render_live_status(active: bool, disc_slug: str | None) -> str:
+    """Header live-status chip per the build prompt §"Header bar":
+    pulsing green dot + "ripping · DISC-<slug>" active, "idle" idle."""
+    if active:
+        text = f"ripping · {disc_slug or 'disc'}"
+        dot_class = "dot dot--pulse-moss"
+    else:
+        text = "idle"
+        dot_class = "dot dot--quiet"
+    return (
+        '<span class="live-status">'
+        f'<span class="{dot_class}" aria-hidden="true"></span>'
+        f'<span class="live-status-text">{_esc(text)}</span>'
+        '</span>'
+    )
+
+
+def _render_rig_stats(stats: dict) -> str:
+    """5-cell bordered group per the build-prompt §"Header bar":
+    Ripped / In review / Partial / Storage / Uptime. Storage + Uptime
+    are populated by JS via /api/rig/stats (lane-3's endpoint)."""
+    cells = [
+        ("Ripped", str(stats.get("ripped", 0)), "rig-ripped"),
+        ("In review", str(stats.get("review", 0)), "rig-review"),
+        ("Partial", str(stats.get("partial", 0)), "rig-partial"),
+        # Storage + Uptime are populated by the rig-stats JS poll.
+        ("Storage", "—", "rig-storage"),
+        ("Uptime", "—", "rig-uptime"),
+    ]
+    rendered = "".join(
+        '<div class="stat-cell">'
+        f'<span class="stat-value" data-rig-cell="{key}">{_esc(value)}</span>'
+        f'<span class="stat-label">{_esc(label)}</span>'
+        '</div>'
+        for label, value, key in cells
+    )
+    return f'<div class="rig-stats">{rendered}</div>'
+
+
+def _render_header_bar(
+    stats: dict, links: dict, *,
+    active_rip: bool = False, active_disc: str | None = None,
+) -> str:
     navidrome = links.get("navidrome") or ""
     beets_web = links.get("beets_web") or ""
     nav_link = (
@@ -594,12 +636,14 @@ def _render_header_bar(stats: dict, links: dict) -> str:
         '<span class="wordmark">cd-archivist</span>'
         '<span class="daemon-state-dot" data-daemon-state="active" '
         'aria-label="daemon active"></span>'
+        f'{_render_live_status(active_rip, active_disc)}'
         '</div>'
         '<div class="header-stats">'
         f'<span class="stat">total {stats["total"]}</span>'
         f'<span class="stat">review {stats["review"]}</span>'
         f'<span class="stat">partial {stats["partial"]}</span>'
         '</div>'
+        f'{_render_rig_stats(stats)}'
         '<div class="header-right">'
         '<button type="button" class="btn" '
         'aria-controls="right-drawer" data-drawer-toggle="right">'
@@ -987,6 +1031,7 @@ setTimeout(pollKanban, POLL_IDLE);
 def _stats(buckets: dict, cards_flat: list[DiscCard]) -> dict:
     return {
         "total": sum(len(v) for v in buckets.values()),
+        "ripped": len(buckets.get("library", [])),
         "review": len(buckets.get("review", [])),
         "partial": sum(1 for c in cards_flat if c.partial),
     }
@@ -996,6 +1041,10 @@ def render_kanban_page(music_root: Path, loop_state) -> str:
     state = build_kanban_state(music_root, loop_state=loop_state)
     cards_flat = [c for cards in state.buckets.values() for c in cards]
     stats = _stats(state.buckets, cards_flat)
+    capture = state.buckets.get("capture", [])
+    active_card = next((c for c in capture if c.progress is not None), None)
+    active_rip = active_card is not None
+    active_disc = active_card.disc_id if active_card else None
     links = {
         "navidrome": os.environ.get("NAVIDROME_URL", ""),
         "beets_web": os.environ.get("BEETS_WEB_URL", ""),
@@ -1038,7 +1087,7 @@ def render_kanban_page(music_root: Path, loop_state) -> str:
         '<link rel="stylesheet" href="/static/css/cda.css">'
         '</head>'
         '<body>'
-        f'{_render_header_bar(stats, links)}'
+        f'{_render_header_bar(stats, links, active_rip=active_rip, active_disc=active_disc)}'
         f'{_render_bucket_tabs()}'
         '<main class="kanban">'
         f'{columns}'

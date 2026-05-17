@@ -712,6 +712,10 @@ def test_kanban_page_class_names_resolve_against_static_css(
             # rule (e.g., data-* state markers).
             if cls.startswith("js-"):
                 continue
+            # Skip JS template-literal interpolation patterns that
+            # appear in inline JS source as `class="row ${topCls}"`.
+            if "${" in cls or "}" in cls:
+                continue
             classes.add(cls)
 
     missing = sorted(c for c in classes if c not in haystack)

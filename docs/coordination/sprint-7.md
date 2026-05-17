@@ -420,7 +420,7 @@ status: draft
 
 #### Bucket B — CSS migration + brand mark (lane-1)
 
-- [ ] {agent: lane-1, depends: test-inline-css-removed, depends: test-brand-mark, id: impl-css-migration-brand-mark}
+- [x] {agent: lane-1, depends: test-inline-css-removed, depends: test-brand-mark, id: impl-css-migration-brand-mark}
   (1) Strip the inline `<style>` block from `kanban_page.py`. Re-route
   every existing class to either `tokens.css` (variables only) or
   `cda.css` (component rules). Where existing class names conflict with
@@ -684,13 +684,17 @@ hook there); composite keys would just stash stale entries
 indefinitely. The cache lives inside the FastAPI closure, so it
 also resets on every daemon restart.
 
-### 2026-05-16 — D-mobile-brand-mark-size — **OPEN** (lane-1 confirms during impl-css-migration-brand-mark)
+### 2026-05-16 — D-mobile-brand-mark-size — keep header 22px on mobile (no `--mobile` variant)
 
-Open. The brand prompt specifies header 22px, splash 84px, marketing
-240px. The current kanban uses the header variant only; mobile
-viewport may want a smaller header (16–18px). Lane-1 confirms whether
-to add a `--mobile` variant or keep the header variant scaled by
-viewport.
+Resolved 2026-05-16 (lane-1, during impl-css-migration-brand-mark). The
+brand prompt specifies header 22px / splash 84px / marketing 240px. At
+the 720px mobile breakpoint, 22px fits comfortably inside the 56px
+header bar without crowding the wordmark or daemon-state dot — adding
+a `--mobile` variant would mean a third size knob to keep in sync with
+no visible payoff. Decision: no `--mobile` variant; the header keeps
+22px across viewports. Pinned in cda.css alongside the variant block.
+Revisit only if header crowding shows up in Wave 3 operator-driven
+visual smoke against `cda.mattmariani.com` on a phone browser.
 
 ## Ratification Log
 

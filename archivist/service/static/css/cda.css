@@ -1189,3 +1189,17 @@ main.kanban {
   .column[data-active-mobile="true"] { display: block; }
   .drawer--right { width: 100%; }
 }
+
+/* Sprint-7 / impl-css-migration — additional kanban classes used by
+   lane-2/3 markup (candidates section, expanded card body, drawer
+   card-detail). Minimal recipes; full design alignment in sprint-8. */
+.apply-btn       { font-family: var(--font-body); padding: 4px 10px;
+                   border-radius: 4px; border: 1px solid var(--mash-pulp);
+                   background: var(--mash-pulp); color: var(--ink-0);
+                   cursor: pointer; }
+.candidate-row   { display: flex; align-items: center; gap: 8px;
+                   padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.card-body       { padding-top: 8px; }
+.card-detail     { padding: 8px; }
+.column-cards    { display: flex; flex-direction: column; gap: 8px; }
+.why-in-review   { color: var(--amber); font-size: 12px; }
