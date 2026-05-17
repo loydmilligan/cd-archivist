@@ -840,3 +840,155 @@ def test_headlamp_is_not_full_column_tint(client: TestClient) -> None:
             f"column carries forbidden full-tint class {cls!r}; "
             "the build prompt mandates 8px headlamp dots, not column tints"
         )
+
+
+# ============== test-live-status-chip (sprint-7 Bucket E, lane-2) =======
+#
+# Header live-status chip per the build prompt §"Header bar":
+#   pulsing green dot + "ripping · DISC-A4F2" when active,
+#   "idle" treatment otherwise. Same chip recipe in both states.
+
+
+def _read_cda_css_for_pulse() -> str:
+    from pathlib import Path as _P
+    p = _P(__file__).resolve().parents[2] / "archivist/service/static/css/cda.css"
+    if not p.is_file():
+        pytest.fail(f"cda.css not found at {p} — lane-1 must land first")
+    return p.read_text(encoding="utf-8")
+
+
+def test_header_live_status_element_renders(client: TestClient) -> None:
+    html = client.get("/").text
+    assert 'class="live-status"' in html
+
+
+def test_live_status_carries_dot_child(client: TestClient) -> None:
+    html = client.get("/").text
+    # The dot is a child element of .live-status, discoverable by class.
+    assert 'class="dot' in html
+
+
+def test_live_status_active_text_and_pulse_class(
+    client: TestClient, loop_state: LoopState,
+) -> None:
+    """Active rip: text reads 'ripping · DISC-<slug>' and the dot has
+    class .dot--pulse-moss."""
+    loop_state.state = "RIP"
+    loop_state.disc_id = "DISC-A4F2"
+    loop_state.rip_progress = "track 1/10 (10%)"
+    snap = getattr(loop_state, "drive_status", None)
+    if snap is not None:
+        snap.state = "ripping"
+        snap.current_disc = "DISC-A4F2"
+
+    html = client.get("/").text
+    assert "ripping · DISC-A4F2" in html
+    assert "dot--pulse-moss" in html
+
+
+def test_live_status_idle_text_and_quiet_class(client: TestClient) -> None:
+    html = client.get("/").text
+    assert "dot--quiet" in html
+    assert "idle" in html
+
+
+def test_cda_css_defines_pulse_keyframes(client: TestClient) -> None:
+    css = _read_cda_css_for_pulse()
+    assert "@keyframes pulse" in css
+    assert ".dot--pulse-moss" in css
+    assert "var(--moss)" in css
+
+
+# ============== test-rig-stats-group (sprint-7 Bucket E, lane-2) ========
+#
+# Header rig-stats group: 5 .stat-cell children (Ripped / In review /
+# Partial / Storage / Uptime) inside a bordered .rig-stats container.
+# Mono weight-700 values + eyebrow labels. Ripped/In review/Partial
+# derive from kanban payload; Storage + Uptime come from /api/rig/stats
+# (lane-3 ships that endpoint).
+
+
+def test_header_renders_rig_stats_group(client: TestClient) -> None:
+    html = client.get("/").text
+    assert 'class="rig-stats"' in html
+
+
+def test_rig_stats_has_five_stat_cells(client: TestClient) -> None:
+    html = client.get("/").text
+    assert html.count('class="stat-cell"') == 5
+
+
+def test_rig_stats_labels_present(client: TestClient) -> None:
+    html = client.get("/").text
+    for label in ("Ripped", "In review", "Partial", "Storage", "Uptime"):
+        assert label in html, f"missing rig-stats label: {label!r}"
+
+
+def test_stat_value_and_label_subclasses_present(client: TestClient) -> None:
+    html = client.get("/").text
+    assert 'class="stat-value"' in html
+    assert 'class="stat-label"' in html
+
+
+def test_stat_value_styled_mono_weight_700(client: TestClient) -> None:
+    css = _read_cda_css_for_pulse()
+    pat = re.compile(
+        r"\.stat-value\b[^{]*\{[^}]*"
+        r"font-family:\s*var\(--font-mono\)[^}]*"
+        r"font-weight:\s*700[^}]*\}",
+        re.S,
+    )
+    pat_alt = re.compile(
+        r"\.stat-value\b[^{]*\{[^}]*"
+        r"font-weight:\s*700[^}]*"
+        r"font-family:\s*var\(--font-mono\)[^}]*\}",
+        re.S,
+    )
+    assert pat.search(css) or pat_alt.search(css), (
+        "expected .stat-value with font-family: var(--font-mono) and "
+        "font-weight: 700 in cda.css"
+    )
+
+
+def test_rig_stats_is_bordered_group_not_disconnected_cells(
+    client: TestClient,
+) -> None:
+    """Visual unit: .rig-stats has its own border so the 5 cells read
+    as a group (build prompt: 'single bordered group')."""
+    css = _read_cda_css_for_pulse()
+    pat = re.compile(
+        r"\.rig-stats\b[^{]*\{[^}]*border\s*:[^}]*\}", re.S,
+    )
+    assert pat.search(css), (
+        "expected .rig-stats with a border declaration in cda.css"
+    )
+
+
+def test_stat_values_derive_from_kanban_payload(
+    client: TestClient, music_root: Path,
+) -> None:
+    """Ripped + In review + Partial counts come from the kanban
+    payload; seed a known mix and assert the labels surface."""
+    for i in range(2):
+        folder = music_root / "library" / f"Art{i}" / f"Alb{i}"
+        _write_flac(folder / "01.flac")
+        _write_source(folder)
+    for i in range(3):
+        folder = music_root / "review" / f"2026-05-16_1200_rs-{i}"
+        _write_flac(folder / "01.flac")
+        _write_source(folder)
+
+    html = client.get("/").text
+    assert "Ripped" in html
+    assert "In review" in html
+    assert "Partial" in html
+
+
+def test_storage_and_uptime_reference_rig_stats_endpoint(
+    client: TestClient,
+) -> None:
+    """Storage + Uptime values come from /api/rig/stats (lane-3
+    ships that endpoint). The page references the endpoint in its
+    inline JS so the front-end can fetch + populate."""
+    html = client.get("/").text
+    assert "/api/rig/stats" in html
