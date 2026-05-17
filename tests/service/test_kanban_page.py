@@ -430,3 +430,220 @@ def test_collapsed_card_chip_mix_cd_count_when_both_on(
     html = client.get("/").text
     # Per spec: "Mix CD ({N} tracks)" — N sourced from TOC (track_count).
     assert "Mix CD (8 tracks)" in html
+
+
+# ============== test-expand-mechanic (sprint-6.5 Bucket B) ==============
+#
+# Cards become click + spacebar expandable, one-at-a-time, with a `?`
+# tooltip surfacing keyboard nav. Per K1.3-A in the brainstorm:
+# accordion-style inline expand, spacebar toggle (not Enter — Enter
+# is reserved for future activation), preventDefault to suppress page
+# scroll on spacebar.
+
+
+def test_cards_carry_tabindex_for_keyboard_nav(
+    client: TestClient, music_root: Path,
+) -> None:
+    folder = music_root / "review" / "2026-05-16_1200_disc-em1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+
+    html = client.get("/").text
+    # Cards must be focusable for spacebar to land on them.
+    assert 'tabindex="0"' in html
+
+
+def test_keyboard_help_button_renders_with_tooltip_payload(
+    client: TestClient,
+) -> None:
+    html = client.get("/").text
+    # Tooltip element: <button aria-label="keyboard help">?</button>
+    # carrying a data-keyboard-help attribute with the keymap.
+    assert 'aria-label="keyboard help"' in html
+    assert "data-keyboard-help" in html
+    # The visible glyph is "?".
+    assert ">?<" in html
+
+
+def test_page_emits_module_script_with_spacebar_handler(
+    client: TestClient,
+) -> None:
+    html = client.get("/").text
+    assert '<script type="module"' in html
+    # Spacebar key check + preventDefault to suppress browser scroll.
+    assert "preventDefault" in html
+    assert "Space" in html or '" "' in html or "' '" in html
+
+
+def test_page_js_carries_one_at_a_time_expand_guard(
+    client: TestClient,
+) -> None:
+    """One card may be expanded at a time. The JS source carries a
+    module-scope reference tracking the currently-expanded card so
+    opening a second one collapses the first."""
+    html = client.get("/").text
+    # Pin a recognisable marker — the impl module-scope variable name
+    # is contractual for this test and called out in the plan.
+    assert "currentlyExpanded" in html or "currentExpanded" in html
+
+
+# ============== test-header-bar (sprint-6.5 Bucket C) ===================
+#
+# Page header per D-no-alerts-v1: wordmark + daemon-state dot + stats
+# (center) + drawer-toggle buttons + nav link-outs (right). No
+# notification/alert strip in v1.
+
+
+def test_header_renders_three_regions(client: TestClient) -> None:
+    html = client.get("/").text
+    assert "<header" in html
+    assert 'class="header-left"' in html
+    assert 'class="header-stats"' in html
+    assert 'class="header-right"' in html
+
+
+def test_header_left_carries_wordmark_and_daemon_dot(
+    client: TestClient,
+) -> None:
+    html = client.get("/").text
+    assert "cd-archivist" in html
+    # Daemon state dot: derives presence from kanban-payload-presence;
+    # element carries a discoverable class/marker.
+    assert "daemon-state-dot" in html or 'data-daemon-state' in html
+
+
+def test_header_stats_show_compact_counts(
+    client: TestClient, music_root: Path,
+) -> None:
+    """At least one card so the count badges have something to count."""
+    folder = music_root / "review" / "2026-05-16_1200_hb-1"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+
+    html = client.get("/").text
+    # Header stats include labels for the three counts called out by
+    # the spec; values come from the kanban payload.
+    assert "total" in html.lower()
+    assert "review" in html.lower()
+    assert "partial" in html.lower()
+
+
+def test_header_right_carries_drawer_toggles_with_aria_controls(
+    client: TestClient,
+) -> None:
+    html = client.get("/").text
+    # Two drawer-toggle buttons: one for the right drawer, one for
+    # the bottom drawer; both carry aria-controls pointing at the
+    # drawer element ids.
+    assert 'aria-controls="right-drawer"' in html
+    assert 'aria-controls="bottom-drawer"' in html
+
+
+def test_header_has_no_alert_strip(client: TestClient) -> None:
+    """D-no-alerts-v1 — header carries no notification/alert strip."""
+    html = client.get("/").text
+    # No element with the discoverable alert-strip marker class.
+    assert "alert-strip" not in html
+    assert 'data-alerts' not in html
+
+
+# ============== test-column-scroll-badges (sprint-6.5 Bucket C) =========
+#
+# Each column scrolls independently; column headers stick to the top
+# of the column; each header carries a count badge.
+
+
+def test_column_carries_overflow_y_auto_in_css(
+    client: TestClient,
+) -> None:
+    """The kanban CSS must declare per-column scroll."""
+    html = client.get("/").text
+    # We pin the CSS rule fragment — the impl can use a selector
+    # other than `.column` as long as the overflow rule applies to
+    # the per-bucket region. The plan calls out `.column`.
+    assert ".column" in html
+    assert "overflow-y: auto" in html or "overflow-y:auto" in html
+
+
+def test_column_header_carries_count_badge(
+    client: TestClient, music_root: Path,
+) -> None:
+    """Header reads e.g. 'REVIEW (6)' via a .count-badge element."""
+    # Seed three review folders so the count is unambiguous.
+    for i in range(3):
+        folder = music_root / "review" / f"2026-05-16_1200_csb-{i}"
+        _write_flac(folder / "01.flac")
+        _write_source(folder)
+
+    html = client.get("/").text
+    assert "count-badge" in html
+    # The count "3" appears alongside the bucket label.
+    assert ">3<" in html or "(3)" in html
+
+
+def test_column_header_is_position_sticky(client: TestClient) -> None:
+    html = client.get("/").text
+    # Sticky header lives in the column CSS — pin the rule fragment.
+    assert "position: sticky" in html or "position:sticky" in html
+
+
+# ============== test-adaptive-polling (sprint-6.5 Bucket E) =============
+#
+# Page emits both poll intervals; /api/kanban payload gains
+# `active_rip: bool`; JS switches the interval based on that field.
+
+
+def test_page_emits_both_adaptive_poll_meta_tags(
+    client: TestClient,
+) -> None:
+    html = client.get("/").text
+    import re
+    active = re.search(
+        r'<meta\s+name=["\']kanban-poll-ms-active["\']\s+content=["\'](\d+)["\']',
+        html,
+    )
+    idle = re.search(
+        r'<meta\s+name=["\']kanban-poll-ms-idle["\']\s+content=["\'](\d+)["\']',
+        html,
+    )
+    assert active is not None, "missing kanban-poll-ms-active meta tag"
+    assert idle is not None, "missing kanban-poll-ms-idle meta tag"
+    # Defaults per D-adaptive-polling-cadence proposal.
+    assert int(active.group(1)) == 1000
+    assert int(idle.group(1)) == 5000
+
+
+def test_kanban_response_carries_active_rip_field(
+    client: TestClient,
+) -> None:
+    body = client.get("/api/kanban").json()
+    assert "active_rip" in body
+    assert isinstance(body["active_rip"], bool)
+
+
+def test_active_rip_true_when_capture_bucket_has_in_progress_card(
+    client: TestClient, loop_state: LoopState,
+) -> None:
+    loop_state.state = "RIP"
+    loop_state.disc_id = "disc-ap1"
+    loop_state.rip_progress = "track 2/10 (20%)"
+    body = client.get("/api/kanban").json()
+    assert body["active_rip"] is True
+
+
+def test_active_rip_false_when_idle(client: TestClient) -> None:
+    body = client.get("/api/kanban").json()
+    assert body["active_rip"] is False
+
+
+def test_page_js_switches_interval_based_on_active_rip(
+    client: TestClient,
+) -> None:
+    """The JS source contains both interval references and a guard
+    that reads `active_rip` from the response."""
+    html = client.get("/").text
+    assert "active_rip" in html
+    # Both interval names referenced so the front-end can flip
+    # between them at the end of each response cycle.
+    assert "kanban-poll-ms-active" in html
+    assert "kanban-poll-ms-idle" in html
