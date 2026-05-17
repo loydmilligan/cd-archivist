@@ -311,7 +311,7 @@ status: draft
   (`time.monotonic` against a module-init timestamp);
   (d) human strings follow the build-prompt mono shorthand rules.
 
-- [ ] {agent: lane-3, id: test-disc-photo-placeholder}
+- [x] {agent: lane-3, id: test-disc-photo-placeholder}
   Failing tests for the CSS-drawn disc-photo placeholder.
   `tests/service/test_card_anatomy.py` additions:
   (a) cards without a real disc photo render a
@@ -336,7 +336,7 @@ status: draft
   (d) no external highlighting library is added to
   `pyproject.toml`.
 
-- [ ] {agent: lane-1, id: test-drawer-mode-toggles}
+- [x] {agent: lane-1, id: test-drawer-mode-toggles}
   Failing tests for explicit drawer mode toggle buttons.
   `tests/service/test_right_drawer.py` additions:
   (a) header nav contains two buttons
