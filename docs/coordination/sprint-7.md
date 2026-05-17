@@ -755,6 +755,70 @@ sprint-8 planning. -->
 
 <!-- Per-agent updates land here, newest first. -->
 
+### 2026-05-16 — lane-2 (pipeline) — Wave 1 failing tests landed (8 tasks, 5 commits)
+
+All 8 lane-2-owned Wave 1 failing-test tasks shipped. Tests fail
+for the right reasons (missing classes, missing cda.css file,
+missing JS-source markers) — the Wave 1 contract is "these fail
+until Wave 2 impls them." No file overlap with lane-1 or lane-3
+per the roster; my additions to `test_kanban_page.py` are
+append-only at the file tail.
+
+**Bucket C — card anatomy (4 tasks, 1 commit):**
+- `68cfcb7` test-{card-header-row, status-line, chip-row,
+  track-segments} — new `tests/service/test_card_anatomy.py`
+  pinning the full card-anatomy contract per the build prompt:
+  `.card-head` with 56×56 `.thumb` (img OR `.thumb--placeholder`)
+  + `.slug` + `.title` + `.artist`; `.cda-status` mono status
+  line with per-state exact formats (`"ripping track 7 ·
+  sector 24,318 · 1 retry · 04:12 elapsed"`, `"weak match ·
+  beets returned 0.42"`, etc.); `.chip-row` with VA / BURNED /
+  MIX / WEAK MATCH · <score> / MUSICBRAINZ · <score> +
+  `.chip--asserted` (dashed) vs `.chip--confirmed` (solid +
+  halo); `.card--accent-*` classes per the build-prompt
+  column-and-state table; `.track-bar` with
+  `style="--track-count: N"` + per-cell state classes
+  (`--clean` / `--recovered` / `--unrecoverable` / `--pending`
+  / `--ripping`); in-flight cell with `style="--progress: X%"`;
+  `.track-cell--identified` with the 1px white inset 2px
+  outline rule in cda.css.
+
+**Bucket E — layout details lane-2 slice (2 tasks, 1 commit):**
+- `ff99bbc` test-{live-status-chip, rig-stats-group} — appended
+  to `tests/service/test_kanban_page.py`. Header `.live-status`
+  with `.dot` child (`"ripping · DISC-<slug>"` + `.dot--pulse-moss`
+  active / `"idle"` + `.dot--quiet` idle); cda.css `@keyframes
+  pulse` driving the moss dot. Header `.rig-stats` with exactly
+  5 `.stat-cell` children (Ripped / In review / Partial /
+  Storage / Uptime); `.stat-value` mono weight-700; `.rig-stats`
+  has its own border (bordered group, not 5 disconnected cells);
+  Storage + Uptime reference `/api/rig/stats` (lane-3 ships the
+  endpoint).
+
+**Bucket F — gates + transitions (2 tasks, 2 commits):**
+- `002410d` test-destructive-gate — new
+  `tests/service/test_destructive_gate.py`. Destructive buttons
+  carry `data-destructive="true"` + `data-action="<name>"`;
+  inline JS source contains `btn--confirm-armed`, the
+  `confirm:` label-swap, a `5000`ms revert timer, and a
+  document-level click handler for outside-click disarm.
+  `<p class="confirm-hint">` renders the build-prompt verbatim
+  text on damaged cards and is absent on healthy cards.
+- `e81ea1d` test-transitions — new
+  `tests/service/test_transitions.py`. cda.css defines
+  `.card--entering { animation: fadeIn 200ms var(--ease-out) }`,
+  `.card--leaving` (fadeOut 200ms), and `.flash-moss` with a
+  `var(--moss)` reference (direct or via named `@keyframes`).
+  Kanban JS source carries `.card--entering`, `.flash-moss`,
+  and `.card--leaving` so the poll handler can add them on
+  diff.
+
+Wave 2 lane-2 queue gates on lane-1's Bucket A landing
+(`archivist/service/static/css/cda.css` must exist before most
+of my impls go green): `impl-card-anatomy`,
+`impl-header-live-and-stats`, `impl-destructive-gate`,
+`impl-transitions`.
+
 ### 2026-05-16 — lane-1 — Wave 1 failing tests landed (Buckets A, B, E slice)
 
 - All 6 lane-1 Wave-1 tasks complete; each test file fails for the
