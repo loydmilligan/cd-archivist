@@ -201,7 +201,7 @@ status: draft
   Commit: `docs(sprint-8): FILE-LAYOUT.md — canonical tree
   schema`.
 
-- [ ] {agent: lane-3, id: phase-a-activity-log}
+- [x] {agent: lane-3, id: phase-a-activity-log}
   Append a single Phase-A Activity Log entry to sprint-8.md when
   all six tasks above land. Tick the [ ] boxes for each. Commit:
   `docs(sprint-8): phase-A activity log`.
@@ -421,6 +421,66 @@ Single edit; non-breaking.
   — postponed again as not housekeeping-shaped).
 
 ## Activity Log
+
+### 2026-05-17 — lane-3 — Phase A process foundation landed (7 tasks, 7 commits)
+
+Phase A gate. All seven lane-3 tasks shipped as atomic commits;
+each commit pushed to origin/master as it landed so Phase B agents
+can pull. Phase B (lane-1 sanitization + lane-2 doc rewrite) is now
+unblocked.
+
+- `workflow-doc` → `docs/WORKFLOW.md` (461 lines). 11 sections per
+  the plan: purpose, commit conventions (Conventional Commits +
+  `sprint-N` / subsystem scope vocabulary), branching (trunk-based
+  default per `D-trunk-based-default`), CM4 deploy sequence,
+  doc-update cadence, semver under `[Unreleased]`-to-release flow,
+  orc-tower escalation boundary, decision-log conventions, sprint-
+  doc lifecycle, ROADMAP add/triage process, ISSUES add/triage
+  process. Appendix quick-reference table.
+- `workflow-claude-ref` → one-paragraph reference inserted into
+  `CLAUDE.md` immediately after the project-instructions preamble.
+  The CLAUDE.md / WORKFLOW.md boundary is phrased "CLAUDE.md governs
+  HOW agents behave; WORKFLOW.md governs HOW work flows."
+- `changelog-init` → `CHANGELOG.md` at repo root in Keep-a-Changelog
+  1.1.0 format. Empty `[Unreleased]` with all six standard
+  subsections at top; one section per closed sprint (sprint-1
+  through sprint-7, plus sprint-6.5) back-filled from each coord
+  doc's Sprint Goals + Activity Log. Each section dated to the
+  source coord doc's `updated:` field.
+- `roadmap-init` → `ROADMAP.md` at repo root. Three-horizon
+  structure with top-of-doc add/triage/resolve prose. Back-filled
+  from sprint-7 + sprint-6.5 "Sprint-N+1 Candidates" — five items
+  in `## Next sprint` (drive-RMA real-rig smoke, track-id data
+  source, log-tail filter UI, operator-hints into beets, force-re-run
+  beets ID), seven in `## Next milestone` (Review v2, cdplay
+  decision revisit, edit-by-hand metadata, sort/filter per column,
+  build_kanban_state cache, alert strip, empty-tag MB-fallback
+  suppression), six in `## Someday / maybe` (multi-drive,
+  containerization, live cam preview, AcoustID submission, light
+  mode, full voice pass).
+- `issues-init` → `ISSUES.md` at repo root. Top-of-doc
+  add/triage/resolve prose. `## Open` initial back-fill: one
+  blocker (drive hardware failure — sprint-8's trigger condition)
+  + four minor (operator-hints not wired into beets, stubbed
+  track-identification source, beets traceback-spam on tag-less
+  flacs, `cdplay.service` deferral). `## Resolved` seeded empty.
+- `file-layout-schema` → `docs/FILE-LAYOUT.md` (150 lines).
+  Inventory of intended layout for top-level, `archivist/`, `tests/`,
+  and `docs/` subdirs. Sections for what goes at root vs nested,
+  what does NOT belong tracked, legacy areas to audit (`src/`,
+  `hardware/`, `scripts/`, `config/`). Bottom carries the explicit
+  per-violation work order for the Phase B-1 sanitizer (the
+  current-violations table). Schema-only — no files moved this
+  commit (D-housekeeping-no-code-changes contains the moves to
+  Phase B-1).
+- `phase-a-activity-log` → this entry. Gate commit; Phase B agents
+  pull-and-go after it lands.
+
+Cross-phase note: I am Sonnet 4.6 for this Phase A run (previous
+Opus context was cleared). Doc-shaped work; nothing required code
+touches. Three OPEN decisions from previous sprints (sprint-7's
+`D-mobile-brand-mark-size`) were left as-is because they belong to
+lanes that aren't running this sprint; revisit at sprint-9 planning.
 
 ### 2026-05-17 — planner — sprint-8 plan drafted
 
