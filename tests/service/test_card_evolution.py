@@ -121,7 +121,7 @@ def test_identified_tracks_carry_data_attribute(
     """When source.json has a disc-id AND beets-confirmed tracks (via
     detected_metadata.tracks with a `title` per track), each
     track-cell gets data-track-identified-{N}="true"."""
-    folder = _seed(music_root / "review", "disc-id1", _base_source(
+    _seed(music_root / "review", "disc-id1", _base_source(
         "disc-id1",
         identifiers={
             "musicbrainz_disc_id": "mbid-abc", "freedb_disc_id": None,

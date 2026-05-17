@@ -196,7 +196,6 @@ def test_library_bucket_newest_first(
     client: TestClient, music_root: Path,
 ) -> None:
     """Library cards are ordered newest mtime first."""
-    import time
     for i in range(3):
         folder = music_root / "library" / f"Artist{i}" / f"Album{i}"
         _write_flac(folder / "01.flac")

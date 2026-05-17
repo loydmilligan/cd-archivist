@@ -25,10 +25,13 @@ from pathlib import Path
 import pytest
 
 from archivist.service.app import LoopState
-from archivist.service.disc_card_builder import (
-    ReviewPriority,
-    build_kanban_state,
-)
+from archivist.service.disc_card_builder import build_kanban_state
+
+
+def _review_priority():
+    """Import lazily so suite collection succeeds before impl lands."""
+    from archivist.service.disc_card_builder import ReviewPriority
+    return ReviewPriority
 
 
 def _write_flac(path: Path, n_bytes: int = 1024) -> None:
@@ -247,6 +250,7 @@ def test_library_bucket_sorts_newest_first(music_root: Path) -> None:
 
 def test_review_priority_enum_values_are_stable() -> None:
     """Enum order is contractual — the UI keys chip labels off it."""
+    ReviewPriority = _review_priority()
     assert ReviewPriority.PARTIAL.value == 0
     assert ReviewPriority.WEAK_MATCH.value == 1
     assert ReviewPriority.NO_MATCH.value == 2
@@ -260,6 +264,7 @@ def test_review_card_carries_review_priority_attribute(
           payload=_base_source(
               "rev-1", beets_review_reason="weak match: score 0.32",
           ))
+    ReviewPriority = _review_priority()
     card = build_kanban_state(music_root).buckets["review"][0]
     assert card.review_priority == ReviewPriority.WEAK_MATCH.value
 

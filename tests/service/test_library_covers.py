@@ -182,8 +182,8 @@ def test_legacy_folder_never_resolves_library_cover(
     # Even if a coincidentally-named library cover existed, legacy never
     # looks it up.
     client = _make_client(inbox, library, tmp_path)
-    body = client.get(f"/library/CD_0001").text
-    assert f"/library/CD_0001/album-cover" not in body
+    body = client.get("/library/CD_0001").text
+    assert "/library/CD_0001/album-cover" not in body
 
 
 # -------- (e) both present → library cover wins ---------------------

@@ -13,7 +13,7 @@ Impl lands in Wave 2 (impl-drive-status-endpoint).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
