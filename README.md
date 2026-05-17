@@ -1,114 +1,86 @@
 # CD Archivist
 
-Automated archival pipeline for old commercial CDs, burned mix CDs, and unknown CD-Rs.
+Get every disc in the sleeve into Navidrome, without operator drudgery. One CM4 owns the optical drive, the USB webcam, the LED light panel, storage, and the FastAPI review surface. Insert a disc — it rips, photographs the label, fingerprints the audio, queries MusicBrainz, and either auto-applies the result into the library or parks the disc in a review bucket with enough context for a one-click manual rescue.
 
-The project uses:
+## How it works
 
-- A Power Mac G4 as the optical-drive ripping machine.
-- A Raspberry Pi as the camera, metadata, storage, review, and music-server machine.
-- A Pi camera or USB webcam aimed at the G4 CD tray.
-- Optional AI/OCR to capture handwritten CD labels and physical descriptions.
-- A structured library suitable for Navidrome or another self-hosted music server.
+Four stages. Every disc is a card that transits left-to-right:
 
-## Core idea
+1. **Capture** — cdparanoia rips audio to FLAC; the webcam shoots the disc label under LED illumination; ripper streams progress per track.
+2. **Beets ID** — automated fingerprint (AcoustID) + disc-id (libdiscid) lookup against MusicBrainz. No operator input expected.
+3. **Review** — beets couldn't auto-apply. Card surfaces the reason and the operator picks a beets candidate, pastes an MBID, supplies hints (Various Artists / Burned / per-track titles), or marks to skip.
+4. **In Library** — clean import. Navidrome scans hourly; Jellyfin shares the same mount.
 
-The CD itself is treated as a metadata artifact.
+Damaged discs stay in Capture with three rescue actions: process partial as-is, redo entire capture, or pick individual tracks to re-rip.
 
-For each disc, the system captures:
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component map, state machine, and API surface.
 
-- Disc photos
-- OCR text
-- AI-generated physical description
-- Rip metadata
-- Track files
-- Logs
-- Human review status
+## Quick start
 
-Example disc folder:
-
-```text
-CD_0042/
-  manifest.json
-  captures/
-    disc_front_001.jpg
-    disc_front_002.jpg
-  audio/
-    01 Track 01.m4a
-    02 Track 02.m4a
-  logs/
-    rip.log
-  review/
-    notes.md
-```
-
-## High-level flow
-
-```text
-Disc placed in G4 tray
-        ↓
-Pi detects tray/disc or receives trigger
-        ↓
-Pi captures burst of photos
-        ↓
-G4 rips CD and ejects
-        ↓
-Audio syncs to Pi
-        ↓
-Pi pairs newest rip with newest capture session
-        ↓
-AI/OCR creates metadata
-        ↓
-Disc lands in library or review queue
-```
-
-## Current status
-
-Scaffold only.
-
-## Development setup
+**Requirements:** CM4 with `cdparanoia`, `flac`, `libdiscid0`, `ffmpeg` installed; Docker running `beets` + `navidrome`; Tasmota LED panel reachable at `http://192.168.5.186`.
 
 ```bash
+git clone <repo>
+cd cd-archivist
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e '.[dev]'
 ```
 
-Run tests:
+**Run tests:**
 
 ```bash
 pytest
 ```
 
-Lint:
+**Run the daemon (development):**
 
 ```bash
-ruff check .
+python -m archivist
 ```
 
-## Important design principle
+**Deploy to the rig (CM4):**
 
-Do not block ripping on perfect metadata.
-
-The system should preserve context first, then allow cleanup later.
-
-```text
-Rip first.
-Capture visual evidence.
-Tag later.
-Review only exceptions.
+```bash
+ssh cm4
+cd ~/Projects/cd-archivist
+git pull --ff-only origin master
+pip install -e '.[dev]'
+systemctl --user restart cd-archivist
 ```
 
-## Safety
+**Access the UI:** `http://192.168.6.38:8228` on the local network, or `https://cda.mattmariani.com` via Cloudflare tunnel.
 
-This project should not require modifying or electrically tapping into the Power Mac G4. Prefer external sensing:
+## Repo layout
 
-- Pi camera tray detection
-- Limit switch
-- Magnetic reed switch
-- Manual capture button
+See [`docs/FILE-LAYOUT.md`](docs/FILE-LAYOUT.md) for the full canonical tree schema — what belongs where, what doesn't belong tracked, and legacy areas to audit.
 
-The G4 should primarily do:
-
-```text
-read CD → rip audio → eject → sync files
 ```
+archivist/          production code (drivers / pipeline / state_machine / service / models)
+tests/              pytest suite mirroring archivist/ subsystem-for-subsystem
+docs/               architecture, workflow, features, design, runbooks, sprint coordination
+CHANGELOG.md        release history (Keep-a-Changelog)
+ROADMAP.md          three-horizon backlog
+ISSUES.md           defect backlog
+```
+
+## Workflow & contributions
+
+See [`docs/WORKFLOW.md`](docs/WORKFLOW.md) for commit conventions, branching strategy, CM4 deployment sequence, documentation cadence, versioning, and the add/triage flows for ROADMAP and ISSUES.
+
+Short version: trunk-based on `master`; Conventional Commits (`feat/fix/docs/chore`); one commit per logical change; atomic commits with `Co-Authored-By` footer for agent work.
+
+## Status
+
+**Working today:**
+
+- Full rip pipeline: cdparanoia → FLAC → disc-id + AcoustID fingerprint → MusicBrainz lookup → beets auto-apply or review queue
+- 4-column kanban UI at `cda.mattmariani.com` with live polling, card-expand drawer, per-track segment bars, and operator-hints support
+- Damaged-disc rescue actions (process-partial, redo, rerip-tracks)
+- MusicBrainz candidates panel in the review UI (sprint-7)
+- Library view with album art, captures, and audio playback
+- systemd user service (`cd-archivist.service`) on the CM4
+
+**Pending / known gaps:** drive hardware failure (PLDS DVD-RW DA8A6SH — RMA in progress); operator-hints not yet wired into beets search; track-identification data source stubbed.
+
+See [`ROADMAP.md`](ROADMAP.md) for the forward backlog and [`ISSUES.md`](ISSUES.md) for the defect list.
