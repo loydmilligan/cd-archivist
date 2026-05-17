@@ -3,7 +3,7 @@ project: cd-archivist
 sprint: sprint-8
 created: 2026-05-17T00:00:00.000Z
 updated: 2026-05-17T00:00:00.000Z
-status: draft
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-8)
