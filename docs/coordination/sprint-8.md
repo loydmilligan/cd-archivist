@@ -210,7 +210,7 @@ status: draft
 
 #### B-1: Repo sanitization (lane-1)
 
-- [ ] {agent: lane-1, id: sanitize-repo-tree, depends: phase-a-activity-log}
+- [x] {agent: lane-1, id: sanitize-repo-tree, depends: phase-a-activity-log}
   Walk the entire repo tree using `docs/FILE-LAYOUT.md` (lane-3
   output) as the schema. Three passes:
   1. **Identify** — list every file that does NOT match the
@@ -325,7 +325,7 @@ status: draft
 
 #### B-1: Sanitization activity log (lane-1)
 
-- [ ] {agent: lane-1, id: phase-b1-activity-log}
+- [x] {agent: lane-1, id: phase-b1-activity-log}
   Append a single Phase-B-1 Activity Log entry to sprint-8.md when
   sanitize-repo-tree lands. Tick the [ ] box. Commit:
   `docs(sprint-8): phase-B-1 activity log`.
@@ -421,6 +421,71 @@ Single edit; non-breaking.
   — postponed again as not housekeeping-shaped).
 
 ## Activity Log
+
+### 2026-05-17 — lane-1 — Phase B-1 repo sanitization landed (1 task, 0 + 1 commits)
+
+Sanitization complete; the repo tree matches `docs/FILE-LAYOUT.md`.
+The substantive sanitization changes (file moves, deletes, .gitignore
+additions) were swept into lane-2's commit `71794e4`
+(`docs(sprint-8): ARCHITECTURE.md`) because my staged work was
+already in the index when lane-2 ran their commit in the same working
+tree — a known hazard of multi-lane execution from a shared checkout.
+The content is in the repo regardless; this log is the audit trail.
+
+**Moves landed (under commit `71794e4`):**
+- `docs/mashco-design-system-handoff/` → `docs/reference/mashco-design-system/`
+  (vendored design handoff; 26 files including the brand asset family,
+  cda-styles.css, the build prompt, and JSX reference components).
+- `docs/ripper-handoff-for-claude-code.md` →
+  `docs/reference/ripper-handoff-for-claude-code.md` (870-line
+  sprint-3/4 AI handoff doc, still load-bearing context for
+  `archivist/models/source.py` and the music-stack migration ops doc).
+- `tests/cd-arhcivist-screen.png` →
+  `docs/screenshots/cd-archivist-screen.png` (UI screenshot;
+  destination filename fixes the source typo).
+
+**Deletes landed (under commit `71794e4`):**
+- `docs/mbid-a359ebe6-…-19375630765.jpg` — MB cover-art testing
+  artifact; the canonical `mbid-*.jpg` anti-pattern per FILE-LAYOUT.
+- `docs/Mash Co. Design System.zip` — vendor archive; the extracted
+  handoff dir under `docs/reference/mashco-design-system/` is the
+  canonical reference, the zip is redundant and `*.zip` is now
+  globally `.gitignore`d.
+
+**`.gitignore` additions landed (under commit `71794e4`):**
+- `.playwright-mcp/` (Playwright MCP scratch dir).
+- `*.zip` (vendor archive bundles at any path).
+- `mbid-*.jpg`, `docs/*.png`, `docs/*.jpg` (cover-art / screenshot
+  strays at `docs/` root — screenshots belong under
+  `docs/screenshots/`, never at `docs/` root).
+- `.pytest_cache/`, `.ruff_cache/` (pinned explicitly per FILE-LAYOUT
+  'verify' note; previously untracked only via implicit patterns).
+
+**Verification:**
+- `git status` clean post-`71794e4`.
+- `python3 -m pytest -q`: 626 passed, 1 skipped (unchanged from
+  pre-sprint-8 baseline).
+- `ruff check .`: 12 pre-existing warnings in `archivist/` and
+  `tests/` (E402, F841, F401), unchanged from baseline — no Python
+  files were modified, consistent with
+  `D-housekeeping-no-code-changes`.
+- Tree visually matches `docs/FILE-LAYOUT.md`.
+
+**Deferred (out of scope this commit):**
+- `src/cd_archivist/`, `scripts/`, `hardware/`, `config/` —
+  `docs/FILE-LAYOUT.md` flags these as 'Legacy areas to audit'
+  separately from the current-violations table. Their disposition
+  is a follow-up pass (next-sprint candidate).
+- Stale path references in `archivist/models/source.py:3` and
+  `docs/operations/2026-05-15-music-stack-migration.md:4` that still
+  point at the old `docs/ripper-handoff-for-claude-code.md` location.
+  Per `D-housekeeping-no-code-changes` the `archivist/` comment is
+  untouched this sprint; the cross-tree path-reference sweep is a
+  next-sprint candidate (file in ISSUES.md when sprint-9 opens).
+- Sprint-7 coord-doc links to `docs/mashco-design-system-handoff/…`
+  are now stale. Per WORKFLOW.md §9 'Don't rebase old sprint docs',
+  these stay as historical pointers; readers who chase them know
+  to grep for the new path.
 
 ### 2026-05-17 — lane-3 — Phase A process foundation landed (7 tasks, 7 commits)
 
