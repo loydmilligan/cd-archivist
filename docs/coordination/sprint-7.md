@@ -152,7 +152,7 @@ status: draft
   rendered output use the `--<name>: <value>` custom-property pattern
   (no direct `width:` / `color:` / `display:` etc.).
 
-- [ ] {agent: lane-1, id: test-brand-mark}
+- [x] {agent: lane-1, id: test-brand-mark}
   Failing tests for the `cd/a` brand mark.
   `tests/service/test_brand_mark.py`: (a) the header renders a
   `<span class="cda-brand-mark">cd/a</span>` element; (b) `cda.css`
@@ -300,7 +300,7 @@ status: draft
   (d) `.rig-stats` is a single bordered group (visual unit,
   not 5 disconnected cells).
 
-- [ ] {agent: lane-3, id: test-rig-stats-endpoint}
+- [x] {agent: lane-3, id: test-rig-stats-endpoint}
   Failing tests for `GET /api/rig/stats`.
   `tests/service/test_rig_stats_endpoint.py`:
   (a) response shape `{"storage": {"used_bytes": int,
