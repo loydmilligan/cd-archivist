@@ -442,7 +442,7 @@ status: draft
 
 #### Bucket C — Card anatomy refactor (lane-2 / pipeline)
 
-- [ ] {agent: lane-2, depends: test-card-header-row, depends: test-status-line, depends: test-chip-row, depends: test-track-segments, id: impl-card-anatomy}
+- [x] {agent: lane-2, depends: test-card-header-row, depends: test-status-line, depends: test-chip-row, depends: test-track-segments, id: impl-card-anatomy}
   Refactor the card-render helper(s) in `kanban_page.py` (or split out
   to a new `archivist/service/card_render.py`) to emit the new anatomy:
   (1) `.card-head` with thumbnail + slug + title + artist line;
@@ -504,7 +504,7 @@ status: draft
   Add `.headlamp` elements to each column header in `kanban_page.py`
   with the per-stage modifier classes. CSS already in `cda.css`.
 
-- [ ] {agent: lane-2, depends: test-live-status-chip, depends: test-rig-stats-group, id: impl-header-live-and-stats}
+- [x] {agent: lane-2, depends: test-live-status-chip, depends: test-rig-stats-group, id: impl-header-live-and-stats}
   Implement the live-status chip + rig-stats group in the header.
   Pulse animation already in `cda.css`. Stats values read from
   `/api/kanban` (counts) + `/api/rig/stats` (storage + uptime —
@@ -535,14 +535,14 @@ status: draft
 
 #### Bucket F — Gates + transitions (lane-2)
 
-- [ ] {agent: lane-2, depends: test-destructive-gate, id: impl-destructive-gate}
+- [x] {agent: lane-2, depends: test-destructive-gate, id: impl-destructive-gate}
   Implement second-click confirmation in the kanban JS. Track
   per-button armed state with a 5s timeout; render the hint text
   below the destructive-action button group. Apply to: redo,
   rerip-tracks, skip, delete (and any future destructive actions
   via the `data-destructive="true"` attribute pattern).
 
-- [ ] {agent: lane-2, depends: test-transitions, id: impl-transitions}
+- [x] {agent: lane-2, depends: test-transitions, id: impl-transitions}
   Implement card transitions in the JS poll handler: diff the new
   kanban payload against the previous one; add `.card--entering`
   to new cards, `.card--leaving` to vanishing cards (then remove
@@ -660,17 +660,33 @@ pipeline lanes (lane-1 and lane-3 respectively). Per-lane file
 ownership in the Agent Roster prevents merge conflicts. Reverts to
 drivers-domain roster at sprint-8.
 
-### 2026-05-16 — D-track-identification-source — **OPEN** (lane-2 picks during impl-card-anatomy)
+### 2026-05-16 — D-track-identification-source — re-derive from `source.json.detected_metadata.tracks` gated on disc-id
 
-Open. The "outline on identified track segments" rule needs a
-data source for which tracks beets has identified. Options to
-resolve during impl: (a) parse `beets-import.log` for per-track
-"identified" lines; (b) query the beets web API
-(`http://cm4:8337/item/<id>`) per track; (c) re-derive from the
-candidates endpoint results. Lane-2 picks the simplest workable
-option and pins. If none are clean, stub the helper to return
-`set()` (all tracks unidentified) and ship the outline machinery
-without the data — sprint-8 wires the real source.
+**Resolved during impl-card-anatomy.** Picked option (c) —
+re-derive from what beets already wrote into source.json. A
+track is "identified" when:
+
+  1. `source.json.identifiers.musicbrainz_disc_id` is populated
+     (so beets had a disc-id to query against), AND
+  2. `source.json.detected_metadata.tracks[*]` carries a `title`
+     for that track-number.
+
+Rejected: (a) parse `beets-import.log` — verbose, brittle to
+beets-version voice; (b) query the beets web API per track —
+adds an HTTP dependency in the hot card-render path.
+
+Trade-off: partial beets runs surface as **partial identification**
+(some tracks get the outline, others don't) — which is the
+correct visual signal that "beets got partway there but not all
+the way." Sprint-8 may light up `recovered` (currently
+indistinguishable from `clean`) if drivers ships per-track recovery
+in DriveStatus.
+
+Pinned by `archivist/service/track_identification.py::
+identified_tracks(folder | source_json) -> set[int]`. The kanban
+renderer calls it from `_render_track_bar` with the already-loaded
+`card.source_json` so the helper does no disk reads on the hot
+path.
 
 ### 2026-05-16 — D-candidates-cache-ttl — TTL=300s, key=folder
 
@@ -764,6 +780,87 @@ sprint-8 planning. -->
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-16 — lane-2 (pipeline) — Wave 2 impls landed (4 tasks, 3 commits)
+
+All 4 lane-2 Wave 2 impl tasks shipped. Lane-2 test surface:
+42/42 pass (test_card_anatomy 27/27 + test_destructive_gate 7/7
++ test_transitions 8/8); 10/10 of the test_kanban_page.py
+live-status + rig-stats cases pass. The four open lane-2 boxes
+in the Wave 2 plan are ticked.
+
+**Bucket F — gates + transitions (2 tasks, 2 commits):**
+- `488bd5f` impl-destructive-gate — `data-destructive="true"` +
+  `data-action="<name>"` markers on redo + rerip-tracks (process
+  partial stays non-destructive); inline JS adds
+  `armDestructive`/`disarmDestructive`/`fireDestructive` with a
+  5000ms revert timer + document-level outside-click disarm;
+  `<p class="confirm-hint">` renders the build-prompt verbatim
+  text below the damaged-action button row.
+- `ea1bf6d` impl-transitions — cda.css gains @keyframes fadeIn /
+  fadeOut / flash-moss + `.card--entering` / `.card--leaving`
+  / `.flash-moss` (200ms var(--ease-out)). Inline JS adds
+  `diffKanban(payload)` reading `lastPayloadHashes` to emit the
+  three classes on diff (new this cycle → entering; payload-hash
+  changed → flash-moss; vanished → leaving, then DOM-removed
+  after 200ms).
+
+**Bucket C — card anatomy (1 commit covering 2 task IDs):**
+- `8c24e8a` impl-{card-anatomy, header-live-and-stats} — bundled
+  because the kanban-page-side wiring was already committed by
+  lane-1's `d35254e` impl-css-migration-brand-mark (which picked
+  up my staged helper functions alongside their CSS migration).
+  This commit lands:
+    * `archivist/service/status_line.py::format(card) -> str`
+      with the 5 per-state one-liners from the build prompt.
+      Numbers come from `loop_state.drive_status` surfaced on
+      `card.progress.drive_status` so the formatter stays
+      stateless.
+    * `archivist/service/track_identification.py::
+      identified_tracks(...) -> set[int]` re-deriving from
+      `source.json.detected_metadata.tracks` gated on
+      `musicbrainz_disc_id`. Resolves
+      **D-track-identification-source** as option (c) — picked
+      over log-parsing (a) and beets-web-API (b) because the
+      answer already lives in source.json.
+    * `disc_card_builder._active_capture_card` now builds an
+      in-flight `track_bar` (1..N-1 success, N in_progress,
+      N+1..total pending) AND attaches a `drive_status` dict to
+      `card.progress` for the status-line formatter.
+    * `DiscCard.top_candidate` is now loaded for library cards
+      too — drives the MUSICBRAINZ confirmed chip + the
+      `matched 0.97` status-line fragment.
+
+**Bucket E — header live + stats (covered in 8c24e8a):**
+- cda.css gains the .live-status chip + .dot--pulse-moss /
+  .dot--quiet variants + @keyframes pulse, plus the .rig-stats
+  bordered group + .stat-cell + .stat-value (mono w700) +
+  .stat-label.
+- kanban_page.py header bar (live-status + rig-stats blocks)
+  committed under lane-1's CSS-migration commit alongside the
+  card-anatomy helpers.
+- New JS `refreshRigStats()` fires once at load + every 60s
+  thereafter, populating Storage + Uptime from
+  `/api/rig/stats` (lane-3's endpoint). Storage + Uptime change
+  slowly so the cadence is decoupled from the kanban poll loop.
+
+**Open decisions resolved:**
+- D-track-identification-source → re-derive from
+  `source.json.detected_metadata.tracks` gated on
+  `musicbrainz_disc_id` (option c). Full rationale + trade-offs
+  in the Decision Log above.
+
+**Remaining test_kanban_page.py failures (NOT lane-2 domain):**
+A handful of sprint-6.5 inline-CSS assertions
+(test_column_carries_overflow_y_auto_in_css, test_column_header_
+is_position_sticky) became stale once lane-1 moved those rules
+from the inline `<style>` block into cda.css — they read the
+rule from the HTML response, which no longer contains it.
+test_page_renders_four_column_headers now fails because lane-3's
+voice pass renamed "In Library" → "In library" (sentence case).
+test_page_applies_mash_tokens asserts `/static/tokens.css` but
+lane-1's static mount lives at `/static/css/tokens.css`. All
+four are lane-1/lane-3 cleanup, not lane-2.
 
 ### 2026-05-16 — lane-1 — Wave 2 impls landed (4 tasks, critical path)
 
