@@ -667,6 +667,48 @@ document.querySelectorAll('.bucket-tab').forEach(btn => {
   });
 });
 
+// --- Transition machinery (sprint-7 impl-transitions) ------------------
+// Diff each kanban poll against the previous one. Cards new this
+// cycle get .card--entering (fadeIn 200ms). Cards vanished this
+// cycle get .card--leaving (fadeOut 200ms) then removed from the
+// DOM. Cards whose payload hash changed get .flash-moss (200ms
+// var(--moss) border pulse).
+const TRANSITION_MS = 200;
+let lastPayloadHashes = new Map(); // folder -> shallow hash
+function payloadHash(card) {
+  try { return JSON.stringify(card.source_json || {}); }
+  catch (_) { return ''; }
+}
+function diffKanban(payload) {
+  const seen = new Map();
+  for (const bucket of Object.values(payload.buckets || {})) {
+    for (const c of bucket) {
+      if (c.folder) seen.set(c.folder, payloadHash(c));
+    }
+  }
+  // Apply .card--entering to cards new this cycle.
+  for (const [folder, hash] of seen.entries()) {
+    const el = document.querySelector(`[data-card-id="${folder}"]`);
+    if (!el) continue;
+    if (!lastPayloadHashes.has(folder)) {
+      el.classList.add('card--entering');
+      setTimeout(() => el.classList.remove('card--entering'), TRANSITION_MS);
+    } else if (lastPayloadHashes.get(folder) !== hash) {
+      el.classList.add('flash-moss');
+      setTimeout(() => el.classList.remove('flash-moss'), TRANSITION_MS);
+    }
+  }
+  // Apply .card--leaving to cards present last cycle but absent now.
+  for (const folder of lastPayloadHashes.keys()) {
+    if (seen.has(folder)) continue;
+    const el = document.querySelector(`[data-card-id="${folder}"]`);
+    if (!el) continue;
+    el.classList.add('card--leaving');
+    setTimeout(() => { try { el.remove(); } catch (_) {} }, TRANSITION_MS);
+  }
+  lastPayloadHashes = seen;
+}
+
 // --- Adaptive polling ---------------------------------------------------
 function pollKanban() {
   fetch('/api/kanban')
@@ -674,6 +716,7 @@ function pollKanban() {
     .then(j => {
       const interval = j.active_rip ? POLL_ACTIVE : POLL_IDLE;
       setTimeout(pollKanban, interval);
+      diffKanban(j);
       // Refresh drive-status drawer body on each tick.
       const driveBody = document.querySelector(
         '[data-target="drive-status-body"]'
