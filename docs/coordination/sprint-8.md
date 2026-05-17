@@ -58,7 +58,7 @@ status: draft
 
 ### Phase A — Process foundation (lane-3, solo, gates Phase B)
 
-- [ ] {agent: lane-3, id: workflow-doc}
+- [x] {agent: lane-3, id: workflow-doc}
   Author `docs/WORKFLOW.md` (~250-400 lines). Section list:
   1. **Purpose & relationship to CLAUDE.md** — one paragraph;
      CLAUDE.md says HOW agents behave, WORKFLOW.md says HOW work
