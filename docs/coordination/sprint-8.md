@@ -120,7 +120,7 @@ status: draft
   work flows; CLAUDE.md governs HOW agents behave.`
   Commit: `docs(sprint-8): claude.md references workflow.md`.
 
-- [ ] {agent: lane-3, id: changelog-init}
+- [x] {agent: lane-3, id: changelog-init}
   Author `CHANGELOG.md` at the repo root in Keep-a-Changelog
   format (https://keepachangelog.com/en/1.1.0/). Sections:
   `[Unreleased]` (with Added / Changed / Deprecated / Removed /
