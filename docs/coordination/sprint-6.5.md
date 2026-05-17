@@ -316,7 +316,7 @@ status: draft
 
 #### Bucket A — Builder fixes (pipeline)
 
-- [ ] {agent: pipeline, depends: test-fix-phantom-audio, id: impl-fix-phantom-audio}
+- [x] {agent: pipeline, depends: test-fix-phantom-audio, id: impl-fix-phantom-audio}
   In `archivist/service/disc_card_builder.py`, change the
   directory walk so it iterates `{music_root}/{review,library,
   archive,failed,inbox}/` only at the **first** level — each
@@ -329,7 +329,7 @@ status: draft
   impl-fix-phantom-audio — stop treating disc subdirs as nested
   discs`.
 
-- [ ] {agent: pipeline, depends: test-per-bucket-sort, id: impl-per-bucket-sort}
+- [x] {agent: pipeline, depends: test-per-bucket-sort, id: impl-per-bucket-sort}
   Implement default sort per bucket per the test spec. Add a
   `ReviewPriority` enum
   (`PARTIAL=0, WEAK_MATCH=1, NO_MATCH=2, NO_ID_NO_TAGS=3`) and
@@ -339,7 +339,7 @@ status: draft
 
 #### Bucket B — Card UI evolution (pipeline)
 
-- [ ] {agent: pipeline, depends: test-card-state-evolution, id: impl-card-state-evolution}
+- [x] {agent: pipeline, depends: test-card-state-evolution, id: impl-card-state-evolution}
   In `archivist/service/kanban_page.py`, render the card-state
   evolution: outline classes on track-cell segments when
   identified; `chip--confirmed` vs `chip--asserted` classes on
@@ -350,7 +350,7 @@ status: draft
   damaged shadow). Pin Mash Co. token mapping in
   `D-card-evolution-tokens`.
 
-- [ ] {agent: pipeline, depends: test-expand-mechanic, id: impl-expand-mechanic}
+- [x] {agent: pipeline, depends: test-expand-mechanic, id: impl-expand-mechanic}
   Implement click + spacebar expand. New inline `<script
   type="module">` block in `kanban_page.py`. Click handler on
   `[data-card-id]` toggles `aria-expanded` and the associated
@@ -363,7 +363,7 @@ status: draft
   focused card · Tab — move between cards · Esc — collapse
   expanded card".
 
-- [ ] {agent: pipeline, depends: test-expanded-card-sections, id: impl-expanded-card-sections}
+- [x] {agent: pipeline, depends: test-expanded-card-sections, id: impl-expanded-card-sections}
   Render the three expanded-body sections (Hints, Manual Steps,
   Damaged-Disc Actions). Hints section reuses the
   operator-hints UI from sprint-6 `impl-operator-hints` (move
@@ -374,7 +374,7 @@ status: draft
   list) wired to the sprint-6 endpoints — only visible when
   the card is in damaged state.
 
-- [ ] {agent: pipeline, depends: test-collapsed-card-actions, id: impl-collapsed-card-actions}
+- [x] {agent: pipeline, depends: test-collapsed-card-actions, id: impl-collapsed-card-actions}
   Implement high-leverage collapsed-card buttons. For
   Capture-bucket damaged cards: "Process partial" + "Redo"
   buttons rendered in the collapsed body's `.card-actions` row.
@@ -387,7 +387,7 @@ status: draft
 
 #### Bucket C — Layout shell (pipeline)
 
-- [ ] {agent: pipeline, depends: test-header-bar, id: impl-header-bar}
+- [x] {agent: pipeline, depends: test-header-bar, id: impl-header-bar}
   Render the header per the test spec. Daemon-state dot derives
   from kanban payload (present = active; absent/error = stopped).
   Stats counts derive from `len(buckets.<name>)` and the
@@ -396,7 +396,7 @@ status: draft
   `NAVIDROME_URL`, `BEETS_WEB_URL` (default "" → button hidden
   if unset). No alert strip.
 
-- [ ] {agent: pipeline, depends: test-right-drawer, id: impl-right-drawer}
+- [x] {agent: pipeline, depends: test-right-drawer, id: impl-right-drawer}
   Implement the right-side drawer with two body templates:
   drive-status (default, no card selected) and card-detail
   (when a card is clicked). The card-click handler from
@@ -411,13 +411,13 @@ status: draft
   `/review/<folder>/disc-photo.jpg` (re-use existing static
   routes). Drawer width: 420px desktop; full-screen on mobile.
 
-- [ ] {agent: pipeline, depends: test-bottom-drawer, id: impl-bottom-drawer}
+- [x] {agent: pipeline, depends: test-bottom-drawer, id: impl-bottom-drawer}
   Implement the bottom log drawer. Collapsed default height
   32px (just the toggle bar); expanded 240px. State persisted
   to localStorage. When expanded, polls `/api/logs/tail` on
   the kanban cadence.
 
-- [ ] {agent: pipeline, depends: test-column-scroll-badges, id: impl-column-scroll-badges}
+- [x] {agent: pipeline, depends: test-column-scroll-badges, id: impl-column-scroll-badges}
   Implement column independent scroll + sticky headers +
   count badges. Adjust the kanban grid to use
   `grid-template-rows: auto 1fr` per column so the header is
@@ -425,7 +425,7 @@ status: draft
   `len(buckets.<name>)` server-side and render in the column
   header markup.
 
-- [ ] {agent: pipeline, depends: test-mobile-bucket-tabs, id: impl-mobile-bucket-tabs}
+- [x] {agent: pipeline, depends: test-mobile-bucket-tabs, id: impl-mobile-bucket-tabs}
   CSS-driven mobile breakpoint at `max-width: 720px`. Bucket-tabs
   segmented control renders below the header on mobile; tab
   selection persisted in localStorage. Pin breakpoint in
@@ -433,12 +433,12 @@ status: draft
 
 #### Bucket D — Endpoints (pipeline)
 
-- [ ] {agent: pipeline, depends: test-logs-tail-endpoint, id: impl-logs-tail-endpoint}
+- [x] {agent: pipeline, depends: test-logs-tail-endpoint, id: impl-logs-tail-endpoint}
   Add `GET /api/logs/tail` to `archivist/service/app.py`. Reads
   `ARCHIVIST_LOG_PATH` env (already used by the daemon), uses
   efficient seek-from-end if file is large.
 
-- [ ] {agent: pipeline, depends: test-drive-status-endpoint, id: impl-drive-status-endpoint}
+- [x] {agent: pipeline, depends: test-drive-status-endpoint, id: impl-drive-status-endpoint}
   Add `GET /api/drive/status` to `archivist/service/app.py`.
   Reads from `loop_state.drive_status` (populated by drivers'
   `impl-drive-status-snapshot`). Returns the contract shape per
@@ -446,7 +446,7 @@ status: draft
 
 #### Bucket E — Adaptive polling (pipeline)
 
-- [ ] {agent: pipeline, depends: test-adaptive-polling, id: impl-adaptive-polling}
+- [x] {agent: pipeline, depends: test-adaptive-polling, id: impl-adaptive-polling}
   Add `active_rip: bool` to the `/api/kanban` response payload.
   Update the inline JS poll loop to read `active_rip` and
   switch interval between 1000ms and 5000ms accordingly. The
@@ -525,35 +525,84 @@ Settled in brainstorm K1.2 sub-brainstorm (header = H-D minus alerts).
 Wordmark left, compact stats center, drawer-toggle + nav buttons right.
 Alert strip deferred to sprint-7.
 
-### 2026-05-16 — D-card-evolution-tokens — **OPEN** (pipeline picks during impl-card-state-evolution)
+### 2026-05-16 — D-card-evolution-tokens — confirmed = --ok glow; asserted = dashed --line; damaged = --meat-red shadow
 
-Open. Pipeline locks the exact Mash Co. token mapping for
-`chip--confirmed` (lean `--ok`-derived background or border-glow?),
-`chip--asserted` (lean `--line` dashed border vs `--meat-red` accent?),
-and `card--damaged` (red shadow strength + spread). Pin chosen
-values when the impl lands.
+**Resolved during impl-card-state-evolution.** Final mapping:
 
-### 2026-05-16 — D-default-sort-v1 — **OPEN** (pipeline pins during impl-per-bucket-sort)
+- `chip--confirmed` (system-confirmed metadata): background
+  `var(--ok)`, text `var(--bg)`, `box-shadow: 0 0 4px var(--ok)`.
+  Loud — beets resolved this and we trust it.
+- `chip--asserted` (operator-asserted only, not confirmed):
+  background `transparent`, `border: 1px dashed var(--line)`,
+  text `var(--ink)`. Quiet — the operator typed this; beets has
+  not yet agreed.
+- `card[data-state="damaged"]` (partial or rip_success=False):
+  left-border switches to `--meat-red`, plus
+  `box-shadow: 0 0 12px 2px rgba(255, 74, 74, 0.35)`. Visible
+  across the entire kanban without forcing a separate column.
+- `track-cell--identified` (beets identified this track):
+  `outline: 1px solid var(--ok)`. Subtle — the per-track bar
+  stays scannable.
 
-Open. Per-bucket sort algorithm is specified in the test; pipeline
-locks the `ReviewPriority` enum order and tie-breaker fields when
-the impl lands.
+Selected via `data-*` attributes (not class names) so the test
+suite can assert class-name absence on unmatched cards via plain
+string-search.
 
-### 2026-05-16 — D-accept-top-candidate-threshold — **OPEN** (pipeline confirms during impl-collapsed-card-actions)
+### 2026-05-16 — D-default-sort-v1 — ReviewPriority enum + per-bucket tie-breakers
 
-Open. Sprint-6.5 proposes `0.85` for the "Accept top match" button
-threshold; pipeline confirms or adjusts based on real review-bucket
-data and pins.
+**Resolved during impl-per-bucket-sort.** Final algorithm:
 
-### 2026-05-16 — D-mobile-breakpoint-v1 — **OPEN** (pipeline confirms during impl-mobile-bucket-tabs)
+- **Capture:** active-rip overlay pinned at index 0; then damaged
+  tier (`partial=True OR rip_success=False`) newest-mtime-first;
+  then healthy tier newest-mtime-first.
+- **Beets ID:** newest-mtime-first (bucket is empty pending
+  sprint-7 work; ordering is a pre-commitment).
+- **Review:** `ReviewPriority` IntEnum `(PARTIAL=0, WEAK_MATCH=1,
+  NO_MATCH=2, NO_ID_NO_TAGS=3)` ascending; mtime-descending
+  within priority tier. Priority derived from
+  `status.beets_review_reason` (preferred) → tail of
+  `beets-import.log` → presence of `musicbrainz_disc_id`.
+- **Library:** newest-mtime-first, capped at
+  `KANBAN_LIBRARY_RETENTION` (default 20).
 
-Open. Sprint-6.5 proposes `max-width: 720px` as the mobile breakpoint;
-pipeline confirms or adjusts and pins.
+Enum values are contractual — the UI keys chip labels off them.
 
-### 2026-05-16 — D-adaptive-polling-cadence — **OPEN** (pipeline pins during impl-adaptive-polling)
+### 2026-05-16 — D-accept-top-candidate-threshold — 0.85
 
-Open. Sprint-6.5 proposes 1000ms during active rip / 5000ms idle;
-pipeline confirms based on perceived CM4 load and pins.
+**Resolved during impl-collapsed-card-actions.** The "Accept top
+match" collapsed-card button surfaces when
+`top_candidate.score >= 0.85`. Below threshold the button is
+absent — the operator must expand and review manually. The
+threshold itself is also enforced server-side in
+`POST /api/disc/<folder>/accept-top-candidate` (409 below
+threshold) so the UI gating can't be bypassed by a stale page.
+
+Sprint-7 may tighten or loosen after real review-bucket data
+accumulates; the value lives in `ACCEPT_TOP_THRESHOLD` and
+the corresponding endpoint check.
+
+### 2026-05-16 — D-mobile-breakpoint-v1 — max-width: 720px
+
+**Resolved during impl-mobile-bucket-tabs.** Single CSS breakpoint
+at `max-width: 720px` (`MOBILE_BREAKPOINT_PX`). Below the breakpoint
+the kanban collapses to one column; the `.bucket-tabs` segmented
+control becomes visible; only the active-mobile column renders.
+Selection persists under `cd-archivist:mobile-bucket` localStorage
+key. Default tab is "capture".
+
+### 2026-05-16 — D-adaptive-polling-cadence — 1000ms active / 5000ms idle
+
+**Resolved during impl-adaptive-polling.** Two cadences exposed
+via meta tags (`kanban-poll-ms-active` / `kanban-poll-ms-idle`)
+so they can be tuned without code changes. JS reads `active_rip`
+from each `/api/kanban` response and schedules the next setTimeout
+with the matching interval. On fetch error, falls back to the
+idle interval to avoid hammering a struggling daemon.
+
+Rationale: 1s during an active rip keeps the drive-status drawer
+fresh enough that the operator doesn't second-guess the photo
+capture window (~2s for the manual-eject step), while 5s idle
+keeps the loaded CM4 from grinding when nothing is happening.
 
 ### 2026-05-16 — D-drive-status-snapshot-schema — RLock + state-transition mapping
 
@@ -686,6 +735,70 @@ sprint-7 planning. -->
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — pipeline — Wave 2 impls landed (14 tasks, 4 commits)
+
+All 14 pipeline-owned Wave 2 impl tasks shipped. Full suite
+497/497 green; ruff clean on touched files. Five OPEN decisions
+RESOLVED inline (D-card-evolution-tokens, D-default-sort-v1,
+D-accept-top-candidate-threshold, D-mobile-breakpoint-v1,
+D-adaptive-polling-cadence).
+
+Commits (atomic per scope; multi-task commits where the work
+shared a single file):
+
+- `6f1cec2` impl-{fix-phantom-audio, per-bucket-sort} —
+  builder rewrite. `_iter_disc_folders` takes an explicit
+  `depth` kwarg (library=2, everything else=1); audio-count
+  flac-fallback prefers `audio/*.flac` (canonical) before the
+  root-level (legacy). `ReviewPriority` IntEnum + DiscCard.
+  review_priority + top_candidate added. `_sort_review`
+  by (priority, -mtime); `_sort_capture` pins active rip,
+  then damaged tier newest, then healthy newest. Capture
+  bucket now walks failed/ + inbox/ at depth=1.
+- `53a9d10` impl-logs-tail-endpoint — `GET /api/logs/tail`
+  with limit clamping [1, 2000], `truncated` flag, 404 on
+  missing log, accept-and-ignore future filter params.
+  Reads `ARCHIVIST_LOG_PATH` env (falls back to daemon's
+  log_path).
+- `b6c17b0` impl-drive-status-endpoint — `GET /api/drive/status`
+  reads `loop_state.drive_status` (populated by drivers'
+  `impl-drive-status-snapshot`); default-idle when attribute
+  is missing.
+- `5b7ba8a` impl-{card-state-evolution, expand-mechanic,
+  expanded-card-sections, collapsed-card-actions, header-bar,
+  right-drawer, bottom-drawer, column-scroll-badges,
+  mobile-bucket-tabs, adaptive-polling} — full
+  `archivist/service/kanban_page.py` rewrite (705
+  insertions / 88 deletions) + two new endpoints in app.py
+  (`POST /api/disc/<folder>/accept-top-candidate`,
+  `GET /api/disc/<folder>/log/tail`) + the `active_rip`
+  field on `/api/kanban`. Ten task IDs landed together
+  because they all render to the same HTML document.
+
+Two sprint-6 tests updated in the kanban-page commit for the
+contract evolution: `test_kanban_response_shape` now accepts the
+new top-level `active_rip` field, and
+`test_page_carries_poll_interval_meta_tag` accepts either the
+legacy single `kanban-poll-ms` or the new adaptive pair
+(`-active`/`-idle`).
+
+The five OPEN decisions resolved during impl with full
+rationale recorded in the Decision Log above:
+- D-card-evolution-tokens — confirmed=`--ok` glow, asserted=dashed
+  `--line`, damaged=`--meat-red` shadow; styled via `data-*`
+  attributes so class-name absence assertions hold.
+- D-default-sort-v1 — ReviewPriority `(PARTIAL=0, WEAK_MATCH=1,
+  NO_MATCH=2, NO_ID_NO_TAGS=3)` + per-bucket tie-breakers.
+- D-accept-top-candidate-threshold — `0.85`, enforced both client-
+  and server-side.
+- D-mobile-breakpoint-v1 — `max-width: 720px`.
+- D-adaptive-polling-cadence — `1000ms` active / `5000ms` idle,
+  meta-tag-driven so operators can re-tune without code changes.
+
+Wave 3 queue: operator-driven `smoke-deploy-and-validate` on the
+CM4. This also closes sprint-5's `musicbrainz_disc_id` real-rig
+validation thread.
 
 ### 2026-05-16 — drivers — Wave 2 impl-drive-status-snapshot landed (1 task, 1 commit)
 
