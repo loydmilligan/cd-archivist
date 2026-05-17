@@ -6,7 +6,7 @@ Three routes:
   GET /api/log     — text/plain tail of the pipeline log (deque, cap 1000)
 
 The HTML lives inline (`_PAGE_HTML`). Styling comes from the vendored
-`archivist/service/static/tokens.css` (Mash Co. v0.1.0) mounted at
+`archivist/service/static/css/tokens.css` (Mash Co. v0.1.0) mounted at
 `/static`, with page-specific overrides in an inline <style> block.
 
 Mash Co. voice/visual contract enforced here:
@@ -22,6 +22,8 @@ from __future__ import annotations
 import html
 import logging
 import re
+import shutil
+import time as _time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -45,6 +47,47 @@ logger = logging.getLogger(__name__)
 _LOG_LINES_CAP = 1000
 _LOG_LINES_DEFAULT = 200
 _STATIC_DIR = Path(__file__).parent / "static"
+# Sprint-7 / impl-rig-stats-endpoint: process-start monotonic clock for
+# uptime. Captured at module import so the elapsed seconds reported by
+# /api/rig/stats reflects how long this daemon process has been alive.
+_PROCESS_START_MONOTONIC = _time.monotonic()
+
+
+def _format_bytes_short(n: int) -> str:
+    """Mono-shorthand byte formatter — `'26.4 GB'`, `'47 MB'`, `'512 B'`.
+
+    Single decimal place above MB to keep the rig-stats group narrow.
+    """
+    abs_n = abs(int(n))
+    if abs_n < 1024:
+        return f"{abs_n} B"
+    kb = abs_n / 1024
+    if kb < 1024:
+        return f"{kb:.1f} KB"
+    mb = kb / 1024
+    if mb < 1024:
+        return f"{mb:.1f} MB"
+    gb = mb / 1024
+    if gb < 1024:
+        return f"{gb:.1f} GB"
+    return f"{gb / 1024:.1f} TB"
+
+
+def _format_uptime_short(seconds: int) -> str:
+    """Mono-shorthand uptime — `'1d 22h'`, `'4h 12m'`, `'47m'`, `'9s'`."""
+    s = max(0, int(seconds))
+    days, rem = divmod(s, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m"
+    return f"{secs}s"
+
+
 _DISC_ID_RE = re.compile(r"^CD_\d{4}$")
 # Sprint-4: also accept the new shape `YYYY-MM-DD_HHMM_disc-NNNNNN`.
 _NEW_FOLDER_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}_disc-\d{6}$")
@@ -223,6 +266,30 @@ def create_app(
                 return PlainTextResponse("")
             with log.open("r", encoding="utf-8", errors="replace") as f:
                 return PlainTextResponse("".join(deque(f, maxlen=limit)))
+
+    if music_root is not None:
+        @app.get("/api/rig/stats")
+        def api_rig_stats() -> JSONResponse:
+            """Sprint-7 / impl-rig-stats-endpoint. Storage from
+            `shutil.disk_usage(music_root)`; uptime from the
+            module-init monotonic timestamp. Human strings follow
+            the build-prompt mono-shorthand rules."""
+            usage = shutil.disk_usage(music_root)
+            seconds = int(_time.monotonic() - _PROCESS_START_MONOTONIC)
+            return JSONResponse({
+                "storage": {
+                    "used_bytes": int(usage.used),
+                    "total_bytes": int(usage.total),
+                    "human": (
+                        f"{_format_bytes_short(usage.used)} / "
+                        f"{_format_bytes_short(usage.total)}"
+                    ),
+                },
+                "uptime": {
+                    "seconds": seconds,
+                    "human": _format_uptime_short(seconds),
+                },
+            })
 
     @app.get("/api/log")
     def api_log(lines: int = Query(_LOG_LINES_DEFAULT, ge=0)) -> PlainTextResponse:
@@ -961,9 +1028,9 @@ _PAGE_HTML = r"""<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>cd-archivist</title>
-  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
   <style>
-    /* Page-specific layout. Tokens come from /static/tokens.css. */
+    /* Page-specific layout. Tokens come from /static/css/tokens.css. */
     html, body {
       margin: 0;
       background: var(--bg);
@@ -1241,7 +1308,7 @@ _PAGE_HTML = r"""<!doctype html>
 """
 
 
-# Shared library-page styles. Reuses Mash Co. tokens from /static/tokens.css.
+# Shared library-page styles. Reuses Mash Co. tokens from /static/css/tokens.css.
 _LIBRARY_STYLES = r"""
 <style>
   html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
@@ -1340,7 +1407,7 @@ _LIBRARY_LIST_HTML = r"""<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>cd-archivist · library</title>
-  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
 """ + _LIBRARY_STYLES + r"""
 </head>
 <body>
@@ -1367,7 +1434,7 @@ _LIBRARY_DETAIL_HTML = r"""<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>cd-archivist · {{DISC_ID}}</title>
-  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
 """ + _LIBRARY_STYLES + r"""
 </head>
 <body>

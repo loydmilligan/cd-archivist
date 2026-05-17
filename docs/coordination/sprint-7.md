@@ -511,7 +511,7 @@ status: draft
   fetched once per minute since these change slowly). Commit:
   `feat(sprint-7): impl-header-live-and-stats`.
 
-- [ ] {agent: lane-3, depends: test-rig-stats-endpoint, id: impl-rig-stats-endpoint}
+- [x] {agent: lane-3, depends: test-rig-stats-endpoint, id: impl-rig-stats-endpoint}
   Implement `GET /api/rig/stats` in `archivist/service/app.py`.
   Uses `shutil.disk_usage` and a module-init `time.monotonic`
   start. Module-init time captured in `app.py` at startup.
