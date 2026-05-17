@@ -310,22 +310,34 @@ def _render_manual_steps_section(card: DiscCard) -> str:
     )
 
 
+_CONFIRM_HINT_TEXT = (
+    "Destructive actions require a second click to confirm. "
+    "The partial flac files stay on disk until you choose."
+)
+
+
 def _render_damaged_actions_section(card: DiscCard) -> str:
     folder = _esc(card.folder)
     return (
         '<section class="card-section" data-section="damaged-actions">'
         '<h4 class="section-title">damaged-disc actions</h4>'
         '<div class="card-actions">'
+        # Process partial is non-destructive (moves data forward); no gate.
         '<button type="button" class="btn btn--accent" '
         f'data-endpoint="/api/disc/{folder}/process-partial">'
         'Process partial</button>'
+        # Redo deletes the partial folder — gated.
         '<button type="button" class="btn" '
+        f'data-destructive="true" data-action="redo" '
         f'data-endpoint="/api/disc/{folder}/redo?confirm=true">'
         'Redo</button>'
+        # Rerip-tracks re-runs cdparanoia over a track subset — gated.
         '<button type="button" class="btn" '
+        f'data-destructive="true" data-action="rerip-tracks" '
         f'data-endpoint="/api/disc/{folder}/rerip-tracks">'
         'Pick tracks to re-rip</button>'
         '</div>'
+        f'<p class="confirm-hint">{_esc(_CONFIRM_HINT_TEXT)}</p>'
         '</section>'
     )
 
@@ -502,6 +514,42 @@ const POLL_ACTIVE = parseInt(
 const POLL_IDLE = parseInt(
   document.querySelector('meta[name="kanban-poll-ms-idle"]').content, 10
 );
+// Sprint-7 impl-destructive-gate: arm window is 5000ms.
+const CONFIRM_TIMEOUT = 5000;
+
+// --- Destructive-action gate -------------------------------------------
+// First click on a [data-destructive="true"] button arms it (label
+// swaps to `confirm: <action>`, class gains .btn--confirm-armed).
+// Second click within CONFIRM_TIMEOUT fires the POST. Click elsewhere
+// or wait it out → revert.
+let armedDestructive = null;
+let armedTimer = null;
+
+function disarmDestructive() {
+  if (!armedDestructive) return;
+  armedDestructive.btn.classList.remove('btn--confirm-armed');
+  armedDestructive.btn.textContent = armedDestructive.originalLabel;
+  if (armedTimer) { clearTimeout(armedTimer); armedTimer = null; }
+  armedDestructive = null;
+}
+
+function armDestructive(btn) {
+  disarmDestructive();
+  const action = btn.getAttribute('data-action') || 'action';
+  armedDestructive = { btn, originalLabel: btn.textContent };
+  btn.classList.add('btn--confirm-armed');
+  btn.textContent = `confirm: ${action}`;
+  armedTimer = setTimeout(disarmDestructive, CONFIRM_TIMEOUT);
+}
+
+async function fireDestructive(btn) {
+  const endpoint = btn.getAttribute('data-endpoint');
+  disarmDestructive();
+  if (!endpoint) return;
+  try {
+    await fetch(endpoint, { method: 'POST' });
+  } catch (_) { /* swallow — next poll surfaces state */ }
+}
 
 // One-at-a-time expand state. Spacebar handler reads/writes this.
 let currentlyExpanded = null;
@@ -521,6 +569,20 @@ function toggleCard(card) {
 }
 
 document.addEventListener('click', (e) => {
+  // Destructive-action gate: arm on first click, fire on second.
+  const destructive = e.target.closest('[data-destructive="true"]');
+  if (destructive) {
+    if (armedDestructive && armedDestructive.btn === destructive) {
+      fireDestructive(destructive);
+    } else {
+      armDestructive(destructive);
+    }
+    return;
+  }
+  // Outside-click reverts any armed destructive button.
+  if (armedDestructive) {
+    disarmDestructive();
+  }
   const card = e.target.closest('[data-card-id]');
   if (card && !e.target.closest('button, a, input, label')) {
     toggleCard(card);
@@ -778,7 +840,29 @@ def render_kanban_page(music_root: Path, loop_state) -> str:
         f'<meta name="kanban-poll-ms-active" content="{POLL_MS_ACTIVE}">'
         f'<meta name="kanban-poll-ms-idle" content="{POLL_MS_IDLE}">'
         '<title>cd-archivist · kanban</title>'
-        '<link rel="stylesheet" href="/static/tokens.css">'
+        '<link rel="icon" type="image/png" sizes="32x32" '
+        'href="/static/img/brand/cd-a-favicon-32x32.png">'
+        '<link rel="icon" type="image/png" sizes="64x64" '
+        'href="/static/img/brand/cd-a-favicon-64x64.png">'
+        '<link rel="icon" type="image/png" sizes="256x256" '
+        'href="/static/img/brand/cd-a-favicon-256x256.png">'
+        '<link rel="apple-touch-icon" sizes="180x180" '
+        'href="/static/img/brand/cd-a-apple-touch-180.png">'
+        '<link rel="manifest" href="/static/manifest.webmanifest">'
+        '<meta name="theme-color" content="#07090c">'
+        '<link rel="preconnect" href="https://fonts.googleapis.com">'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        '<link rel="stylesheet" '
+        'href="https://fonts.googleapis.com/css2'
+        '?family=Bricolage+Grotesque:wght@600;800&display=swap">'
+        '<link rel="stylesheet" '
+        'href="https://fonts.googleapis.com/css2'
+        '?family=Inter+Tight:wght@400;500;700&display=swap">'
+        '<link rel="stylesheet" '
+        'href="https://fonts.googleapis.com/css2'
+        '?family=JetBrains+Mono:wght@400;500&display=swap">'
+        '<link rel="stylesheet" href="/static/css/tokens.css">'
+        '<link rel="stylesheet" href="/static/css/cda.css">'
         f'<style>{_STYLES}</style>'
         '</head>'
         '<body>'
