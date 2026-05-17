@@ -11,6 +11,7 @@ Impl lands in Wave 2 (impl-right-drawer).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -189,3 +190,97 @@ def test_card_click_handler_opens_right_drawer_in_js(
     assert "right-drawer" in html
     # The handler reads from the kanban payload to populate detail.
     assert "card-detail" in html
+
+
+# =========================================================================
+# Sprint-7 Bucket E — test-drawer-mode-toggles (lane-1)
+# =========================================================================
+#
+# Per the build prompt the right drawer has two modes (drive / card)
+# swapped explicitly by header nav buttons. Sprint-6.5 toggled mode
+# implicitly via card click; sprint-7 adds explicit toggles with
+# aria-pressed so the operator can flip between drive-status and the
+# last-selected card without re-clicking a card.
+#
+# Wave 2 impl: `impl-drawer-mode-toggles` (lane-1).
+
+
+def test_header_nav_has_drawer_drive_toggle(client: TestClient) -> None:
+    html = client.get("/").text
+    # The drive-mode toggle button lives in the header nav and uses
+    # the `.drawer-toggle--drive` modifier class plus an aria-pressed
+    # attribute that JS flips between "true" and "false".
+    assert "drawer-toggle--drive" in html, (
+        "header nav missing `.drawer-toggle--drive` button"
+    )
+    m = re.search(
+        r'<button[^>]*\bdrawer-toggle--drive\b[^>]*>',
+        html,
+    )
+    assert m is not None, (
+        "expected a <button> element carrying class drawer-toggle--drive"
+    )
+    assert "aria-pressed" in m.group(0), (
+        "drawer-toggle--drive button must carry aria-pressed"
+    )
+
+
+def test_header_nav_has_drawer_card_toggle(client: TestClient) -> None:
+    html = client.get("/").text
+    assert "drawer-toggle--card" in html, (
+        "header nav missing `.drawer-toggle--card` button"
+    )
+    m = re.search(
+        r'<button[^>]*\bdrawer-toggle--card\b[^>]*>',
+        html,
+    )
+    assert m is not None, (
+        "expected a <button> element carrying class drawer-toggle--card"
+    )
+    assert "aria-pressed" in m.group(0), (
+        "drawer-toggle--card button must carry aria-pressed"
+    )
+
+
+def test_drawer_toggles_default_aria_pressed_state(
+    client: TestClient,
+) -> None:
+    """At first render no card is selected, so drive-mode is active —
+    drive-toggle aria-pressed=\"true\" and card-toggle aria-pressed=\"false\"."""
+    html = client.get("/").text
+    drive_m = re.search(
+        r'<button[^>]*\bdrawer-toggle--drive\b[^>]*>', html,
+    )
+    card_m = re.search(
+        r'<button[^>]*\bdrawer-toggle--card\b[^>]*>', html,
+    )
+    assert drive_m is not None and card_m is not None
+    assert 'aria-pressed="true"' in drive_m.group(0), (
+        "drive-toggle should start aria-pressed=\"true\" (default mode)"
+    )
+    assert 'aria-pressed="false"' in card_m.group(0), (
+        "card-toggle should start aria-pressed=\"false\" with no selection"
+    )
+
+
+def test_drawer_toggle_click_handlers_referenced_in_js(
+    client: TestClient,
+) -> None:
+    """The kanban JS module must wire click handlers for both toggles.
+    The drive-toggle clears the selected card and swaps the drawer
+    body to drive-mode; the card-toggle re-opens the last-selected
+    card (or no-ops when none was ever selected this session)."""
+    html = client.get("/").text
+    # Both selector strings appear in the JS source.
+    assert ".drawer-toggle--drive" in html, (
+        "JS missing querySelector for `.drawer-toggle--drive`"
+    )
+    assert ".drawer-toggle--card" in html, (
+        "JS missing querySelector for `.drawer-toggle--card`"
+    )
+    # The card-toggle behavior depends on a stored last-selected ref —
+    # JS source must reference it by a stable name.
+    assert "lastSelectedCard" in html or "last_selected_card" in html, (
+        "JS missing `lastSelectedCard` state for the card-toggle re-open "
+        "behavior"
+    )
