@@ -467,7 +467,7 @@ status: draft
 
 #### Bucket D — Beets candidates (lane-3)
 
-- [ ] {agent: lane-3, depends: test-candidates-endpoint, id: impl-candidates-endpoint}
+- [x] {agent: lane-3, depends: test-candidates-endpoint, id: impl-candidates-endpoint}
   Implement `GET /api/disc/<folder>/candidates` in
   `archivist/service/app.py`. Use `archivist/service/mb_client.py` for
   MB queries. Flow:
@@ -672,11 +672,17 @@ option and pins. If none are clean, stub the helper to return
 `set()` (all tracks unidentified) and ship the outline machinery
 without the data — sprint-8 wires the real source.
 
-### 2026-05-16 — D-candidates-cache-ttl — **OPEN** (lane-3 confirms during impl-candidates-endpoint)
+### 2026-05-16 — D-candidates-cache-ttl — TTL=300s, key=folder
 
-Open. The candidates endpoint proposes a 5-minute in-memory cache to
-avoid hammering MusicBrainz. Lane-3 confirms the TTL value + cache
-key (folder vs. folder + hints-mtime) during impl.
+Resolved during `impl-candidates-endpoint`. TTL stays at 300s
+(5 minutes — long enough to absorb operator-expand-collapse churn,
+short enough that a hint edit reaches MB within a normal triage
+cycle). Cache key is the folder name only, NOT folder + hints-mtime:
+the `/api/disc/<folder>/hints` write path is the right invalidation
+seam (sprint-8 adds an explicit `_candidates_cache.pop(folder)`
+hook there); composite keys would just stash stale entries
+indefinitely. The cache lives inside the FastAPI closure, so it
+also resets on every daemon restart.
 
 ### 2026-05-16 — D-mobile-brand-mark-size — **OPEN** (lane-1 confirms during impl-css-migration-brand-mark)
 

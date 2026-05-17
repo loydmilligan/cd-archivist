@@ -200,6 +200,93 @@ def create_app(
         from archivist.service.damaged_disc import mount_damaged_disc_routes
         mount_damaged_disc_routes(app, music_root=music_root)
 
+        # Sprint-7 / impl-candidates-endpoint. D-candidates-source-
+        # priority: (1) musicbrainz_disc_id lookup, prepended at score
+        # 1.0; (2) AcoustID fingerprint lookup; (3) metadata search by
+        # operator_hints.artist|album. Dedupe by MBID, sort desc, top 5.
+        # D-candidates-cache-ttl: TTL=300s, key=folder name only — hints
+        # mtime is intentionally NOT part of the key because hint edits
+        # land via /api/disc/<folder>/hints which already invalidates
+        # the cache by call site (next request after an edit re-runs).
+        _CANDIDATES_CACHE_TTL_SECONDS = 300
+        _candidates_cache: dict[str, tuple[float, dict]] = {}
+
+        def _find_disc_folder(folder: str) -> Path | None:
+            from archivist.service.disc_card_builder import _iter_disc_folders
+            for sub in ("review", "inbox", "failed", "archive"):
+                for d in _iter_disc_folders(music_root / sub, depth=1):
+                    if d.name == folder:
+                        return d
+            return None
+
+        @app.get("/api/disc/{folder}/candidates")
+        def api_disc_candidates(folder: str) -> JSONResponse:
+            import json as _json
+
+            target = _find_disc_folder(folder)
+            if target is None:
+                raise HTTPException(status_code=404, detail=f"folder not found: {folder}")
+
+            now = _time.monotonic()
+            cached = _candidates_cache.get(folder)
+            if cached is not None and (now - cached[0]) < _CANDIDATES_CACHE_TTL_SECONDS:
+                return JSONResponse(cached[1])
+
+            source: dict = {}
+            sp = target / "source.json"
+            if sp.is_file():
+                try:
+                    source = _json.loads(sp.read_text(encoding="utf-8")) or {}
+                except (ValueError, OSError):
+                    source = {}
+
+            identifiers = source.get("identifiers") or {}
+            mb_disc_id = identifiers.get("musicbrainz_disc_id")
+            hints = source.get("operator_hints") or {}
+
+            from archivist.service.mb_client import get_mb_client
+            client = get_mb_client()
+
+            candidates: list[dict] = []
+            try:
+                if mb_disc_id:
+                    hit = client.lookup_by_disc_id(mb_disc_id)
+                    if hit is not None:
+                        hit["score"] = 1.0
+                        candidates.append(hit)
+                else:
+                    fp_hits = client.search_by_fingerprint(target)
+                    if fp_hits:
+                        candidates.extend(fp_hits)
+                    elif hints.get("artist") or hints.get("album"):
+                        candidates.extend(client.search_by_metadata(
+                            artist=hints.get("artist"),
+                            album=hints.get("album"),
+                        ))
+            except Exception as exc:  # noqa: BLE001 — wrap any MB failure
+                logger.warning("candidates: musicbrainz failure: %s", exc)
+                raise HTTPException(
+                    status_code=503,
+                    detail={"error": "musicbrainz unavailable"},
+                ) from exc
+
+            seen: set[str] = set()
+            unique: list[dict] = []
+            for c in candidates:
+                mbid = c.get("mbid") or ""
+                if mbid and mbid in seen:
+                    continue
+                if mbid:
+                    seen.add(mbid)
+                unique.append(c)
+            unique.sort(key=lambda c: float(c.get("score") or 0), reverse=True)
+            payload = {
+                "candidates": unique[:5],
+                "source": "musicbrainzngs",
+            }
+            _candidates_cache[folder] = (now, payload)
+            return JSONResponse(payload)
+
         # Sprint-6.5 / impl-collapsed-card-actions: high-confidence
         # one-click accept. Body invokes the existing beets pipeline
         # via the docker stack — sprint-7 wires the actual `beet
