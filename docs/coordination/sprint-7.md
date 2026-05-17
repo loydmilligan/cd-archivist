@@ -781,6 +781,54 @@ sprint-8 planning. -->
 
 <!-- Per-agent updates land here, newest first. -->
 
+### 2026-05-16 — lane-1 (hotfix, picking up from lane-2) — 12 cross-lane test regressions fixed; full suite green
+
+Sprint-7 Wave 2 impls across all three lanes evolved the rendered
+contract in ways that left 12 sprint-6.5 regression tests pinning the
+prior surface. Hotfix updates each assertion to follow the contract to
+its new home — no tests deleted. Single commit `fix(sprint-7):
+cross-lane test updates …`.
+
+- **(A) Voice pass (2 tests):** lane-3's targeted voice sweep
+  lowercased \"In Library\" → \"In library\" in column titles; updated
+  test_kanban_page::test_page_renders_four_column_headers and
+  test_mobile_kanban::test_bucket_tabs_nav_present_in_markup to match.
+- **(B) CSS migration (7 tests):** lane-1's
+  impl-css-migration-brand-mark moved the inline `<style>` block to
+  /static/css/cda.css per D-inline-css-whitelist; the legacy
+  assertions grepped the rendered HTML for inline rules. Updated each
+  test to fetch /static/css/cda.css (and /static/css/tokens.css for
+  test_root_page_carries_mash_design_tokens) and assert against the
+  served stylesheet. Also refreshed test_page_applies_mash_tokens'
+  expected token names from the stale sprint-6 placeholder set
+  (--ink / --ok / --warn / --info) to Mash Co. vocabulary (--ink-* /
+  --mash-pulp / --moss / --amber / --sky / --ember). Added minimal
+  cda.css recipes for .drawer-toggle--drive, .drawer-toggle--card
+  (aria-pressed='true' modifier in pulp), and .live-status-text — the
+  three class names lane-1 + lane-2 had added to markup that lacked
+  CSS presence (so test_kanban_page_class_names_resolve_against_static_css
+  passes without weakening its contract).
+- **(C) Chip rename (3 tests):** lane-2's impl-card-anatomy
+  refactored the chip-row driver. Old contract (\"any populated
+  detected_metadata → chip--confirmed\") is gone; new contract:
+  operator-hint chips (VA / BURNED / MIX) are .chip--asserted,
+  Beets-side scores (WEAK MATCH / MUSICBRAINZ) are .chip--confirmed.
+  Re-seeded the three test_card_evolution cases to hit the new
+  chip-row branches: library + musicbrainz_disc_id +
+  top_candidate.json (0.97) for MUSICBRAINZ confirmed; review +
+  operator_hints.various_artists=True for VA asserted; both seeded
+  on the same card for \"confirmed wins\" (now: \"confirmed still
+  appears alongside the operator chip — system match wins the trust
+  signal\" — the original chip--asserted-not-present invariant was
+  intentionally dropped because the new model allows them to
+  coexist).
+
+Full suite: 615 passed, 1 skipped (regression count delta: -12).
+Lane-1 hotfix work complete; lane-2's pending Wave-2 work
+(if any remains beyond the 4 tasks they already shipped) is
+unblocked. No impl bugs surfaced — every fix was a contract update
+the test hadn't been told about.
+
 ### 2026-05-16 — lane-2 (pipeline) — Wave 2 impls landed (4 tasks, 3 commits)
 
 All 4 lane-2 Wave 2 impl tasks shipped. Lane-2 test surface:
