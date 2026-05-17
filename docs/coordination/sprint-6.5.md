@@ -291,7 +291,7 @@ status: draft
 
 #### Bucket F — Drive-status snapshot (drivers)
 
-- [ ] {agent: drivers, id: test-drive-status-snapshot}
+- [x] {agent: drivers, id: test-drive-status-snapshot}
   Failing tests for the new `DriveStatus` exposure.
   `tests/state_machine/test_drive_status.py`:
   (a) `DriveStatus` dataclass exists in
@@ -645,6 +645,53 @@ sprint-7 planning. -->
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — drivers — Wave 1 failing test landed (1 task, 1 commit)
+
+Single drivers Wave 1 task closed.
+
+- **test-drive-status-snapshot** (this commit) — new file
+  `tests/state_machine/test_drive_status.py` with 13 failing tests
+  for the not-yet-implemented
+  `archivist.state_machine.drive_status` module + the
+  `LoopState.drive_status` attribute (impl lands in
+  `impl-drive-status-snapshot`). Locks in: (a) the 9-field
+  DriveStatus dataclass shape + defaults (state="idle", everything
+  else None) and typed-value acceptance; (b) `LoopState.drive_status`
+  defaulting to a fresh DriveStatus per instance (`default_factory`,
+  NOT a shared default); (c) the
+  `update_from_progress_line(drive_status, line)` helper — bumps
+  `current_track` on `:outputting track N`, sets `sector_current` +
+  `retries_on_current_track` on `scsi_read error: sector=X retry=N`,
+  resets retries on track change, no-ops on unrelated lines; (d)
+  state-machine transitions: STABILIZE → `drive_status.state =
+  "stabilizing"`, RIP → `"ripping"`, CAPTURE → photo_state walks
+  pending → capturing → done; (e) IDLE reset zeroes all transient
+  fields back to None; (f) thread-safety — DriveStatus exposes a
+  context-manager `lock` attribute, and a smoke test runs 8 workers
+  × 50 bumps and asserts the final accumulator equals 400 (no torn
+  updates).
+
+Test posture: reuses `_FakeDrive` / `_FakeRipper` / `_FakeCamera` /
+`_FakeLED` / `_Clock` from `tests/state_machine/test_loop.py` via
+package import (the established pattern from sprint-6's
+test_cdplay_decoupled). State-machine tests construct a `LoopState`
+and wire it into `ArchivistLoop` via the existing `loop_state=`
+parameter — no constructor changes needed for the test scaffolding.
+The transitional-state tests are lenient on mid-flight timing
+(synchronous fake rip can advance through ripping → capturing →
+idle in a single tick) to keep the contract on observable end-state
+rather than tick-by-tick lockstep.
+
+Verified: `pytest tests/state_machine/test_drive_status.py` →
+13/13 FAIL with `ModuleNotFoundError: archivist.state_machine.
+drive_status` (the test module imports the not-yet-existing
+target lazily inside each case so collection itself stays clean).
+`ruff check tests/state_machine/test_drive_status.py` clean.
+
+Wave 2 queue: `impl-drive-status-snapshot` (single task, unblocks
+pipeline's `/api/drive/status` endpoint). Per the agent-roster
+note, drivers should land this early in Wave 2.
 
 ### 2026-05-16 — planner — sprint-6.5 plan drafted
 
