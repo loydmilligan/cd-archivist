@@ -650,3 +650,193 @@ def test_page_js_switches_interval_based_on_active_rip(
     # between them at the end of each response cycle.
     assert "kanban-poll-ms-active" in html
     assert "kanban-poll-ms-idle" in html
+
+
+# =========================================================================
+# Sprint-7 Bucket B — test-inline-css-removed (lane-1)
+# =========================================================================
+#
+# Per D-inline-css-whitelist the inline <style> block in kanban_page.py
+# must be removed. All component CSS lives in /static/css/cda.css; all
+# variables live in /static/css/tokens.css. The ONLY allowed style=""
+# attribute pattern is the CSS-custom-property-as-data pattern
+# (style="--progress: 65%", style="--track-count: 13") consumed by
+# the stylesheet via var().
+#
+# Wave 2 impl: `impl-css-migration-brand-mark` (lane-1).
+
+
+def test_kanban_page_has_no_inline_style_block(
+    client: TestClient, music_root: Path,
+) -> None:
+    """At most one <style> element may exist, and if present it must
+    contain ONLY CSS-custom-property-as-data documentation comments
+    (or be empty). The component CSS lives in /static/css/cda.css."""
+    html = client.get("/").text
+    style_blocks = re.findall(r"<style[^>]*>(.*?)</style>", html, re.DOTALL)
+    assert len(style_blocks) <= 1, (
+        f"expected at most one <style> element; found {len(style_blocks)}"
+    )
+    if style_blocks:
+        body = style_blocks[0].strip()
+        # Only comments or the custom-property docs may remain.
+        non_comment = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL).strip()
+        assert non_comment == "", (
+            "<style> block contains non-comment CSS rules; component "
+            "CSS must live in /static/css/cda.css per D-inline-css-whitelist"
+        )
+
+
+def test_kanban_page_class_names_resolve_against_static_css(
+    client: TestClient, music_root: Path,
+) -> None:
+    """Every CSS class used in the rendered markup must appear in
+    /static/css/tokens.css OR /static/css/cda.css. Asserted by
+    grepping the static files for each class name extracted from
+    the rendered HTML."""
+    # Seed a card so card-level classes are exercised.
+    folder = music_root / "review" / "2026-05-16_1200_disc-classcheck"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+
+    html = client.get("/").text
+    tokens = client.get("/static/css/tokens.css").text
+    cda = client.get("/static/css/cda.css").text
+    haystack = tokens + "\n" + cda
+
+    classes: set[str] = set()
+    for attr in re.finditer(r'class="([^"]+)"', html):
+        for cls in attr.group(1).split():
+            # Skip dynamic/state classes used purely by JS via
+            # querySelector — these aren't required to have a CSS
+            # rule (e.g., data-* state markers).
+            if cls.startswith("js-"):
+                continue
+            classes.add(cls)
+
+    missing = sorted(c for c in classes if c not in haystack)
+    assert not missing, (
+        "rendered HTML uses CSS classes that aren't defined in "
+        f"tokens.css or cda.css: {missing[:10]}"
+    )
+
+
+def test_kanban_page_inline_style_attrs_only_use_custom_properties(
+    client: TestClient, music_root: Path,
+) -> None:
+    """Allowed inline style attribute pattern is CSS custom properties
+    only (`style="--progress: 65%"`). Direct property assignments
+    (`width:`, `color:`, `display:`, etc.) are forbidden per
+    D-inline-css-whitelist."""
+    folder = music_root / "review" / "2026-05-16_1200_disc-stylecheck"
+    _write_flac(folder / "01.flac")
+    _write_source(folder)
+
+    html = client.get("/").text
+    for m in re.finditer(r'style="([^"]+)"', html):
+        body = m.group(1).strip()
+        # Each declaration must start with `--`.
+        decls = [d.strip() for d in body.split(";") if d.strip()]
+        for decl in decls:
+            prop = decl.split(":", 1)[0].strip()
+            assert prop.startswith("--"), (
+                f"inline style declaration {decl!r} is not a CSS "
+                "custom property; only --<name>: <value> is allowed "
+                "per D-inline-css-whitelist"
+            )
+
+
+# =========================================================================
+# Sprint-7 Bucket E — test-column-headlamps (lane-1)
+# =========================================================================
+#
+# Per the build prompt: each column header gets an 8px round
+# "headlamp" dot in the per-stage color. Capture → --mash-pulp;
+# Beets ID → --sky; Review → --amber; In library → --moss. The dots
+# are NOT a full-column background tint.
+#
+# Wave 2 impl: `impl-column-headlamps` (lane-1).
+
+
+_HEADLAMP_MODIFIERS = [
+    ("capture", "headlamp--pulp"),
+    ("beets_id", "headlamp--sky"),
+    ("review", "headlamp--amber"),
+    ("library", "headlamp--moss"),
+]
+
+
+@pytest.mark.parametrize("bucket,modifier", _HEADLAMP_MODIFIERS)
+def test_column_header_renders_headlamp_dot(
+    client: TestClient, bucket: str, modifier: str,
+) -> None:
+    html = client.get("/").text
+    # The headlamp element sits inside the column header for `bucket`.
+    # Asserted by finding the column section, then asserting the
+    # base `.headlamp` class and the per-stage modifier both appear
+    # inside that section.
+    m = re.search(
+        rf'<section[^>]*data-bucket="{bucket}"[^>]*>(.*?)</section>',
+        html, re.DOTALL,
+    )
+    assert m is not None, f"column section for bucket={bucket!r} not found"
+    section = m.group(1)
+    # Header is the first <header> in the section.
+    hdr = re.search(r"<header[^>]*>(.*?)</header>", section, re.DOTALL)
+    assert hdr is not None, f"column-header missing for {bucket!r}"
+    head = hdr.group(1)
+    assert "headlamp" in head, (
+        f"column header for {bucket!r} missing `.headlamp` element"
+    )
+    assert modifier in head, (
+        f"column header for {bucket!r} missing `.{modifier}` modifier"
+    )
+
+
+def test_headlamp_css_recipe_defined_in_cda_css(client: TestClient) -> None:
+    """cda.css must style `.headlamp` as 8px round dot with per-stage
+    background-color modifiers."""
+    cda = client.get("/static/css/cda.css").text
+    assert ".headlamp" in cda, "cda.css missing .headlamp rule"
+    # The base recipe must declare 8px size and round shape.
+    base_block = re.search(
+        r"\.headlamp\s*\{[^}]*\}", cda, re.DOTALL,
+    )
+    assert base_block is not None, "no .headlamp { ... } block in cda.css"
+    block = base_block.group(0)
+    assert "8px" in block, ".headlamp must be 8px square"
+    assert "border-radius" in block, ".headlamp must be round"
+    # Per-stage modifiers exist and reference the right tokens.
+    for modifier, token in (
+        ("headlamp--pulp", "--mash-pulp"),
+        ("headlamp--sky", "--sky"),
+        ("headlamp--amber", "--amber"),
+        ("headlamp--moss", "--moss"),
+    ):
+        mblock = re.search(
+            rf"\.{modifier}\s*\{{[^}}]*\}}", cda, re.DOTALL,
+        )
+        assert mblock is not None, f"cda.css missing .{modifier} rule"
+        assert token in mblock.group(0), (
+            f".{modifier} must reference {token} per the build prompt"
+        )
+
+
+def test_headlamp_is_not_full_column_tint(client: TestClient) -> None:
+    """The build prompt is explicit: headlamps are 8px dots, NEVER a
+    full-column background tint. Asserted by checking that the column
+    element itself does not carry a stage-color background class."""
+    html = client.get("/").text
+    forbidden_column_bgs = (
+        "column--pulp", "column--sky", "column--amber", "column--moss",
+        "bg-pulp", "bg-sky", "bg-amber", "bg-moss",
+    )
+    for cls in forbidden_column_bgs:
+        # Match the class only as a whole-token (not as a substring of
+        # `column--header` etc.).
+        assert not re.search(
+            rf'class="[^"]*\b{re.escape(cls)}\b[^"]*"', html,
+        ), (
+            f"column carries forbidden full-tint class {cls!r}; "
+            "the build prompt mandates 8px headlamp dots, not column tints"
+        )
