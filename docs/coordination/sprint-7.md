@@ -377,7 +377,7 @@ status: draft
 
 #### Bucket G — Targeted voice pass (lane-3)
 
-- [ ] {agent: lane-3, id: test-voice-pass-status-lines}
+- [x] {agent: lane-3, id: test-voice-pass-status-lines}
   Failing tests for targeted voice pass on status lines + button
   labels + error messages.
   `tests/service/test_voice_pass.py`:
@@ -754,6 +754,43 @@ sprint-8 planning. -->
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-16 — lane-3 — Wave 1 failing tests landed (6 tasks, 6 commits)
+
+All 6 lane-3 Wave 1 failing-test tasks shipped:
+- `test-candidates-endpoint` → `tests/service/test_candidates_endpoint.py`
+  (7 cases — shape, sort+cap, disc-id prepend, fingerprint fallback,
+  operator-hints metadata search, 404 missing folder, 503 on MB
+  failure; fakes injected via monkeypatching `mb_client.get_mb_client`)
+- `test-candidates-section-ui` → `tests/service/test_candidates_section_ui.py`
+  (4 cases pinning `.score-chip` / `.candidate-meta` / `.apply-btn` /
+  `.candidate--top` + `data-mbid` POST to `accept-top-candidate`)
+- `test-rig-stats-endpoint` → `tests/service/test_rig_stats_endpoint.py`
+  (5 cases — shape, shutil.disk_usage parity, monotonic uptime,
+  storage + uptime mono-shorthand regex)
+- `test-disc-photo-placeholder` → `tests/service/test_disc_photo_placeholder.py`
+  (3 cases — card `.thumb--placeholder` div, conic-gradient in cda.css,
+  larger variant in drive-mode drawer)
+- `test-source-json-highlight` → `tests/service/test_source_json_highlight.py`
+  (5 cases — helper module import, .k/.s/.n/.b span wrapping, nested
+  containers, drawer cda-json reference, no external highlight library
+  in pyproject)
+- `test-voice-pass-status-lines` → `tests/service/test_voice_pass.py`
+  (7 cases — canonical phrases in status_line.py, no SHOUTING /
+  marketing copy, sentence-case button labels, specific-error pattern
+  in review_explainer + damaged_disc, no emoji, no smart quotes,
+  no emoji in rendered HTML; one current title-case offender ("In
+  Library") flagged for impl-voice-pass-targeted to fix)
+
+Per-lane file ownership respected — no overlap with lane-1 or lane-2;
+each test file is new and lane-3-owned per the roster. Per the user-
+explicit task spec some tests live in lane-3 sibling files rather than
+the lane-2 `test_card_anatomy.py` / pre-existing `test_expanded_card.py`
+/ `test_right_drawer.py` to keep concurrent edits safe.
+
+One open decision deferred to Wave 2:
+- `D-candidates-cache-ttl` — TTL value + cache-key shape (folder vs.
+  folder+hints-mtime) confirmed during `impl-candidates-endpoint`.
 
 ### 2026-05-16 — lane-2 (pipeline) — Wave 1 failing tests landed (8 tasks, 5 commits)
 
