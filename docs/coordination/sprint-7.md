@@ -321,7 +321,7 @@ status: draft
   (c) the right-drawer drive-mode body also uses this
   placeholder at larger size when no card is selected.
 
-- [ ] {agent: lane-3, id: test-source-json-highlight}
+- [x] {agent: lane-3, id: test-source-json-highlight}
   Failing tests for source.json syntax highlight in the
   drawer card-detail body.
   `tests/service/test_right_drawer.py` additions:
