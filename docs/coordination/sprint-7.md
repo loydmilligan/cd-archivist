@@ -500,7 +500,7 @@ status: draft
 
 #### Bucket E — Layout details
 
-- [ ] {agent: lane-1, depends: test-column-headlamps, id: impl-column-headlamps}
+- [x] {agent: lane-1, depends: test-column-headlamps, id: impl-column-headlamps}
   Add `.headlamp` elements to each column header in `kanban_page.py`
   with the per-stage modifier classes. CSS already in `cda.css`.
 

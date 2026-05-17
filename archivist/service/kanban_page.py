@@ -560,13 +560,31 @@ def _render_card(card: DiscCard) -> str:
     )
 
 
+# Sprint-7 / impl-column-headlamps — per-bucket 8px stage dots in the
+# column header. Build-prompt §kanban table: Capture → pulp, Beets ID
+# → sky, Review → amber, In library → moss. The dot is 8px round, NOT
+# a full-column tint.
+_HEADLAMP_MODIFIER: dict[str, str] = {
+    "capture": "headlamp--pulp",
+    "beets_id": "headlamp--sky",
+    "review": "headlamp--amber",
+    "library": "headlamp--moss",
+}
+
+
 def _render_column(
     key: str, title: str, cards: list[DiscCard],
 ) -> str:
     cards_html = "\n".join(_render_card(c) for c in cards)
+    headlamp_mod = _HEADLAMP_MODIFIER.get(key, "")
+    headlamp = (
+        f'<span class="headlamp {headlamp_mod}" aria-hidden="true"></span>'
+        if headlamp_mod else ""
+    )
     return (
         f'<section class="column" data-bucket="{key}">'
         '<header class="column-header">'
+        f'{headlamp}'
         f'<h2 class="column-title">{_esc(title)}'
         f' <span class="count-badge">({len(cards)})</span>'
         '</h2>'
@@ -995,6 +1013,29 @@ function diffKanban(payload) {
   }
   lastPayloadHashes = seen;
 }
+
+// --- Rig stats (Storage + Uptime) ---------------------------------------
+// Sprint-7 impl-header-live-and-stats: poll /api/rig/stats once at
+// load and every 60s thereafter (these values change slowly). Storage
+// + Uptime populate the corresponding .stat-value cells.
+function refreshRigStats() {
+  fetch('/api/rig/stats')
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (!j) return;
+      const storage = document.querySelector('[data-rig-cell="rig-storage"]');
+      const uptime = document.querySelector('[data-rig-cell="rig-uptime"]');
+      if (storage && j.storage && j.storage.human) {
+        storage.textContent = j.storage.human;
+      }
+      if (uptime && j.uptime && j.uptime.human) {
+        uptime.textContent = j.uptime.human;
+      }
+    })
+    .catch(() => {});
+}
+refreshRigStats();
+setInterval(refreshRigStats, 60000);
 
 // --- Adaptive polling ---------------------------------------------------
 function pollKanban() {
