@@ -133,7 +133,7 @@ status: draft
   `docs(sprint-8): CHANGELOG.md — Keep-a-Changelog backfill
   through sprint-7`.
 
-- [ ] {agent: lane-3, id: roadmap-init}
+- [x] {agent: lane-3, id: roadmap-init}
   Author `ROADMAP.md` at the repo root. Three horizon sections:
   `## Next sprint` (items earmarked for sprint-9 — pull from
   sprint-7 + sprint-6.5 "Sprint-N+1 Candidates"), `## Next
