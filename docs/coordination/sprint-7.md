@@ -528,7 +528,7 @@ status: draft
   Right-drawer card-detail body uses this. Unit-test with
   small fixture objects.
 
-- [ ] {agent: lane-1, depends: test-drawer-mode-toggles, id: impl-drawer-mode-toggles}
+- [x] {agent: lane-1, depends: test-drawer-mode-toggles, id: impl-drawer-mode-toggles}
   Add header nav `.drawer-toggle--drive` + `.drawer-toggle--card`
   buttons. JS state tracks `lastSelectedCard`; toggle-card
   re-opens that card in the drawer.
@@ -764,6 +764,67 @@ sprint-8 planning. -->
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-16 — lane-1 — Wave 2 impls landed (4 tasks, critical path)
+
+All 4 lane-1 Wave 2 tasks shipped; the previously-failing lane-1 Wave 1
+tests for static mount, font loading, brand mark, column headlamps, and
+drawer mode toggles now pass. The `test_kanban_page_class_names_resolve_against_static_css`
+assertion (Bucket B) passes after the inline `<style>` strip + the
+appended legacy-class block in cda.css.
+
+- `feat(sprint-7): impl-asset-wire-up` (bundled in commit 1dfce41 with
+  lane-3's disc-photo-placeholder because lane-3 picked up my staged
+  files): tokens.css moved to /static/css/tokens.css (re-vendored from
+  upstream colors_and_type.css), cda.css already in place from lane-2's
+  prior commit, full favicon family + maskable + apple-touch + PWA
+  manifest copied into /static/img/brand/ + /static/manifest.webmanifest,
+  kanban_page <head> emits favicon links + theme-color + Google Fonts
+  preconnect + Bricolage/Inter/JetBrains family stylesheets (already
+  shipped under lane-2's 488bd5f when they swept my working-tree
+  edits). review_page_v1.py + beets_review.py chase the path rename.
+- `feat(sprint-7): impl-css-migration-brand-mark` (d35254e): extract
+  font-size from the base .cda-brand-mark recipe into three size
+  variants (--header 22px, --splash 84px, --marketing 240px) in
+  cda.css. Replace the legacy text wordmark in the kanban header with
+  `<span class="cda-brand-mark cda-brand-mark--header">cd/a</span>`
+  (rendered alongside the cd-archivist slug). Strip the ~120-line
+  inline `_STYLES` f-string + `<style>{_STYLES}</style>` emission;
+  move the rules onto /static/css/cda.css (appended block) so every
+  rendered class resolves against static CSS per D-inline-css-whitelist.
+  Hard-code the 720px @media rule inside cda.css (MOBILE_BREAKPOINT_PX
+  Python constant still drives JS-side polling decisions). Refine my
+  class-name extraction regex to skip JS template-literal patterns
+  (`class="row ${topCls}"`). Update test_right_drawer's
+  transform-rule assertion to follow the CSS to its new home.
+- `feat(sprint-7): impl-column-headlamps` (fe9099d): `_HEADLAMP_MODIFIER`
+  maps each bucket to its per-stage class (Capture → headlamp--pulp,
+  Beets ID → headlamp--sky, Review → headlamp--amber, In library →
+  headlamp--moss). The 8px round dot is emitted as a span inside
+  `.column-header`, before the column title. CSS recipe already in
+  cda.css under the impl-css-migration block.
+- `feat(sprint-7): impl-drawer-mode-toggles` (this commit): header nav
+  gains `.drawer-toggle--drive` + `.drawer-toggle--card` buttons with
+  `aria-pressed` (drive defaults true). JS tracks `lastSelectedCard`;
+  drive-toggle swaps the drawer body to drive-mode without clearing
+  the selection memory; card-toggle re-opens the last-selected card
+  (no-op when none selected this session). `openRightDrawerForCard`
+  now also flips `aria-pressed` via `setDrawerMode('card')` so
+  drawer-state is observable from both the URL-less header nav and
+  card clicks.
+
+**Decisions resolved:**
+- `D-mobile-brand-mark-size` (closed): no `--mobile` variant — 22px
+  holds across viewports. Header bar has room under the 720px
+  breakpoint. Revisit only if Wave 3 visual smoke surfaces crowding.
+
+**Cross-lane note:** all four commits landed cleanly against lane-2 /
+lane-3 work that arrived in parallel; one near-miss (the
+test_card_evolution chip--{confirmed,asserted} failures observed
+during regression sweep were verified to be pre-existing in the lane
+ahead of my impl, not caused by the inline-CSS strip). Lane-1 Wave 2
+critical path complete; lane-2 / lane-3 can now reference
+cda-brand-mark + .headlamp + .drawer-toggle--* freely.
 
 ### 2026-05-16 — lane-3 — Wave 2 impls landed (6 tasks, 6 commits)
 

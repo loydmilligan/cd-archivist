@@ -663,9 +663,16 @@ def _render_header_bar(
         '</div>'
         f'{_render_rig_stats(stats)}'
         '<div class="header-right">'
-        '<button type="button" class="btn" '
-        'aria-controls="right-drawer" data-drawer-toggle="right">'
+        # Sprint-7 / impl-drawer-mode-toggles. Explicit drive/card mode
+        # buttons in the header nav. drive defaults pressed (no card
+        # selected at first render); card-toggle re-opens the last
+        # selected card (no-op when none).
+        '<button type="button" class="btn drawer-toggle--drive" '
+        'aria-controls="right-drawer" aria-pressed="true">'
         'drive</button>'
+        '<button type="button" class="btn drawer-toggle--card" '
+        'aria-controls="right-drawer" aria-pressed="false">'
+        'card</button>'
         '<button type="button" class="btn" '
         'aria-controls="bottom-drawer" data-drawer-toggle="bottom">'
         'logs</button>'
@@ -912,18 +919,47 @@ function setDrawerHidden(id, hidden) {
   if (el) el.setAttribute('aria-hidden', hidden ? 'true' : 'false');
 }
 
+// Sprint-7 impl-drawer-mode-toggles: track the most-recently-opened
+// card so the .drawer-toggle--card button can re-open it after the
+// operator has flipped to drive-mode.
+let lastSelectedCard = null;
+
+function setDrawerMode(mode) {
+  // mode: 'drive' | 'card'. Updates aria-pressed on the two header
+  // toggles so screen readers + CSS get the active state.
+  const driveBtn = document.querySelector('.drawer-toggle--drive');
+  const cardBtn  = document.querySelector('.drawer-toggle--card');
+  if (driveBtn) driveBtn.setAttribute(
+    'aria-pressed', mode === 'drive' ? 'true' : 'false'
+  );
+  if (cardBtn)  cardBtn.setAttribute(
+    'aria-pressed', mode === 'card' ? 'true' : 'false'
+  );
+}
+
 function openRightDrawerForCard(card) {
   setDrawerHidden('right-drawer', false);
+  lastSelectedCard = card;
+  setDrawerMode('card');
   const folder = card.getAttribute('data-card-id');
   // card-detail population — fetch /api/disc/<folder>/log/tail
   fetch(`/api/disc/${folder}/log/tail`).then(r => r.ok ? r.text() : '');
 }
 
-document.querySelectorAll('[data-drawer-toggle="right"]').forEach(btn => {
+document.querySelectorAll('.drawer-toggle--drive').forEach(btn => {
   btn.addEventListener('click', () => {
-    const el = document.getElementById('right-drawer');
-    const hidden = el.getAttribute('aria-hidden') === 'true';
-    setDrawerHidden('right-drawer', !hidden);
+    // Clear the selected card and swap the drawer body to drive-mode.
+    setDrawerHidden('right-drawer', false);
+    setDrawerMode('drive');
+  });
+});
+
+document.querySelectorAll('.drawer-toggle--card').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // Re-open the last-selected card; no-op when none selected this
+    // session.
+    if (!lastSelectedCard) return;
+    openRightDrawerForCard(lastSelectedCard);
   });
 });
 
