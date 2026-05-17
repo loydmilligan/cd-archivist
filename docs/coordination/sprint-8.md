@@ -146,7 +146,7 @@ status: draft
   the add/triage/resolve process (per WORKFLOW.md §10). Commit:
   `docs(sprint-8): ROADMAP.md — three-horizon backlog`.
 
-- [ ] {agent: lane-3, id: issues-init}
+- [x] {agent: lane-3, id: issues-init}
   Author `ISSUES.md` at the repo root. Sections:
   `## Open` (active defects, sorted blocker > major > minor >
   cosmetic), `## Resolved` (auto-curated when an issue lands a
