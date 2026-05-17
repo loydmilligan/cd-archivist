@@ -154,6 +154,35 @@ def create_app(
     def api_log(lines: int = Query(_LOG_LINES_DEFAULT, ge=0)) -> PlainTextResponse:
         return PlainTextResponse(_tail_log(log_path, lines))
 
+    @app.get("/api/drive/status")
+    def api_drive_status() -> JSONResponse:
+        """Sprint-6.5 / impl-drive-status-endpoint. Reads from
+        `loop_state.drive_status` (populated by drivers'
+        impl-drive-status-snapshot). Returns a default-idle snapshot
+        when the attribute is missing so the right-drawer doesn't
+        500 in environments without the drivers update yet."""
+        snap = getattr(loop_state, "drive_status", None)
+        if snap is None:
+            return JSONResponse({
+                "state": "idle",
+                "current_disc": None, "current_track": None,
+                "track_total": None, "sector_current": None,
+                "sector_total": None, "retries_on_current_track": None,
+                "photo_state": None, "elapsed_seconds": None,
+            })
+        return JSONResponse({
+            "state": getattr(snap, "state", "idle"),
+            "current_disc": getattr(snap, "current_disc", None),
+            "current_track": getattr(snap, "current_track", None),
+            "track_total": getattr(snap, "track_total", None),
+            "sector_current": getattr(snap, "sector_current", None),
+            "sector_total": getattr(snap, "sector_total", None),
+            "retries_on_current_track":
+                getattr(snap, "retries_on_current_track", None),
+            "photo_state": getattr(snap, "photo_state", None),
+            "elapsed_seconds": getattr(snap, "elapsed_seconds", None),
+        })
+
     @app.get("/api/logs/tail")
     def api_logs_tail(
         request: Request,
