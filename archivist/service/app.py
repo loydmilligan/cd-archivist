@@ -29,6 +29,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from archivist.state_machine.drive_status import DriveStatus
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -76,6 +78,13 @@ class LoopState:
     # Empty string disables the hook (the systemd backup timer is the
     # safety net).
     process_ready_hook: str = ""
+    # Sprint-6.5 / impl-drive-status-snapshot / D-drive-status-snapshot-
+    # schema: live drive/rip/capture snapshot exposed via /api/drive/
+    # status. Written from the state-machine thread (transitions) and
+    # the ripper's progress-callback thread; read from the FastAPI
+    # request thread. The DriveStatus's internal `lock` (threading.
+    # RLock) serializes multi-field mutations.
+    drive_status: DriveStatus = field(default_factory=DriveStatus)
 
 
 def _tail_log(path: Path, lines: int) -> str:
@@ -144,6 +153,46 @@ def create_app(
     @app.get("/api/log")
     def api_log(lines: int = Query(_LOG_LINES_DEFAULT, ge=0)) -> PlainTextResponse:
         return PlainTextResponse(_tail_log(log_path, lines))
+
+    @app.get("/api/logs/tail")
+    def api_logs_tail(
+        request: Request,
+        limit: int = Query(200, ge=1),
+    ) -> JSONResponse:
+        """Sprint-6.5 / impl-logs-tail-endpoint. Default tail of N=200
+        lines from `ARCHIVIST_LOG_PATH` (env override) or the path the
+        daemon was started with. Future per-rip/per-card filter params
+        are accepted-and-ignored today so sprint-7 can wire the UI
+        without a contract bump (request.query_params is consulted
+        only via the typed `limit` param)."""
+        import os as _os
+        # Honour the env override so operators can re-point logs
+        # without restarting the daemon; fall back to log_path.
+        target = Path(_os.environ.get("ARCHIVIST_LOG_PATH") or str(log_path))
+        if not target.is_file():
+            raise HTTPException(
+                status_code=404, detail=f"log file not found: {target}",
+            )
+        clamped = min(max(limit, 1), 2000)
+        with target.open("r", encoding="utf-8", errors="replace") as f:
+            tail = list(deque(f, maxlen=clamped))
+        # Strip trailing newline per line for a clean JSON list.
+        lines_out = [line.rstrip("\n") for line in tail]
+        # truncated=True iff the source had MORE than the clamped limit.
+        truncated = False
+        try:
+            with target.open("rb") as fh:
+                truncated = sum(1 for _ in fh) > clamped
+        except OSError:
+            truncated = False
+        # Drain query_params just so unused-name lints don't fire and
+        # the accept-and-ignore contract is observable in code.
+        _ = request.query_params
+        return JSONResponse({
+            "lines": lines_out,
+            "log_path": str(target),
+            "truncated": truncated,
+        })
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
