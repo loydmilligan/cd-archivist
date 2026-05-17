@@ -462,7 +462,7 @@ def _render_right_drawer() -> str:
         '<div class="card-detail">'
         '<h3 data-target="detail-title"></h3>'
         '<pre data-target="detail-log"></pre>'
-        '<pre data-target="detail-source-json"></pre>'
+        '<pre class="cda-json" data-target="detail-source-json"></pre>'
         '<img data-target="detail-photo" alt="">'
         '</div>'
         '</template>'

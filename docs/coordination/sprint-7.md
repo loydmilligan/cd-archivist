@@ -521,7 +521,7 @@ status: draft
   for cards without a real photo. Right-drawer drive-mode body
   uses a larger variant. CSS already in `cda.css`.
 
-- [ ] {agent: lane-3, depends: test-source-json-highlight, id: impl-source-json-highlight}
+- [x] {agent: lane-3, depends: test-source-json-highlight, id: impl-source-json-highlight}
   Implement `archivist/service/json_highlight.py::highlight(obj)
   -> str` that walks a JSON-serializable object and emits
   `<pre class="cda-json">` content with `.k/.s/.n/.b` spans.
