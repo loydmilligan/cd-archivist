@@ -92,7 +92,7 @@ status: draft
 
 #### Bucket A — Builder fixes (pipeline)
 
-- [ ] {agent: pipeline, id: test-fix-phantom-audio}
+- [x] {agent: pipeline, id: test-fix-phantom-audio}
   Failing tests for the directory-walk fix in
   `archivist/service/disc_card_builder.py::build_kanban_state`.
   `tests/service/test_disc_card_builder.py` additions:
@@ -105,7 +105,7 @@ status: draft
   per disc, not as nested discs. Regression-pin the bug observed
   on cda.mattmariani.com 2026-05-16.
 
-- [ ] {agent: pipeline, id: test-per-bucket-sort}
+- [x] {agent: pipeline, id: test-per-bucket-sort}
   Failing tests for default sort per bucket in
   `build_kanban_state`. `tests/service/test_kanban_sort.py`:
   (a) Capture-bucket cards sort with the active-rip overlay
@@ -120,7 +120,7 @@ status: draft
 
 #### Bucket B — Card UI evolution (pipeline)
 
-- [ ] {agent: pipeline, id: test-card-state-evolution}
+- [x] {agent: pipeline, id: test-card-state-evolution}
   Failing tests for the visual-evolution renderer.
   `tests/service/test_card_evolution.py`:
   (a) a card whose `source.json` has `identifiers.musicbrainz_disc_id`
@@ -139,7 +139,7 @@ status: draft
   (e) thumbnail src prefers `library/<album>/cover.*` when the disc
   is in Library, falls back to `<folder>/disc-photo.jpg` otherwise.
 
-- [ ] {agent: pipeline, id: test-expand-mechanic}
+- [x] {agent: pipeline, id: test-expand-mechanic}
   Failing tests for click-to-expand + keyboard.
   `tests/service/test_kanban_page.py` additions:
   (a) cards have `aria-expanded="false"` and `tabindex="0"`;
@@ -154,7 +154,7 @@ status: draft
   `playwright` if available; otherwise assert the JS source
   contains the one-at-a-time guard).
 
-- [ ] {agent: pipeline, id: test-expanded-card-sections}
+- [x] {agent: pipeline, id: test-expanded-card-sections}
   Failing tests for the expanded card body sections.
   `tests/service/test_expanded_card.py`:
   (a) expanded body renders three labeled `<section>` elements
@@ -167,7 +167,7 @@ status: draft
   (d) the damaged-actions section is hidden unless
   `card.partial=true OR card.status=="failed"`.
 
-- [ ] {agent: pipeline, id: test-collapsed-card-actions}
+- [x] {agent: pipeline, id: test-collapsed-card-actions}
   Failing tests for high-leverage actions on collapsed cards.
   `tests/service/test_collapsed_card_actions.py`:
   (a) Capture-bucket card with `card--damaged` renders two
@@ -182,7 +182,7 @@ status: draft
 
 #### Bucket C — Layout shell (pipeline)
 
-- [ ] {agent: pipeline, id: test-header-bar}
+- [x] {agent: pipeline, id: test-header-bar}
   Failing tests for the page header.
   `tests/service/test_kanban_page.py` additions:
   (a) page renders a `<header>` element with three regions:
@@ -196,7 +196,7 @@ status: draft
   the right drawer and bottom drawer elements respectively;
   (c) no notification/alert strip is present (D-no-alerts-v1).
 
-- [ ] {agent: pipeline, id: test-right-drawer}
+- [x] {agent: pipeline, id: test-right-drawer}
   Failing tests for the right-side slide-out drawer.
   `tests/service/test_right_drawer.py`:
   (a) drawer element exists with `id="right-drawer"`,
@@ -211,7 +211,7 @@ status: draft
   disc-photo at full size); (d) drawer-toggle button in the
   header AND clicking a card both open the drawer.
 
-- [ ] {agent: pipeline, id: test-bottom-drawer}
+- [x] {agent: pipeline, id: test-bottom-drawer}
   Failing tests for the bottom log drawer.
   `tests/service/test_bottom_drawer.py`:
   (a) drawer element exists with `id="bottom-drawer"`,
@@ -222,7 +222,7 @@ status: draft
   persists in localStorage under
   `cd-archivist:bottom-drawer:open`.
 
-- [ ] {agent: pipeline, id: test-column-scroll-badges}
+- [x] {agent: pipeline, id: test-column-scroll-badges}
   Failing tests for independent column scroll + count badges.
   `tests/service/test_kanban_page.py` additions:
   (a) each `.column` element has `overflow-y: auto` and a
@@ -232,7 +232,7 @@ status: draft
   (c) column header is `position: sticky; top: 0` so it
   doesn't scroll away.
 
-- [ ] {agent: pipeline, id: test-mobile-bucket-tabs}
+- [x] {agent: pipeline, id: test-mobile-bucket-tabs}
   Failing tests for the mobile single-column fallback.
   `tests/service/test_mobile_kanban.py`:
   (a) at viewport ≤ 720px, the kanban renders a
@@ -244,7 +244,7 @@ status: draft
 
 #### Bucket D — Endpoints (pipeline)
 
-- [ ] {agent: pipeline, id: test-logs-tail-endpoint}
+- [x] {agent: pipeline, id: test-logs-tail-endpoint}
   Failing tests for `GET /api/logs/tail`.
   `tests/service/test_logs_tail_endpoint.py`:
   (a) returns the last N lines of the daemon's
@@ -258,7 +258,7 @@ status: draft
   (sprint-7) but the endpoint accepts and ignores them
   without erroring.
 
-- [ ] {agent: pipeline, id: test-drive-status-endpoint}
+- [x] {agent: pipeline, id: test-drive-status-endpoint}
   Failing tests for `GET /api/drive/status`.
   `tests/service/test_drive_status_endpoint.py`:
   (a) returns
@@ -276,7 +276,7 @@ status: draft
 
 #### Bucket E — Adaptive polling (pipeline)
 
-- [ ] {agent: pipeline, id: test-adaptive-polling}
+- [x] {agent: pipeline, id: test-adaptive-polling}
   Failing tests for adaptive poll cadence.
   `tests/service/test_kanban_page.py` additions:
   (a) page emits two poll-interval values in
@@ -692,6 +692,29 @@ target lazily inside each case so collection itself stays clean).
 Wave 2 queue: `impl-drive-status-snapshot` (single task, unblocks
 pipeline's `/api/drive/status` endpoint). Per the agent-roster
 note, drivers should land this early in Wave 2.
+
+### 2026-05-16 — pipeline — Wave 1 failing tests landed (14 of 15)
+
+- Shipped in 8 commits, several bundled per bucket:
+  - `03dcaae` test-fix-phantom-audio
+  - `b25046c` test-per-bucket-sort
+  - `3d60d99` test-card-state-evolution
+  - `09d9499` test-{expand-mechanic, header-bar, column-scroll-badges, adaptive-polling}
+  - `de03535` test-expanded-card-sections
+  - `11782dc` test-collapsed-card-actions
+  - `4a952dd` test-{right-drawer, bottom-drawer, mobile-bucket-tabs}
+  - `ec677e9` test-{logs-tail-endpoint, drive-status-endpoint}
+- All 14 pipeline tests fail-as-expected (no impl yet, contracts pinned).
+- Activity Log + checkbox ticks were applied retroactively by orc
+  (agents shipped commits but didn't bookkeep the doc).
+
+### 2026-05-16 — drivers — Wave 1 failing test landed (1 of 1)
+
+- `5579c15` test-drive-status-snapshot.
+- DriveStatus dataclass + LoopState attribute + ripper progress
+  callback hooks + state-machine transition hooks + idle-reset +
+  threading.Lock — all pinned in failing tests.
+- Ready for pipeline's `/api/drive/status` impl to wire against.
 
 ### 2026-05-16 — planner — sprint-6.5 plan drafted
 
