@@ -400,7 +400,7 @@ status: draft
 
 #### Bucket A — Asset wire-up (lane-1)
 
-- [ ] {agent: lane-1, depends: test-static-mount, depends: test-font-loading, id: impl-asset-wire-up}
+- [x] {agent: lane-1, depends: test-static-mount, depends: test-font-loading, id: impl-asset-wire-up}
   (1) Add a FastAPI static file mount in `archivist/service/app.py`:
   `app.mount("/static", StaticFiles(directory="archivist/service/static"))`.
   Create `archivist/service/static/` and subdirs `css/`, `img/brand/`.
@@ -485,7 +485,7 @@ status: draft
   hammering MB.
   Commit: `feat(sprint-7): impl-candidates-endpoint`.
 
-- [ ] {agent: lane-3, depends: test-candidates-section-ui, depends: impl-candidates-endpoint, id: impl-candidates-section-ui}
+- [x] {agent: lane-3, depends: test-candidates-section-ui, depends: impl-candidates-endpoint, id: impl-candidates-section-ui}
   Add the candidates section to the expanded card body in
   `kanban_page.py`. Template emits a section placeholder + the JS
   fetches `/api/disc/<folder>/candidates` on card-expand. Renders

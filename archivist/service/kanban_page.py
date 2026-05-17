@@ -126,19 +126,167 @@ def _metadata_chips(card: DiscCard) -> str:
     return "".join(chips)
 
 
+# Sprint-7 impl-card-anatomy: map the disc-card-builder's terminal
+# state labels to the build-prompt-spec cell-state names. The
+# recovered state isn't currently distinguishable from clean at the
+# builder level — drivers' DriveStatus doesn't track per-track
+# recovery yet — so success → clean today; sprint-8 may light up
+# recovered once that signal exists.
+_TRACK_STATE_MAP = {
+    "success": "clean",
+    "fail": "unrecoverable",
+    "in_progress": "ripping",
+    "pending": "pending",
+}
+
+
 def _render_track_bar(card: DiscCard) -> str:
+    from archivist.service.track_identification import identified_tracks
+    ident_set = identified_tracks(source_json=card.source_json)
+    progress_pct = 0
+    if card.progress is not None:
+        try:
+            progress_pct = int(card.progress.get("percent", 0))
+        except (TypeError, ValueError):
+            progress_pct = 0
+
     cells: list[str] = []
     for i, state in enumerate(card.track_bar, start=1):
-        identified = _is_identified_track(card, i)
+        cell_state = _TRACK_STATE_MAP.get(state, state)
+        identified = i in ident_set
         ident_attr = f' data-track-identified-{i}="true"' if identified else ""
         ident_class = " track-cell--identified" if identified else ""
+        progress_attr = ""
+        if cell_state == "ripping":
+            # D-inline-css-whitelist: CSS-custom-property-as-data
+            # pattern allowed.
+            progress_attr = f' style="--progress: {progress_pct}%"'
         cells.append(
-            f'<span class="track-cell track-cell--{_esc(state)}{ident_class}"{ident_attr}></span>'
+            f'<span class="track-cell track-cell--{_esc(cell_state)}'
+            f'{ident_class}"{ident_attr}{progress_attr}></span>'
         )
+    track_count = len(card.track_bar)
     return (
-        '<div class="track-bar" role="img" aria-label="track progress">'
+        '<div class="track-bar" role="img" aria-label="track progress" '
+        f'style="--track-count: {track_count}">'
         + "".join(cells) + '</div>'
     )
+
+
+def _accent_class(card: DiscCard) -> str:
+    """Per the build-prompt §kanban table:
+
+        Capture default → pulp; capture+ripping → pulp-ripping
+        Capture+damaged → ember-damaged
+        Beets ID        → sky
+        Review weak     → amber; Review no-match → ember
+        Library         → moss
+    """
+    bucket = card.bucket
+    if bucket == "library":
+        return "card--accent-moss"
+    if bucket == "capture":
+        if _is_damaged(card):
+            return "card--accent-ember-damaged"
+        if card.progress is not None:
+            return "card--accent-pulp-ripping"
+        return "card--accent-pulp"
+    if bucket == "beets_id":
+        return "card--accent-sky"
+    if bucket == "review":
+        # Review priority: NO_MATCH / NO_ID_NO_TAGS → ember; others → amber.
+        pri = card.review_priority
+        # ReviewPriority: PARTIAL=0, WEAK_MATCH=1, NO_MATCH=2, NO_ID_NO_TAGS=3
+        if pri is not None and pri >= 2:
+            return "card--accent-ember"
+        return "card--accent-amber"
+    return ""
+
+
+def _card_title(card: DiscCard) -> str:
+    src = card.source_json or {}
+    album = (src.get("detected_metadata") or {}).get("album")
+    return _esc(album) if album else _esc(card.folder)
+
+
+def _card_artist(card: DiscCard) -> str:
+    src = card.source_json or {}
+    artist = (src.get("detected_metadata") or {}).get("album_artist")
+    if not artist:
+        hint_artist = (card.operator_hints or {}).get("artist")
+        return _esc(hint_artist) if hint_artist else ""
+    return _esc(artist)
+
+
+def _render_card_head(card: DiscCard) -> str:
+    return (
+        '<header class="card-head">'
+        f'{_render_thumbnail(card)}'
+        '<div class="card-head-text">'
+        f'<span class="slug">{_esc(card.folder)}</span>'
+        f'<h3 class="title">{_card_title(card)}</h3>'
+        f'<div class="artist">{_card_artist(card)}</div>'
+        '</div>'
+        '</header>'
+    )
+
+
+def _render_status_line(card: DiscCard) -> str:
+    from archivist.service import status_line as _sl
+    text = _sl.format(card)
+    if not text:
+        return ""
+    return f'<div class="cda-status">{_esc(text)}</div>'
+
+
+def _render_chip_row(card: DiscCard) -> str:
+    """0–4 chips per the build prompt: VA / BURNED / MIX / WEAK MATCH /
+    MUSICBRAINZ. Operator-asserted (hint-derived) chips get
+    .chip--asserted; system-confirmed ones get .chip--confirmed."""
+    chips: list[str] = []
+    hints = card.operator_hints or {}
+    va = bool(hints.get("various_artists"))
+    burned = bool(hints.get("burned_cd"))
+
+    # Mix CD is the special-case both-on chip per sprint-6.5; build
+    # prompt also lists MIX as its own chip. Emit MIX when both toggles
+    # ON (replaces VA + BURNED separately), else emit individually.
+    if va and burned:
+        chips.append(
+            '<span class="chip chip--asserted" '
+            'data-chip="mix">MIX</span>'
+        )
+    else:
+        if va:
+            chips.append(
+                '<span class="chip chip--asserted" '
+                'data-chip="va">VA</span>'
+            )
+        if burned:
+            chips.append(
+                '<span class="chip chip--asserted" '
+                'data-chip="burned">BURNED</span>'
+            )
+
+    # Beets-side scores: WEAK MATCH for review-bucket weak matches,
+    # MUSICBRAINZ for library-bucket disc-id-confirmed.
+    top = card.top_candidate or {}
+    score = top.get("score") if isinstance(top, dict) else None
+    src = card.source_json or {}
+    identifiers = src.get("identifiers") or {}
+    has_disc_id = bool(identifiers.get("musicbrainz_disc_id"))
+
+    if card.bucket == "review" and isinstance(score, (int, float)) and score < 0.85:
+        chips.append(
+            '<span class="chip chip--asserted" data-chip="weak">'
+            f'WEAK MATCH · {score:.2f}</span>'
+        )
+    elif card.bucket == "library" and has_disc_id and isinstance(score, (int, float)):
+        chips.append(
+            '<span class="chip chip--confirmed" data-chip="musicbrainz">'
+            f'MUSICBRAINZ · {score:.2f}</span>'
+        )
+    return '<div class="chip-row">' + "".join(chips) + '</div>'
 
 
 def _render_progress(card: DiscCard) -> str:
@@ -160,18 +308,27 @@ def _thumbnail_src(card: DiscCard) -> str | None:
         return f"/library/{folder}/album-cover"
     src = card.source_json or {}
     physical = src.get("physical_disc") or {}
-    photo = physical.get("photo") or "disc-photo.jpg"
-    if not photo.endswith(".jpg") and not photo.endswith(".png"):
-        photo = "disc-photo.jpg"
-    return f"/review/{folder}/disc-photo.jpg"
+    # Sprint-7: only emit an <img> when a photo was actually captured;
+    # otherwise fall through to the conic-gradient placeholder so the
+    # card doesn't render a broken-image icon.
+    if physical.get("photo_captured"):
+        return f"/review/{folder}/disc-photo.jpg"
+    return None
 
 
 def _render_thumbnail(card: DiscCard) -> str:
     src = _thumbnail_src(card)
     if src is None:
         # Sprint-7 / impl-disc-photo-placeholder: CSS-drawn conic-gradient
-        # glow stands in until the pi-camera photo lands on disk.
-        return '<div class="thumb thumb--placeholder" aria-hidden="true"></div>'
+        # glow stands in until the pi-camera photo lands on disk. We
+        # still encode the would-be photo URL as a data attribute so
+        # the front-end (and tests) can find it.
+        folder = _esc(card.folder)
+        return (
+            '<div class="thumb thumb--placeholder" '
+            f'data-photo-src="/review/{folder}/disc-photo.jpg" '
+            'aria-hidden="true"></div>'
+        )
     return (
         f'<img class="thumb card-thumb" loading="lazy" alt="" src="{src}">'
     )
@@ -346,16 +503,25 @@ def _render_damaged_actions_section(card: DiscCard) -> str:
 
 def _render_card(card: DiscCard) -> str:
     folder = _esc(card.folder)
-    chip = _chip_for(card)
-    chip_html = ""
-    if chip is not None:
-        ck, ct = chip
-        chip_html = f'<span class="chip" data-chip="{ck}">{_esc(ct)}</span>'
-
     damaged = _is_damaged(card)
     damaged_class = " card--damaged" if damaged else ""
     damaged_attr = ' data-state="damaged"' if damaged else ""
+    accent_class = _accent_class(card)
+    accent_segment = f" {accent_class}" if accent_class else ""
 
+    # Sprint-7 / impl-candidates-section-ui: placeholder is rendered
+    # server-side; the kanban JS fetches /api/disc/<folder>/candidates
+    # on first expand and replaces the inner body when the response
+    # carries a non-empty candidates list. The section element is
+    # hidden until the fetch resolves with results so cards without
+    # candidates don't leave an empty header sitting around.
+    candidates_section = (
+        '<section class="card-section" data-section="candidates" '
+        f'data-candidates-folder="{folder}" hidden>'
+        '<h4 class="section-title">beets candidates</h4>'
+        '<div class="candidate-rows" data-target="candidate-rows"></div>'
+        '</section>'
+    )
     hints_section = (
         '<section class="card-section" data-section="hints">'
         '<h4 class="section-title">hints</h4>'
@@ -372,24 +538,20 @@ def _render_card(card: DiscCard) -> str:
     )
 
     collapsed = (
-        '<header class="card-head">'
-        f'{_render_thumbnail(card)}'
-        f'<h3 class="card-title">{folder}</h3>'
-        f'{chip_html}'
-        f'{_metadata_chips(card)}'
-        '</header>'
-        f'{_render_progress(card)}'
+        f'{_render_card_head(card)}'
         f'{_render_track_bar(card)}'
+        f'{_render_status_line(card)}'
+        f'{_render_chip_row(card)}'
         f'{_render_collapsed_actions(card)}'
     )
     expanded = (
         '<div class="card-body" hidden>'
-        f'{hints_section}{manual_section}{damaged_section}'
+        f'{candidates_section}{hints_section}{manual_section}{damaged_section}'
         '</div>'
     )
 
     return (
-        f'<article class="card{damaged_class}"{damaged_attr} '
+        f'<article class="card{damaged_class}{accent_segment}"{damaged_attr} '
         f'data-folder="{folder}" '
         f'data-card-id="{folder}" data-bucket="{_esc(card.bucket)}" '
         'aria-expanded="false" tabindex="0">'
@@ -428,6 +590,7 @@ def _render_header_bar(stats: dict, links: dict) -> str:
     return (
         '<header class="page-header">'
         '<div class="header-left">'
+        '<span class="cda-brand-mark cda-brand-mark--header">cd/a</span>'
         '<span class="wordmark">cd-archivist</span>'
         '<span class="daemon-state-dot" data-daemon-state="active" '
         'aria-label="daemon active"></span>'
@@ -569,8 +732,84 @@ function toggleCard(card) {
   const body = card.querySelector('.card-body');
   if (body) body.hidden = expanded;
   currentlyExpanded = expanded ? null : card;
-  if (!expanded) openRightDrawerForCard(card);
+  if (!expanded) {
+    openRightDrawerForCard(card);
+    loadCandidatesForCard(card);
+  }
 }
+
+// Sprint-7 / impl-candidates-section-ui: fetch /api/disc/<folder>/candidates
+// once per card-expand, render up to 5 rows when the response carries
+// a non-empty list, hide the section otherwise. The conditional render
+// guard lives here (data.candidates && data.candidates.length).
+async function loadCandidatesForCard(card) {
+  const section = card.querySelector('[data-section="candidates"]');
+  if (!section || section.dataset.loaded === 'true') return;
+  const folder = section.getAttribute('data-candidates-folder');
+  if (!folder) return;
+  try {
+    const res = await fetch(`/api/disc/${encodeURIComponent(folder)}/candidates`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!(data.candidates && data.candidates.length)) {
+      section.hidden = true;
+      return;
+    }
+    renderCandidateRows(section, folder, data.candidates.slice(0, 5));
+    section.hidden = false;
+    section.dataset.loaded = 'true';
+  } catch (_) { /* swallow — operator can re-expand to retry */ }
+}
+
+function renderCandidateRows(section, folder, candidates) {
+  const target = section.querySelector('[data-target="candidate-rows"]');
+  if (!target) return;
+  const rows = candidates.map((c, i) => {
+    const topClass = i === 0 ? ' candidate--top' : '';
+    const score = (c.score == null ? '' : Math.round(c.score * 100));
+    const year = c.year ? ` · ${c.year}` : '';
+    const country = c.country ? ` · ${c.country}` : '';
+    return (
+      `<div class="candidate-row${topClass}">` +
+        `<span class="score-chip">${score}</span>` +
+        `<div class="candidate-meta">` +
+          `<div class="candidate-meta-title">${escapeHtml(c.artist || '')} — ${escapeHtml(c.title || '')}</div>` +
+          `<div class="candidate-meta-sub">${escapeHtml(c.mbid || '')}${year}${country}</div>` +
+        `</div>` +
+        `<button type="button" class="apply-btn btn btn--accent" ` +
+          `data-mbid="${escapeAttr(c.mbid || '')}" ` +
+          `data-folder="${escapeAttr(folder)}">apply</button>` +
+      `</div>`
+    );
+  }).join('');
+  target.innerHTML = rows;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+function escapeAttr(s) {
+  return String(s).replace(/["&<>]/g, (c) => ({'"':'&quot;','&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+document.addEventListener('click', async (e) => {
+  const apply = e.target.closest('.apply-btn[data-mbid]');
+  if (apply) {
+    e.preventDefault();
+    e.stopPropagation();
+    const folder = apply.getAttribute('data-folder');
+    const mbid = apply.getAttribute('data-mbid');
+    if (folder && mbid) {
+      try {
+        await fetch(`/api/disc/${encodeURIComponent(folder)}/accept-top-candidate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mbid }),
+        });
+      } catch (_) { /* swallow */ }
+    }
+  }
+});
 
 document.addEventListener('click', (e) => {
   // Destructive-action gate: arm on first click, fire on second.

@@ -774,3 +774,418 @@ body {
   height: 160px;
   flex: 0 0 160px;
 }
+
+/* ============================================================ card-anatomy
+ * Sprint-7 impl-card-anatomy (lane-2). Card-head + chip-row +
+ * status-line + track-bar + per-column accent classes.
+ */
+
+/* --- Card head: 56×56 thumb + slug/title/artist text block ---------- */
+.card-head {
+  display: flex;
+  gap: var(--s-3, 12px);
+  align-items: flex-start;
+}
+.thumb {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: var(--r-2, 4px);
+  object-fit: cover;
+  background: var(--ink-3);
+}
+.thumb--placeholder {
+  background:
+    conic-gradient(
+      from 220deg at 50% 50%,
+      var(--mash-pulp) 0deg,
+      var(--mash-pulp-edge) 110deg,
+      var(--ink-2) 240deg,
+      var(--mash-pulp) 360deg
+    );
+  box-shadow: inset 0 0 12px rgba(0,0,0,0.45);
+}
+.card-head-text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.slug {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs, 11px);
+  letter-spacing: 0.04em;
+  color: var(--ink-7, #aaa);
+  text-transform: uppercase;
+}
+.card-head-text .title {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm, 14px);
+  font-weight: 700;
+  color: var(--ink, #eee);
+  margin: 0;
+}
+.card-head-text .artist {
+  font-family: var(--font-body);
+  font-size: var(--fs-sm, 13px);
+  color: var(--ink-6, #ccc);
+}
+
+/* --- Status line (mono) --------------------------------------------- */
+.cda-status {
+  font-family: var(--font-mono);
+  color: var(--ink-7, #aaa);
+  font-size: 12px;
+  margin-top: var(--s-2, 8px);
+}
+
+/* --- Chip row ------------------------------------------------------- */
+.chip-row {
+  display: flex;
+  gap: var(--s-2, 8px);
+  margin-top: var(--s-2, 8px);
+  flex-wrap: wrap;
+}
+.chip-row .chip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs, 11px);
+  padding: 2px 6px;
+  border-radius: var(--r-full, 999px);
+  background: transparent;
+  color: var(--ink, #eee);
+  border: 1px solid var(--ink-4, #283039);
+}
+.chip-row .chip[data-meta-state="confirmed"],
+.chip-row .chip--confirmed {
+  background: var(--moss-soft, #1d3a2a);
+  color: var(--moss, #3ec27a);
+  border: 1px solid var(--moss, #3ec27a);
+  box-shadow: 0 0 6px var(--moss, #3ec27a);
+}
+.chip-row .chip[data-meta-state="asserted"],
+.chip-row .chip--asserted {
+  background: transparent;
+  color: var(--ink, #eee);
+  border: 1px dashed var(--ink-5, #3a4451);
+}
+
+/* --- Per-column left-border accent ---------------------------------- */
+.card--accent-pulp           { border-left: 3px solid var(--mash-pulp); }
+.card--accent-pulp-ripping   { border-left: 3px solid var(--mash-pulp);
+                               box-shadow: 0 0 8px var(--mash-pulp-soft); }
+.card--accent-ember-damaged  { border-left: 4px solid var(--ember);
+                               box-shadow: 0 0 12px rgba(230, 86, 108, 0.35); }
+.card--accent-sky            { border-left: 3px solid var(--sky); }
+.card--accent-amber          { border-left: 3px solid var(--amber); }
+.card--accent-ember          { border-left: 3px solid var(--ember); }
+.card--accent-moss           { border-left: 3px solid var(--moss); }
+
+/* --- Track bar ------------------------------------------------------ */
+.track-bar {
+  display: grid;
+  grid-template-columns: repeat(var(--track-count, 1), 1fr);
+  gap: 2px;
+  margin-top: var(--s-2, 8px);
+}
+.track-cell {
+  height: 8px;
+  background: var(--ink-3);
+  border-radius: 1px;
+}
+.track-cell--clean         { background: var(--moss); }
+.track-cell--recovered     { background: var(--sky); }
+.track-cell--unrecoverable { background: var(--ember); }
+.track-cell--pending       { background: var(--ink-3); }
+.track-cell--ripping {
+  background: linear-gradient(
+    to right,
+    var(--mash-pulp) 0,
+    var(--mash-pulp) var(--progress, 0%),
+    var(--ink-3) var(--progress, 0%),
+    var(--ink-3) 100%
+  );
+}
+.track-cell--identified {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+}
+
+/* impl-candidates-section-ui: rows inside the expanded card body. */
+.candidate-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.candidate-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-4, #283039);
+  border-radius: 6px;
+  background: var(--ink-2, #141921);
+}
+.candidate--top {
+  background: var(--amber-soft, #3a2e15);
+  border-color: var(--amber, #e8a83a);
+}
+.score-chip {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--ink-3, #1c232c);
+  color: var(--ink-9, #faf7f2);
+  text-align: center;
+}
+.candidate-meta-title {
+  font-size: 13px;
+  color: var(--ink-9, #faf7f2);
+}
+.candidate-meta-sub {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  color: var(--ink-6, #6b7480);
+}
+
+/* =========================================================================
+   Sprint-7 / impl-css-migration-brand-mark — brand-mark size variants.
+   The base .cda-brand-mark (above) defines the recipe (font, weight,
+   color, stroke, paint-order, text-shadow extrude). The variants below
+   set font-size per the build-prompt table. The legacy 22px declared
+   in .cda-brand-mark itself is preserved as the implicit default so
+   existing usages don't break — but new callers should always use
+   one of the three variants.
+
+   D-mobile-brand-mark-size (resolved 2026-05-16, lane-1): no mobile
+   variant. 22px is comfortable under the 720px breakpoint and lets
+   the header bar keep its single layout. Revisit if header crowding
+   shows up in operator-driven smoke (Wave 3).
+   ========================================================================= */
+
+.cda-brand-mark--header    { font-size: 22px; }
+.cda-brand-mark--splash    {
+  font-size: 84px;
+  -webkit-text-stroke: 2px var(--mash-pulp-edge);
+}
+.cda-brand-mark--marketing {
+  font-size: 240px;
+  -webkit-text-stroke: 2.5px var(--mash-pulp-edge);
+}
+
+/* =========================================================================
+   Sprint-7 / impl-css-migration — legacy kanban layout rules moved off
+   the inline <style> block in kanban_page.py per D-inline-css-whitelist.
+   Class names are preserved to keep existing tests (test_card_evolution,
+   test_collapsed_card_actions, test_kanban_endpoint, …) passing. A full
+   migration to the cda-* namespace is deferred to sprint-8.
+   ========================================================================= */
+
+:root { color-scheme: dark; }
+body {
+  font-family: var(--font-body);
+  background: var(--ink-0);
+  color: var(--fg);
+  margin: 0;
+  padding: 0;
+}
+
+.page-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.header-left   { display: flex; gap: 8px; align-items: center; }
+.header-stats  { display: flex; gap: 12px; justify-self: center; color: var(--fg-quiet); }
+.header-right  { display: flex; gap: 8px; justify-self: end; }
+
+.wordmark { font-weight: 700; color: var(--fg); }
+.daemon-state-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--moss);
+}
+.daemon-state-dot[data-daemon-state="stopped"] { background: var(--ember); }
+
+main.kanban {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.column {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+.column-header {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+  padding-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.column-title {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-quiet);
+  margin: 0 0 12px 0;
+}
+.count-badge { color: var(--fg); font-weight: 600; }
+
+/* Sprint-7 / impl-column-headlamps. 8px round dots, NOT column tints. */
+.headlamp { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.headlamp--pulp  { background: var(--mash-pulp); }
+.headlamp--sky   { background: var(--sky); }
+.headlamp--amber { background: var(--amber); }
+.headlamp--moss  { background: var(--moss); }
+
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--sky);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.card[data-bucket="review"]    { border-left-color: var(--amber); }
+.card[data-bucket="library"]   { border-left-color: var(--moss); }
+.card[data-state="damaged"] {
+  border-left-color: var(--ember);
+  box-shadow: 0 0 12px 2px rgba(230, 86, 108, 0.35);
+}
+
+.card-head    { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card-thumb   { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+.card-title   { font-size: 13px; margin: 0; }
+.chip {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--fg);
+  color: var(--ink-0);
+  border-radius: 999px;
+}
+.chip[data-meta-state="confirmed"] {
+  background: var(--moss);
+  color: var(--ink-0);
+  box-shadow: 0 0 4px var(--moss);
+}
+.chip[data-meta-state="asserted"] {
+  background: transparent;
+  color: var(--fg);
+  border: 1px dashed var(--line-strong);
+}
+.track-bar  { display: flex; gap: 2px; margin-top: 8px; }
+.track-cell                { flex: 1; height: 6px; background: var(--surface); }
+.track-cell--success       { background: var(--moss); }
+.track-cell--fail          { background: var(--ember); }
+.track-cell--in_progress   { background: var(--sky); }
+.track-cell--pending       { background: var(--surface); }
+.track-cell--identified    { outline: 1px solid var(--moss); }
+
+.card-actions  { display: flex; gap: 8px; margin-top: 8px; }
+.progress      { margin-top: 8px; }
+.progress-stage{ font-size: 11px; color: var(--fg-quiet); }
+.card-section {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-quiet);
+  margin: 0 0 8px 0;
+}
+.hint-controls         { border: 1px solid var(--line); padding: 8px; }
+.hint-controls label   { display: block; margin: 4px 0; }
+.per-track-table       { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.per-track-table td,
+.per-track-table th    { padding: 2px 4px; border-bottom: 1px solid var(--line); }
+
+.btn {
+  font-family: var(--font-body);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  background: var(--surface);
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn--accent {
+  background: var(--mash-pulp);
+  color: var(--ink-0);
+}
+.btn--confirm-armed {
+  background: var(--ember);
+  color: var(--ink-0);
+  border-color: var(--ember);
+}
+.keyboard-help {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+}
+.drawer {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  z-index: 8;
+  transition: transform 200ms var(--ease-out);
+}
+.drawer--right {
+  top: 0; right: 0; bottom: 0; width: 420px;
+  transform: translateX(100%);
+}
+.drawer--right[aria-hidden="false"] { transform: translateX(0); }
+.drawer--bottom {
+  left: 0; right: 0; bottom: 0; height: 240px;
+  transform: translateY(100%);
+}
+.drawer--bottom[aria-hidden="false"] { transform: translateY(0); }
+.drawer-body { padding: 12px; height: 100%; overflow: auto; }
+
+.bucket-tabs { display: none; gap: 8px; padding: 8px 12px; }
+.bucket-tab {
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+.bucket-tab[data-selected="true"] {
+  background: var(--mash-pulp);
+  color: var(--ink-0);
+}
+
+/* D-mobile-breakpoint-v1 — single column + bucket-tab segmented at ≤720px. */
+@media (max-width: 720px) {
+  main.kanban { grid-template-columns: 1fr; }
+  .bucket-tabs { display: flex; }
+  .column { display: none; }
+  .column[data-active-mobile="true"] { display: block; }
+  .drawer--right { width: 100%; }
+}

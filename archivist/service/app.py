@@ -293,7 +293,11 @@ def create_app(
         # import --search-id <mbid>` shell-out. For sprint-6.5 the
         # endpoint records the operator's intent on disk.
         @app.post("/api/disc/{folder}/accept-top-candidate")
-        def api_accept_top_candidate(folder: str) -> JSONResponse:
+        async def api_accept_top_candidate(folder: str, request: Request) -> JSONResponse:
+            """Sprint-7: additive body contract. With no body, picks the
+            on-disk top_candidate.json (sprint-6.5 behaviour). With a
+            JSON body `{mbid: str}`, accepts the operator-picked MBID
+            directly — used by the Beets-candidates Apply buttons."""
             import json as _json
             from archivist.service.disc_card_builder import _iter_disc_folders
             target: Path | None = None
@@ -308,6 +312,27 @@ def create_app(
                 raise HTTPException(
                     status_code=404, detail=f"folder not found: {folder}",
                 )
+
+            # Operator-picked MBID path (additive sprint-7 surface).
+            picked_mbid: str | None = None
+            try:
+                raw = await request.body()
+            except Exception:  # noqa: BLE001 — body read may fail on weird clients
+                raw = b""
+            if raw:
+                try:
+                    body = _json.loads(raw)
+                    picked_mbid = (body or {}).get("mbid") or None
+                except ValueError:
+                    picked_mbid = None
+            if picked_mbid:
+                accepted = {"mbid": picked_mbid, "score": None, "source": "operator"}
+                (target / "ACCEPTED").write_text(
+                    _json.dumps(accepted), encoding="utf-8",
+                )
+                return JSONResponse({"accepted": accepted, "folder": folder})
+
+            # No-body path: pick from on-disk top_candidate.json (legacy).
             top_cand_path = target / "top_candidate.json"
             if not top_cand_path.is_file():
                 raise HTTPException(
