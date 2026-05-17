@@ -48,14 +48,19 @@ def test_bucket_tabs_nav_present_in_markup(client: TestClient) -> None:
     html = client.get("/").text
     assert 'class="bucket-tabs"' in html or "bucket-tabs" in html
     # Four tabs, one per bucket — pin the bucket labels.
-    for label in ("Capture", "Beets ID", "Review", "In Library"):
+    # Sprint-7 voice pass: "In Library" → "In library" (sentence case).
+    for label in ("Capture", "Beets ID", "Review", "In library"):
         assert label in html
 
 
 def test_mobile_breakpoint_is_720px(client: TestClient) -> None:
-    """D-mobile-breakpoint-v1 proposes max-width: 720px."""
-    html = client.get("/").text
-    assert "max-width: 720px" in html or "max-width:720px" in html
+    """D-mobile-breakpoint-v1 proposes max-width: 720px. Sprint-7 /
+    impl-css-migration moved the @media rule from the inline <style>
+    block to /static/css/cda.css (and hard-coded 720px there — see
+    D-inline-css-whitelist + the impl-css-migration-brand-mark commit
+    message)."""
+    cda = client.get("/static/css/cda.css").text
+    assert "max-width: 720px" in cda or "max-width:720px" in cda
 
 
 # ============== (b) tab selection persists in localStorage ==============

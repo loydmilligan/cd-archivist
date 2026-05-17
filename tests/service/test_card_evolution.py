@@ -159,13 +159,27 @@ def test_unidentified_tracks_do_not_carry_data_attribute(
 def test_confirmed_chips_carry_confirmed_class(
     client: TestClient, music_root: Path,
 ) -> None:
-    _seed(music_root / "library" / "Foo", "Bar", _base_source(
+    """Sprint-7 / impl-card-anatomy refactored the chip-row driver:
+    `chip--confirmed` now signals a system-confirmed Beets/MusicBrainz
+    match (not a populated `detected_metadata` block). Seed a
+    library-bucket card with a `musicbrainz_disc_id` AND a
+    `top_candidate.json` sidecar so the chip row emits the
+    `MUSICBRAINZ · <score>` confirmed chip."""
+    folder = _seed(music_root / "library" / "Foo", "Bar", _base_source(
         "Bar",
+        identifiers={
+            "musicbrainz_disc_id": "abc123", "freedb_disc_id": None,
+            "cd_toc": None, "upc": None, "isrcs": [],
+        },
         detected_metadata={
             "album_artist": "Foo", "album": "Bar", "year": None,
             "label": None, "catalog_number": None, "tracks": [],
         },
     ))
+    (folder / "top_candidate.json").write_text(json.dumps({
+        "mbid": "abc-mbid", "score": 0.97,
+        "artist": "Foo", "title": "Bar",
+    }))
     html = client.get("/").text
     assert "chip--confirmed" in html
 
@@ -176,38 +190,55 @@ def test_confirmed_chips_carry_confirmed_class(
 def test_asserted_chips_carry_asserted_class(
     client: TestClient, music_root: Path,
 ) -> None:
-    """operator_hints.artist set; detected_metadata.album_artist NOT
-    confirmed by beets → asserted (dashed border)."""
+    """Sprint-7 / impl-card-anatomy refactored the chip-row driver:
+    operator-hint-derived chips (VA / BURNED / MIX) are emitted with
+    `chip--asserted` (dashed border). Seed a review-bucket card with
+    `various_artists=True` so the VA chip carries the asserted class."""
     _seed(music_root / "review", "disc-asserted", _base_source(
         "disc-asserted",
         operator_hints={
-            "various_artists": False, "burned_cd": False,
-            "artist": "Hand-Typed", "album": None, "tracks": [],
+            "various_artists": True, "burned_cd": False,
+            "artist": None, "album": None, "tracks": [],
         },
     ))
     html = client.get("/").text
     assert "chip--asserted" in html
     # The confirmed class must NOT appear for this card — there's no
-    # detected_metadata to confirm against.
+    # system-confirmed match to drive a MUSICBRAINZ / confirmed chip.
     assert "chip--confirmed" not in html
 
 
 def test_confirmed_wins_over_asserted_when_both_present(
     client: TestClient, music_root: Path,
 ) -> None:
-    """If beets confirmed AND operator asserted, the chip is
-    confirmed (system trumps operator)."""
-    _seed(music_root / "library" / "Foo", "Bar", _base_source(
+    """Sprint-7 / impl-card-anatomy refactored the chip-row driver:
+    operator-asserted chips (VA / BURNED / MIX) and system-confirmed
+    chips (MUSICBRAINZ) live alongside each other in the new chip row —
+    they're not mutually exclusive. What the test still pins is the
+    original spirit: when Beets has system-confirmed the match, the
+    `chip--confirmed` class MUST appear regardless of any operator
+    assertions on the same card. Seed a library card with both a
+    Beets-confirmed match AND operator hints; assert the confirmed
+    class is present (the asserted hint chip MAY also appear)."""
+    folder = _seed(music_root / "library" / "Foo", "Bar", _base_source(
         "Bar",
+        identifiers={
+            "musicbrainz_disc_id": "abc123", "freedb_disc_id": None,
+            "cd_toc": None, "upc": None, "isrcs": [],
+        },
         detected_metadata={
             "album_artist": "Foo", "album": "Bar", "year": None,
             "label": None, "catalog_number": None, "tracks": [],
         },
         operator_hints={
-            "various_artists": False, "burned_cd": False,
+            "various_artists": False, "burned_cd": True,
             "artist": "Foo", "album": "Bar", "tracks": [],
         },
     ))
+    (folder / "top_candidate.json").write_text(json.dumps({
+        "mbid": "abc-mbid", "score": 0.97,
+        "artist": "Foo", "title": "Bar",
+    }))
     html = client.get("/").text
     assert "chip--confirmed" in html
 

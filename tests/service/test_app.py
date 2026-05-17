@@ -166,18 +166,26 @@ def test_root_page_wires_real_endpoints_and_title(loop_state: LoopState, log_pat
 
 
 def test_root_page_carries_mash_design_tokens(loop_state: LoopState, log_path: Path) -> None:
-    """Tokens are wired — inline <style> or via served /static/tokens.css."""
+    """Tokens are wired — inline <style> or via served tokens.css.
+    Sprint-7 / impl-asset-wire-up moved the canonical token file to
+    /static/css/tokens.css (legacy /static/tokens.css path no longer
+    served). Sprint-7 / impl-css-migration moved component CSS to
+    /static/css/cda.css. The page is allowed to link either CSS file
+    and tokens may resolve from any of them; the test scans all three
+    potential sources."""
     client = TestClient(create_app(loop_state, log_path))
     body = client.get("/").text
 
     # Tokens may be inline OR linked. If linked, fetch the served file
-    # and search across both for the token strings.
+    # and search across all known locations for the token strings.
     sources = [body]
-    link_match = re.search(r'href="(/static/tokens\.css[^"]*)"', body)
-    if link_match:
-        resp = client.get(link_match.group(1))
-        assert resp.status_code == 200, "linked tokens.css must be served"
-        sources.append(resp.text)
+    for css_path in ("/static/css/tokens.css", "/static/css/cda.css"):
+        if css_path in body:
+            resp = client.get(css_path)
+            assert resp.status_code == 200, (
+                f"linked {css_path} must be served"
+            )
+            sources.append(resp.text)
 
     combined = "\n".join(sources)
     assert "--ink-" in combined, "missing --ink-* design tokens"

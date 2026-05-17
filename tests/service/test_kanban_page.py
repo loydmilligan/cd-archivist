@@ -109,7 +109,9 @@ def test_page_renders_four_column_headers(client: TestClient) -> None:
     assert "Capture" in html
     assert "Beets ID" in html
     assert "Review" in html
-    assert "In Library" in html
+    # Sprint-7 voice pass lowercased "In Library" → "In library"
+    # (sentence case; eyebrows are CSS-uppercased per design system).
+    assert "In library" in html
 
 
 # ---------------- collapsed-card markup ----------------------------------
@@ -162,12 +164,18 @@ def test_page_carries_poll_interval_meta_tag(client: TestClient) -> None:
 
 def test_page_applies_mash_tokens(client: TestClient) -> None:
     html = client.get("/").text
-    # Tokens live in /static/tokens.css — page must link/load it.
-    assert "/static/tokens.css" in html
-    # Token names referenced in the page CSS (validated by string search;
-    # the actual color values come from tokens.css).
-    for tok in ("--ink", "--ok", "--warn", "--info"):
-        assert tok in html, f"expected Mash token {tok!r} in page CSS"
+    # Sprint-7 / impl-asset-wire-up moved tokens to /static/css/tokens.css.
+    assert "/static/css/tokens.css" in html
+    # Sprint-7 / impl-css-migration moved component CSS from the inline
+    # <style> block to /static/css/cda.css. The token names referenced
+    # by the page CSS now live there (and in tokens.css). Mash Co.
+    # vocabulary replaces the sprint-6 placeholder names — see the
+    # canonical token list in colors_and_type.css.
+    cda = client.get("/static/css/cda.css").text
+    tokens = client.get("/static/css/tokens.css").text
+    haystack = cda + "\n" + tokens
+    for tok in ("--ink-", "--mash-pulp", "--moss", "--amber", "--sky", "--ember"):
+        assert tok in haystack, f"expected Mash token {tok!r} in static CSS"
 
 
 def test_page_dark_first_theme(client: TestClient) -> None:
@@ -559,13 +567,13 @@ def test_header_has_no_alert_strip(client: TestClient) -> None:
 def test_column_carries_overflow_y_auto_in_css(
     client: TestClient,
 ) -> None:
-    """The kanban CSS must declare per-column scroll."""
-    html = client.get("/").text
-    # We pin the CSS rule fragment — the impl can use a selector
-    # other than `.column` as long as the overflow rule applies to
-    # the per-bucket region. The plan calls out `.column`.
-    assert ".column" in html
-    assert "overflow-y: auto" in html or "overflow-y:auto" in html
+    """The kanban CSS must declare per-column scroll. Sprint-7 /
+    impl-css-migration moved this rule from the inline <style> block
+    to /static/css/cda.css — the assertion follows the CSS to its new
+    home."""
+    cda = client.get("/static/css/cda.css").text
+    assert ".column" in cda
+    assert "overflow-y: auto" in cda or "overflow-y:auto" in cda
 
 
 def test_column_header_carries_count_badge(
@@ -585,9 +593,10 @@ def test_column_header_carries_count_badge(
 
 
 def test_column_header_is_position_sticky(client: TestClient) -> None:
-    html = client.get("/").text
-    # Sticky header lives in the column CSS — pin the rule fragment.
-    assert "position: sticky" in html or "position:sticky" in html
+    """Sprint-7 / impl-css-migration moved the sticky-header rule to
+    /static/css/cda.css alongside the rest of the column layout."""
+    cda = client.get("/static/css/cda.css").text
+    assert "position: sticky" in cda or "position:sticky" in cda
 
 
 # ============== test-adaptive-polling (sprint-6.5 Bucket E) =============

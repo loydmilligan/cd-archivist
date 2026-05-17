@@ -53,9 +53,14 @@ def test_bottom_drawer_element_exists_with_default_hidden(
 def test_bottom_drawer_slide_up_uses_css_transform(
     client: TestClient,
 ) -> None:
+    """Sprint-7 / impl-css-migration moved the slide-up transform rule
+    from the inline <style> block to /static/css/cda.css; the assertion
+    follows the CSS to its new home."""
     html = client.get("/").text
     assert "bottom-drawer" in html
-    assert "transform" in html
+    cda = client.get("/static/css/cda.css").text
+    assert "transform" in cda
+    assert ".drawer--bottom" in cda
 
 
 # ============== (b) tails /api/logs/tail when expanded ==================

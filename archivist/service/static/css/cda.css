@@ -1272,3 +1272,24 @@ main.kanban {
   color: var(--ink-7, #aaa);
   text-transform: uppercase;
 }
+
+/* Sprint-7 hotfix — additional kanban class names referenced from
+   markup that need a presence in this stylesheet so the class-name
+   resolution test passes. Minimal recipes; visual refinement deferred
+   to sprint-8. */
+.drawer-toggle--drive,
+.drawer-toggle--card {
+  /* Modifier markers on .btn. The base styling comes from .btn; the
+     active state is signalled via aria-pressed (not a class). */
+  background: var(--surface);
+}
+.drawer-toggle--drive[aria-pressed="true"],
+.drawer-toggle--card[aria-pressed="true"] {
+  background: var(--mash-pulp);
+  color: var(--ink-0);
+  border-color: var(--mash-pulp);
+}
+.live-status-text {
+  font: 500 12px/1 var(--font-mono);
+  color: var(--fg);
+}
