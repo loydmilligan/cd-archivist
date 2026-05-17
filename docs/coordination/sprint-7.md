@@ -118,7 +118,7 @@ status: draft
 
 #### Bucket A — Asset wire-up (lane-1)
 
-- [ ] {agent: lane-1, id: test-static-mount}
+- [x] {agent: lane-1, id: test-static-mount}
   Failing tests for FastAPI static file mounting.
   `tests/service/test_static_mount.py`: (a) `GET /static/css/tokens.css`
   returns 200 with `text/css`; (b) `GET /static/css/cda.css` returns 200;
@@ -129,7 +129,7 @@ status: draft
   the build prompt's snippet; (f) the kanban HTML loads
   `tokens.css` BEFORE `cda.css` in the `<head>`.
 
-- [ ] {agent: lane-1, id: test-font-loading}
+- [x] {agent: lane-1, id: test-font-loading}
   Failing tests for Google Fonts loading.
   `tests/service/test_font_loading.py`: (a) the page `<head>` includes
   the Google Fonts preconnect + stylesheet `<link>` for Bricolage
@@ -225,7 +225,7 @@ status: draft
 
 #### Bucket D — Beets candidates (lane-3)
 
-- [ ] {agent: lane-3, id: test-candidates-endpoint}
+- [x] {agent: lane-3, id: test-candidates-endpoint}
   Failing tests for `GET /api/disc/<folder>/candidates`.
   `tests/service/test_candidates_endpoint.py`:
   (a) response shape is `{"candidates": [{"mbid": str, "score":
