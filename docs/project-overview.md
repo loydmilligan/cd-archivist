@@ -1,6 +1,6 @@
 ---
 title: cd-archivist — project overview
-updated: 2026-05-16
+updated: 2026-05-17
 status: living-doc
 ---
 
@@ -18,7 +18,7 @@ Four stages, left-to-right. Every disc is a card that transits through them.
 
 1. **Capture** — cdparanoia rips audio to flac; pi camera shoots the disc label; ripper streams progress + sector errors per track.
 2. **Beets ID** — automated. Fingerprint + disc-id lookup runs against MusicBrainz / AcoustID. Monitoring step; no operator input expected.
-3. **Review** — beets couldn't auto-apply. Card surfaces a "why" (no match / weak match / no tags) and the operator drives a manual rescue: pick a beets candidate, paste an MBID, override with hints, or mark to skip.
+3. **Review** — beets couldn't auto-apply. Card surfaces a "why" (no match / weak match / no tags) and the operator drives a manual rescue: pick from up to 5 ranked MusicBrainz candidates, paste an MBID, override with hints, or mark to skip.
 4. **In Library** — clean import. Navidrome scans hourly; Jellyfin shares the same library.
 
 Damaged or partial-rip discs stay in **Capture** with a red-shadow visual treatment and three actions: **process partial as-is**, **redo entire capture**, **pick tracks to (re-)rip**.
@@ -31,8 +31,8 @@ Single web surface at `cda.mattmariani.com`. Operator-facing only.
 - **Cards** carry title, per-track segment bar (green/empty/red/blue), one-line status, disc-photo thumbnail (replaced by album art once metadata confirms), and chips for VA / Burned / Mix / Partial / track count. **Cards evolve visually as they advance:** track segments gain an outline once beets identifies the track; artist/album chips glow when system-confirmed; operator-entered values render with a dashed border so you can tell asserted from confirmed at a glance.
 - **Click a card** to inline-expand it (one at a time). Expanded body holds actionable controls in labeled sections: **Hints · Manual Steps · Damaged-Disc Actions**. Spacebar toggles expand when a card is focused; `?` tooltip surfaces keyboard nav.
 - **Right-side drawer** is the heavy-detail surface. When no card is selected, it shows the live drive status: current track, sector, retries, photo-capture state, elapsed time. When a card is clicked, it swaps to the rip-log tail + full `source.json` + disc photo.
-- **Bottom drawer** carries the daemon tail log. Collapsed by default; expand on demand. Sprint-7 will add per-rip and per-card log filters.
-- **Header bar** is sparse: wordmark left, compact rig stats center (discs ripped / in review / partial), drawer-toggle + nav buttons right (navidrome, beets web UI).
+- **Bottom drawer** carries the daemon tail log. Collapsed by default; expand on demand. Per-rip and per-card log filters are backlogged.
+- **Header bar** is sparse: wordmark left, compact rig stats center (Ripped / In review / Partial / Storage / Uptime), drawer-toggle + nav buttons right (navidrome, beets web UI).
 - **Live updates** poll `/api/kanban` adaptively — 1s during an active rip, 5s when idle. Keeps the CM4 quiet while staying responsive at the moments that matter (eject prompts, photo capture).
 - **Mobile** collapses to a single column with bucket tabs. Phone access is a "spot-check the rig" use case, not a primary surface.
 
