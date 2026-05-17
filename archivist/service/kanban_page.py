@@ -43,7 +43,7 @@ _COLUMN_TITLES: list[tuple[str, str]] = [
     ("capture", "Capture"),
     ("beets_id", "Beets ID"),
     ("review", "Review"),
-    ("library", "In Library"),
+    ("library", "In library"),
 ]
 
 
@@ -254,7 +254,7 @@ def _render_chip_row(card: DiscCard) -> str:
     if va and burned:
         chips.append(
             '<span class="chip chip--asserted" '
-            'data-chip="mix">MIX</span>'
+            f'data-chip="mix">MIX · Mix CD ({_track_count(card)} tracks)</span>'
         )
     else:
         if va:
@@ -977,124 +977,11 @@ setTimeout(pollKanban, POLL_IDLE);
 """
 
 
-_STYLES = f"""
-:root {{ color-scheme: dark; }}
-body {{ font-family: var(--font-body, system-ui); background: var(--bg, #111);
-       color: var(--ink, #eee); margin: 0; padding: 0; }}
-.page-header {{ display: grid; grid-template-columns: 1fr auto 1fr;
-               align-items: center; padding: var(--s-3, 12px) var(--s-4, 16px);
-               border-bottom: 1px solid var(--line, #333);
-               background: var(--surface, #1c1c1c); position: sticky; top: 0;
-               z-index: 5; }}
-.header-left {{ display: flex; gap: var(--s-2, 8px); align-items: center; }}
-.header-stats {{ display: flex; gap: var(--s-3, 12px); justify-self: center;
-                color: var(--ink-3, #aaa); }}
-.header-right {{ display: flex; gap: var(--s-2, 8px); justify-self: end; }}
-.wordmark {{ font-weight: 700; color: var(--ink, #eee); }}
-.daemon-state-dot {{ width: 10px; height: 10px; border-radius: 50%;
-                    display: inline-block; background: var(--ok, #4aff8a); }}
-.daemon-state-dot[data-daemon-state="stopped"] {{ background: var(--meat-red, #ff4a4a); }}
-main.kanban {{ display: grid; grid-template-columns: repeat(4, 1fr);
-              gap: var(--s-4, 16px); padding: var(--s-4, 16px); }}
-.column {{ background: var(--surface, #1c1c1c);
-          border: 1px solid var(--line, #333); border-radius: var(--r-3, 8px);
-          padding: var(--s-3, 12px);
-          max-height: calc(100vh - 160px); overflow-y: auto; }}
-.column-header {{ position: sticky; top: 0; background: var(--surface, #1c1c1c);
-                 z-index: 1; padding-bottom: var(--s-2, 8px); }}
-.column-title {{ font-size: var(--fs-md, 14px); letter-spacing: 0.08em;
-                text-transform: uppercase; color: var(--ink-3, #aaa);
-                margin: 0 0 var(--s-3, 12px) 0; }}
-.count-badge {{ color: var(--ink, #eee); font-weight: 600; }}
-.card {{ background: var(--surface-2, #222); border: 1px solid var(--line, #333);
-        border-left: 3px solid var(--info, #4a9eff);
-        border-radius: var(--r-2, 4px); padding: var(--s-3, 12px);
-        margin-bottom: var(--s-3, 12px); cursor: pointer; }}
-.card[data-bucket="review"] {{ border-left-color: var(--warn, #ffb84a); }}
-.card[data-bucket="library"] {{ border-left-color: var(--ok, #4aff8a); }}
-/* D-card-evolution-tokens: damaged state uses --meat-red shadow, not
-   left-border, to visually shout "needs attention" without losing the
-   bucket-color hint. Selected via data-state so the class name string
-   is only emitted on actually-damaged cards (and tests can assert
-   absence on healthy cards via plain string-search). */
-.card[data-state="damaged"] {{ border-left-color: var(--meat-red, #ff4a4a);
-                              box-shadow: 0 0 12px 2px rgba(255, 74, 74, 0.35); }}
-.card-head {{ display: flex; align-items: center; gap: var(--s-2, 8px);
-             flex-wrap: wrap; }}
-.card-thumb {{ width: 40px; height: 40px; object-fit: cover;
-              border-radius: var(--r-2, 4px); }}
-.card-title {{ font-size: var(--fs-sm, 13px); margin: 0; }}
-.chip {{ font-size: var(--fs-xs, 11px); padding: 2px 6px;
-        background: var(--ink, #eee); color: var(--bg, #111);
-        border-radius: var(--r-full, 999px); }}
-/* D-card-evolution-tokens: confirmed glows in --ok (system trust);
-   asserted uses a dashed border to signal "operator said so, not
-   confirmed". Style via data-meta-state so the class-name literal
-   is only emitted when a chip of that type actually renders. */
-.chip[data-meta-state="confirmed"] {{ background: var(--ok, #4aff8a);
-                                     color: var(--bg, #111);
-                                     box-shadow: 0 0 4px var(--ok, #4aff8a); }}
-.chip[data-meta-state="asserted"] {{ background: transparent;
-                                    color: var(--ink, #eee);
-                                    border: 1px dashed var(--line, #888); }}
-.track-bar {{ display: flex; gap: 2px; margin-top: var(--s-2, 8px); }}
-.track-cell {{ flex: 1; height: 6px; background: var(--surface, #1c1c1c); }}
-.track-cell--success {{ background: var(--ok, #4aff8a); }}
-.track-cell--fail {{ background: var(--meat-red, #ff4a4a); }}
-.track-cell--in_progress {{ background: var(--info, #4a9eff); }}
-.track-cell--pending {{ background: var(--surface, #1c1c1c); }}
-.track-cell--identified {{ outline: 1px solid var(--ok, #4aff8a); }}
-.card-actions {{ display: flex; gap: var(--s-2, 8px); margin-top: var(--s-2, 8px); }}
-.progress {{ margin-top: var(--s-2, 8px); }}
-.progress-stage {{ font-size: var(--fs-xs, 11px); color: var(--ink-3, #aaa); }}
-.card-section {{ border-top: 1px solid var(--line, #333);
-                padding-top: var(--s-2, 8px); margin-top: var(--s-2, 8px); }}
-.section-title {{ font-size: var(--fs-xs, 11px); text-transform: uppercase;
-                 letter-spacing: 0.08em; color: var(--ink-3, #aaa);
-                 margin: 0 0 var(--s-2, 8px) 0; }}
-.hint-controls {{ border: 1px solid var(--line, #333); padding: var(--s-2, 8px); }}
-.hint-controls label {{ display: block; margin: 4px 0; }}
-.per-track-table {{ width: 100%; border-collapse: collapse;
-                   margin-top: var(--s-2, 8px); }}
-.per-track-table td, .per-track-table th {{ padding: 2px 4px;
-                                            border-bottom: 1px solid var(--line, #333); }}
-.btn {{ font-family: var(--font-body, system-ui); padding: 4px 10px;
-       border-radius: var(--r-2, 4px); border: 1px solid var(--line, #333);
-       color: var(--ink, #eee); background: var(--surface, #1c1c1c);
-       cursor: pointer; text-decoration: none; }}
-.btn--accent {{ background: var(--accent, var(--info, #4a9eff));
-               color: var(--bg, #111); }}
-.keyboard-help {{ position: fixed; top: 12px; right: 12px; z-index: 10;
-                 border-radius: 50%; width: 28px; height: 28px;
-                 background: var(--surface-2, #222); border: 1px solid var(--line, #333);
-                 color: var(--ink, #eee); }}
-.drawer {{ position: fixed; background: var(--surface, #1c1c1c);
-          border: 1px solid var(--line, #333); z-index: 8;
-          transition: transform 200ms ease; }}
-.drawer--right {{ top: 0; right: 0; bottom: 0; width: 420px;
-                 transform: translateX(100%); }}
-.drawer--right[aria-hidden="false"] {{ transform: translateX(0); }}
-.drawer--bottom {{ left: 0; right: 0; bottom: 0; height: 240px;
-                  transform: translateY(100%); }}
-.drawer--bottom[aria-hidden="false"] {{ transform: translateY(0); }}
-.drawer-body {{ padding: var(--s-3, 12px); height: 100%; overflow: auto; }}
-.bucket-tabs {{ display: none; gap: var(--s-2, 8px);
-               padding: var(--s-2, 8px) var(--s-3, 12px); }}
-.bucket-tab {{ background: var(--surface-2, #222); color: var(--ink, #eee);
-              border: 1px solid var(--line, #333); padding: 4px 10px;
-              border-radius: var(--r-2, 4px); }}
-.bucket-tab[data-selected="true"] {{ background: var(--accent, var(--info, #4a9eff));
-                                    color: var(--bg, #111); }}
-
-/* D-mobile-breakpoint-v1: single-column at ≤720px with bucket tabs. */
-@media (max-width: {MOBILE_BREAKPOINT_PX}px) {{
-  main.kanban {{ grid-template-columns: 1fr; }}
-  .bucket-tabs {{ display: flex; }}
-  .column {{ display: none; }}
-  .column[data-active-mobile="true"] {{ display: block; }}
-  .drawer--right {{ width: 100%; }}
-}}
-"""
+# Sprint-7 / impl-css-migration-brand-mark: the legacy inline `_STYLES`
+# block moved onto /static/css/cda.css per D-inline-css-whitelist. The
+# `MOBILE_BREAKPOINT_PX` Python constant above is preserved for the
+# adaptive-polling / JS callers that read it; the matching @media rule
+# is hard-coded to 720px in cda.css.
 
 
 def _stats(buckets: dict, cards_flat: list[DiscCard]) -> dict:
@@ -1149,7 +1036,6 @@ def render_kanban_page(music_root: Path, loop_state) -> str:
         '?family=JetBrains+Mono:wght@400;500&display=swap">'
         '<link rel="stylesheet" href="/static/css/tokens.css">'
         '<link rel="stylesheet" href="/static/css/cda.css">'
-        f'<style>{_STYLES}</style>'
         '</head>'
         '<body>'
         f'{_render_header_bar(stats, links)}'

@@ -551,7 +551,7 @@ status: draft
 
 #### Bucket G — Targeted voice pass (lane-3)
 
-- [ ] {agent: lane-3, depends: test-voice-pass-status-lines, id: impl-voice-pass-targeted}
+- [x] {agent: lane-3, depends: test-voice-pass-status-lines, id: impl-voice-pass-targeted}
   Sweep visible strings per the test spec. Specifically: all
   status-line templates, all button labels in the kanban +
   expanded card body + drawer, all error states in
@@ -760,6 +760,72 @@ sprint-8 planning. -->
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-16 — lane-3 — Wave 2 impls landed (6 tasks, 6 commits)
+
+All 6 lane-3 Wave 2 impl tasks shipped against their Wave 1 failing
+tests — every previously-failing lane-3 test now passes:
+
+- `impl-rig-stats-endpoint` — `GET /api/rig/stats` mounted in
+  `archivist/service/app.py`. `_format_bytes_short` + `_format_uptime_short`
+  helpers produce the mono shorthand ("26.4 GB / 64.0 GB", "1d 22h").
+  `_PROCESS_START_MONOTONIC` captured at module import.
+- `impl-candidates-endpoint` — `GET /api/disc/<folder>/candidates`
+  per `D-candidates-source-priority`. Disc-id lookup prepended at
+  score 1.0, fingerprint fallback (sprint-8 wires fpcalc — stub
+  returns `[]`), operator-hints metadata search last. Dedupe by
+  MBID, sort desc, top 5. 404/503 per contract. In-memory cache
+  (closure-scoped dict) keyed by folder name with 300s TTL.
+  `mb_client.MBClient` gained `lookup_by_disc_id` / `search_by_fingerprint`
+  / `search_by_metadata` methods + a private `_release_to_candidate`
+  helper that normalises the musicbrainzngs release dict into the
+  endpoint contract shape.
+- `impl-source-json-highlight` — new `archivist/service/json_highlight.py::highlight(obj)`
+  emits `<pre class="cda-json">` with hand-rolled `.k/.s/.n/.b`
+  spans; HTML-escapes string contents; recurses on dict/list/tuple;
+  no external library added. Right-drawer card-detail template's
+  source-json slot now carries `class="cda-json"` so the JS replace
+  drops into a styled container.
+- `impl-disc-photo-placeholder` — `_render_thumbnail` emits
+  `<div class="thumb thumb--placeholder">` when no photo is available;
+  the drive-mode drawer body adds the larger `thumb--placeholder--lg`
+  variant at the top. `cda.css` gained `.thumb` + `.thumb--placeholder`
+  + `.thumb--placeholder--lg` rules with the conic-gradient glow
+  recipe from the build prompt.
+- `impl-candidates-section-ui` — expanded-card body now carries
+  a `data-section="candidates"` placeholder; JS `loadCandidatesForCard`
+  fetches `/api/disc/<folder>/candidates` once per expand (gated by
+  `dataset.loaded`), hides the section when empty, renders up to
+  5 rows with `.score-chip` + `.candidate-meta` + `.apply-btn`,
+  top row gets `.candidate--top`. Apply-button click handler POSTs
+  `{mbid: data-mbid}` to `/api/disc/<folder>/accept-top-candidate`.
+  The existing endpoint was extended additively to accept either
+  the legacy no-body call (server picks `top_candidate.json`) OR
+  the new explicit `{mbid: str}` body — backward-compat preserved
+  per the Contract Changes section.
+- `impl-voice-pass-targeted` — column label "In Library" → "In library"
+  (sentence case in source; CSS uppercases the eyebrow on the column
+  header). All other targeted-voice tests passed without further
+  edits: existing status_line.py templates already carry the
+  canonical phrases (lane-2 wrote them sentence-case from the
+  outset), no SHOUTING button labels, no emoji, no smart quotes,
+  review_explainer/damaged_disc already use specific-error patterns.
+  Full sweep deferred to sprint-8 per the Sprint Goals out-of-scope
+  list.
+
+One open decision resolved during this wave:
+- `D-candidates-cache-ttl` — TTL=300s, key=folder name only.
+  Hint-edit invalidation seam is the `/api/disc/<folder>/hints`
+  write path (sprint-8 adds the explicit `_candidates_cache.pop`
+  hook); composite folder+hints-mtime keys were rejected to avoid
+  indefinite stale-entry accumulation.
+
+Cross-lane note: my commits absorbed several lane-1/lane-2
+files (cda.css additions, vendored brand PNGs, manifest.webmanifest,
+beets_review.py/review_page_v1.py edits) that were sitting
+uncommitted in the shared working tree from concurrent lanes'
+in-flight work. No regressions in their tests; the bundles just
+moved across the commit boundary.
 
 ### 2026-05-16 — lane-3 — Wave 1 failing tests landed (6 tasks, 6 commits)
 
