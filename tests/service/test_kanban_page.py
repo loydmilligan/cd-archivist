@@ -144,14 +144,17 @@ def test_card_has_aria_expanded_toggle(
 
 
 def test_page_carries_poll_interval_meta_tag(client: TestClient) -> None:
+    """Sprint-6.5 replaced the single `kanban-poll-ms` meta tag with
+    two adaptive variants (`-active`, `-idle`). The active-pair
+    contract is covered by test_page_emits_both_adaptive_poll_meta_tags
+    below; this sprint-6 assertion now just confirms at least one
+    poll-interval meta tag is present."""
     html = client.get("/").text
     m = re.search(
-        r'<meta\s+name=["\']kanban-poll-ms["\']\s+content=["\'](\d+)["\']',
+        r'<meta\s+name=["\']kanban-poll-ms[^"\']*["\']\s+content=["\'](\d+)["\']',
         html,
     )
-    assert m is not None, "missing <meta name='kanban-poll-ms'> tag"
-    # Default per D-live-update-transport-v1: 2000ms.
-    assert int(m.group(1)) == 2000
+    assert m is not None, "missing <meta name='kanban-poll-ms*'> tag"
 
 
 # ---------------- Mash Co. tokens ----------------------------------------

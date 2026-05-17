@@ -143,12 +143,86 @@ def create_app(
         @app.get("/api/kanban")
         def api_kanban() -> JSONResponse:
             state = build_kanban_state(music_root, loop_state=loop_state)
-            return JSONResponse(state.to_dict())
+            payload = state.to_dict()
+            # Sprint-6.5 / impl-adaptive-polling: top-level active_rip
+            # drives the client's poll cadence (1s active / 5s idle).
+            payload["active_rip"] = any(
+                c.get("progress") is not None
+                for c in payload["buckets"].get("capture", [])
+            )
+            return JSONResponse(payload)
 
         mount_operator_hints_routes(app, music_root=music_root)
 
         from archivist.service.damaged_disc import mount_damaged_disc_routes
         mount_damaged_disc_routes(app, music_root=music_root)
+
+        # Sprint-6.5 / impl-collapsed-card-actions: high-confidence
+        # one-click accept. Body invokes the existing beets pipeline
+        # via the docker stack — sprint-7 wires the actual `beet
+        # import --search-id <mbid>` shell-out. For sprint-6.5 the
+        # endpoint records the operator's intent on disk.
+        @app.post("/api/disc/{folder}/accept-top-candidate")
+        def api_accept_top_candidate(folder: str) -> JSONResponse:
+            import json as _json
+            from archivist.service.disc_card_builder import _iter_disc_folders
+            target: Path | None = None
+            for sub in ("review", "inbox", "failed"):
+                for d in _iter_disc_folders(music_root / sub, depth=1):
+                    if d.name == folder:
+                        target = d
+                        break
+                if target is not None:
+                    break
+            if target is None:
+                raise HTTPException(
+                    status_code=404, detail=f"folder not found: {folder}",
+                )
+            top_cand_path = target / "top_candidate.json"
+            if not top_cand_path.is_file():
+                raise HTTPException(
+                    status_code=409,
+                    detail="no top_candidate.json sidecar on disk",
+                )
+            top = _json.loads(top_cand_path.read_text(encoding="utf-8"))
+            if float(top.get("score") or 0) < 0.85:
+                raise HTTPException(
+                    status_code=409,
+                    detail="top candidate score below 0.85 threshold",
+                )
+            (target / "ACCEPTED").write_text(
+                _json.dumps({"mbid": top.get("mbid"), "score": top.get("score")}),
+                encoding="utf-8",
+            )
+            return JSONResponse({"accepted": top, "folder": folder})
+
+        # Sprint-6.5 / impl-right-drawer: per-disc rip-log tail for
+        # the card-detail drawer body.
+        @app.get("/api/disc/{folder}/log/tail")
+        def api_disc_log_tail(
+            folder: str, limit: int = Query(200, ge=1, le=2000),
+        ) -> PlainTextResponse:
+            from archivist.service.disc_card_builder import _iter_disc_folders
+            target: Path | None = None
+            for sub in ("review", "inbox", "failed", "archive"):
+                root = music_root / sub
+                if sub == "library":
+                    continue
+                for d in _iter_disc_folders(root, depth=1):
+                    if d.name == folder:
+                        target = d
+                        break
+                if target is not None:
+                    break
+            if target is None:
+                raise HTTPException(status_code=404)
+            log = target / "rip.log"
+            if not log.is_file():
+                log = target / "logs" / "rip.log"
+            if not log.is_file():
+                return PlainTextResponse("")
+            with log.open("r", encoding="utf-8", errors="replace") as f:
+                return PlainTextResponse("".join(deque(f, maxlen=limit)))
 
     @app.get("/api/log")
     def api_log(lines: int = Query(_LOG_LINES_DEFAULT, ge=0)) -> PlainTextResponse:

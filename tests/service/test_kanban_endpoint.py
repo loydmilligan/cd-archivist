@@ -107,7 +107,9 @@ def test_kanban_response_shape(client: TestClient) -> None:
     resp = client.get("/api/kanban")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body.keys()) == {"buckets"}
+    # Sprint-6.5 / impl-adaptive-polling added top-level active_rip.
+    assert set(body.keys()) >= {"buckets"}
+    assert "active_rip" in body
     assert set(body["buckets"].keys()) == {"capture", "beets_id", "review", "library"}
     for bucket in body["buckets"].values():
         assert isinstance(bucket, list)
