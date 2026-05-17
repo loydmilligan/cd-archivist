@@ -1203,3 +1203,72 @@ main.kanban {
 .card-detail     { padding: 8px; }
 .column-cards    { display: flex; flex-direction: column; gap: 8px; }
 .why-in-review   { color: var(--amber); font-size: 12px; }
+
+/* ============================================================ header live + stats
+ * Sprint-7 impl-header-live-and-stats (lane-2). Live-status chip
+ * (pulse moss / quiet idle) + 5-cell rig-stats group.
+ */
+
+/* --- Live-status chip ----------------------------------------------- */
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2, 8px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs, 11px);
+  padding: 2px 8px;
+  border-radius: var(--r-full, 999px);
+  border: 1px solid var(--ink-4);
+  background: var(--ink-1);
+}
+.live-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot--quiet {
+  background: var(--ink-5);
+  box-shadow: none;
+}
+.dot--pulse-moss {
+  background: var(--moss);
+  box-shadow: 0 0 6px var(--moss);
+  animation: pulse 1500ms ease-in-out infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 var(--moss); opacity: 1; }
+  50%  { box-shadow: 0 0 0 4px transparent; opacity: 0.6; }
+  100% { box-shadow: 0 0 0 0 var(--moss); opacity: 1; }
+}
+
+/* --- Rig-stats bordered group --------------------------------------- */
+.rig-stats {
+  display: inline-flex;
+  border: 1px solid var(--ink-4);
+  border-radius: var(--r-3, 8px);
+  background: var(--ink-1);
+  overflow: hidden;
+}
+.rig-stats .stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-right: 1px solid var(--ink-4);
+  min-width: 64px;
+}
+.rig-stats .stat-cell:last-child { border-right: 0; }
+.stat-value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--fs-sm, 13px);
+  color: var(--ink, #eee);
+}
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-7, #aaa);
+  text-transform: uppercase;
+}

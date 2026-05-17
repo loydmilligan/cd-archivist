@@ -248,7 +248,15 @@ def _card_from_folder(folder: Path, *, bucket: Bucket, archived: bool) -> DiscCa
     review_priority = (
         _derive_review_priority(source, folder) if bucket == "review" else None
     )
-    top_candidate = _load_top_candidate(folder) if bucket == "review" else None
+    # Sprint-7: library cards also benefit from the top_candidate
+    # sidecar (drives the MUSICBRAINZ confirmed chip + "matched 0.97"
+    # status line). Capture/beets_id stay None until those buckets
+    # surface candidates.
+    top_candidate = (
+        _load_top_candidate(folder)
+        if bucket in {"review", "library"}
+        else None
+    )
 
     return DiscCard(
         folder=folder.name,
@@ -281,6 +289,27 @@ def _parse_progress(rip_progress: str | None) -> dict | None:
 _ACTIVE_RIP_STATES = {"STABILIZE", "RIP", "EJECT", "CAPTURE"}
 
 
+def _drive_status_snapshot(loop_state: Any) -> dict[str, Any]:
+    """Serialise the loop_state.drive_status (drivers'
+    impl-drive-status-snapshot) to a plain dict so it can ride along
+    on the kanban payload + reach the status-line formatter."""
+    ds = getattr(loop_state, "drive_status", None)
+    if ds is None:
+        return {}
+    return {
+        "state": getattr(ds, "state", None),
+        "current_disc": getattr(ds, "current_disc", None),
+        "current_track": getattr(ds, "current_track", None),
+        "track_total": getattr(ds, "track_total", None),
+        "sector_current": getattr(ds, "sector_current", None),
+        "sector_total": getattr(ds, "sector_total", None),
+        "retries_on_current_track":
+            getattr(ds, "retries_on_current_track", None),
+        "photo_state": getattr(ds, "photo_state", None),
+        "elapsed_seconds": getattr(ds, "elapsed_seconds", None),
+    }
+
+
 def _active_capture_card(loop_state: Any) -> DiscCard | None:
     if loop_state is None:
         return None
@@ -290,11 +319,28 @@ def _active_capture_card(loop_state: Any) -> DiscCard | None:
     disc_id = getattr(loop_state, "disc_id", None)
     rip_progress = getattr(loop_state, "rip_progress", None)
     folder = disc_id or "active-rip"
+    ds = _drive_status_snapshot(loop_state)
+    progress = _parse_progress(rip_progress) or {"percent": 0, "current_stage": ""}
+    progress["drive_status"] = ds
+
+    # Build an in-flight track bar from the drive_status snapshot.
+    track_total = int(ds.get("track_total") or 0)
+    current_track = ds.get("current_track")
+    track_bar: list[str] = []
+    if track_total > 0 and current_track:
+        successful = list(range(1, int(current_track)))
+        track_bar = track_bar_from_counts(
+            total=track_total,
+            successful=successful, failed=[],
+            in_progress=int(current_track),
+        )
+
     return DiscCard(
         folder=folder,
         bucket="capture",
-        progress=_parse_progress(rip_progress),
+        progress=progress,
         disc_id=disc_id,
+        track_bar=track_bar,
     )
 
 
