@@ -140,7 +140,7 @@ status: draft
 
 #### Bucket B — CSS migration + brand mark (lane-1)
 
-- [ ] {agent: lane-1, id: test-inline-css-removed}
+- [x] {agent: lane-1, id: test-inline-css-removed}
   Failing tests asserting the inline `<style>` block is gone from
   `kanban_page.py`. `tests/service/test_kanban_page.py` additions:
   (a) the rendered page has at most one `<style>` element AND that
@@ -245,7 +245,7 @@ status: draft
   (g) 503 with `{"error": "musicbrainz unavailable"}` on
   network failure (mockable).
 
-- [ ] {agent: lane-3, id: test-candidates-section-ui}
+- [x] {agent: lane-3, id: test-candidates-section-ui}
   Failing tests for the candidates UI inside the expanded card body.
   `tests/service/test_expanded_card.py` additions:
   (a) the candidates section renders only when the candidates
@@ -263,7 +263,7 @@ status: draft
 
 #### Bucket E — New layout details (split: lane-1, lane-2, lane-3)
 
-- [ ] {agent: lane-1, id: test-column-headlamps}
+- [x] {agent: lane-1, id: test-column-headlamps}
   Failing tests for the 8px stage headlamp dots.
   `tests/service/test_kanban_page.py` additions:
   (a) each column header has a `.headlamp` element with class
