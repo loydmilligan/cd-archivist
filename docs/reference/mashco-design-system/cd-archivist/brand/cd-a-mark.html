@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cd/a mark renderer</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&display=swap");
+
+  /* the mark sits on a transparent body — capture in PNG mode */
+  html, body { margin: 0; padding: 0; background: transparent; }
+
+  /* a single, sized stage. The capture script resizes #stage and the body
+     to the target size, then we screenshot. Font is loaded once. */
+  #stage {
+    width: 512px;
+    height: 512px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+  }
+
+  /* The mark.
+     Composition: italic Bricolage Grotesque, weight 800, in pulp orange,
+     with a 5-step extruded edge in the deep edge color and a 1.5px stroke.
+     Letter-spacing pulled tighter (-0.06em) so the slash docks closer to
+     the surrounding letters than at sidebar size. */
+  .ml-mark {
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: -0.06em;
+    line-height: 1;
+    color: #ff5b2e;
+    -webkit-text-stroke: 2.5px #8a2d15;
+    paint-order: stroke fill;
+    /* shift up so the bottom extrusion + drop don't push the visual
+       center off-square */
+    transform: translateY(-4%);
+    /* size driven by --size; the capture script writes it */
+    font-size: var(--size, 320px);
+    text-shadow:
+      0 calc(var(--ex, 8px) * 0.125) 0 #8a2d15,
+      0 calc(var(--ex, 8px) * 0.25)  0 #8a2d15,
+      0 calc(var(--ex, 8px) * 0.375) 0 #8a2d15,
+      0 calc(var(--ex, 8px) * 0.5)   0 #8a2d15,
+      0 calc(var(--ex, 8px) * 0.625) 0 #8a2d15,
+      0 calc(var(--ex, 8px) * 0.75)  0 #8a2d15,
+      0 calc(var(--ex, 8px) * 1)     calc(var(--ex, 8px) * 1.5) rgba(0,0,0,0.45);
+  }
+
+  /* optional rounded-square background for the maskable / app-icon variant */
+  #stage.is-bone {
+    background: #faf7f2;
+  }
+  #stage.is-dark {
+    background: #07090c;
+  }
+  #stage.is-tile {
+    background: #07090c;
+    border-radius: 22%;
+  }
+</style>
+</head>
+<body>
+  <div id="stage" style="--size: 320px; --ex: 36px;">
+    <span class="ml-mark">cd/a</span>
+  </div>
+
+  <script>
+    // Helpers called by save_screenshot steps:
+    //   __mlResize(px, bg)  — resize the stage + body to a square, swap bg
+    //   __mlExtrudeFor(px)  — pick a sensible extrude depth for that size
+    window.__mlExtrudeFor = (px) => Math.max(2, Math.round(px * 0.07));
+    window.__mlResize = (px, bg) => {
+      const stage = document.getElementById("stage");
+      stage.classList.remove("is-bone","is-dark","is-tile");
+      if (bg) stage.classList.add("is-" + bg);
+      stage.style.width = px + "px";
+      stage.style.height = px + "px";
+      // size mark to ~52% of side (cd/a is 3 glyphs+slash, narrower per-char
+      // than m/l). Leaves padding + room for extrude.
+      const markPx = Math.round(px * 0.52);
+      stage.style.setProperty("--size", markPx + "px");
+      stage.style.setProperty("--ex", window.__mlExtrudeFor(px) + "px");
+      document.body.style.width  = px + "px";
+      document.body.style.height = px + "px";
+      // also resize the viewport via doc-level for the screenshot tool
+      document.documentElement.style.background = "transparent";
+    };
+    // Wait for the font, otherwise the first capture renders in fallback
+    window.__mlReady = document.fonts ? document.fonts.ready : Promise.resolve();
+  </script>
+</body>
+</html>

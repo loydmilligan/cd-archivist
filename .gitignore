@@ -45,3 +45,21 @@ secrets/
 
 # orc-tower channel directory (adoption flow, B3) — keep untracked.
 .orc-tower/
+
+# Playwright MCP scratch dir (per FILE-LAYOUT.md "what does NOT belong tracked").
+.playwright-mcp/
+
+# Vendor archive bundles. Design-system / SDK zips get extracted into
+# docs/reference/<name>/ and the archive itself is not tracked.
+*.zip
+
+# MB-scraped cover-art JPGs and disc-photo strays from manual testing.
+# Real disc photos live under data/captures/ (already gitignored above)
+# or docs/screenshots/ for UI work — never at docs/ root.
+mbid-*.jpg
+docs/*.png
+docs/*.jpg
+
+# Lint / pytest caches. These regenerate; never tracked.
+.pytest_cache/
+.ruff_cache/
