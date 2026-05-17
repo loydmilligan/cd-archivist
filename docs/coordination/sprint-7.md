@@ -712,6 +712,46 @@ no visible payoff. Decision: no `--mobile` variant; the header keeps
 Revisit only if header crowding shows up in Wave 3 operator-driven
 visual smoke against `cda.mattmariani.com` on a phone browser.
 
+**Superseded 2026-05-16 (sprint-7 polish hotfix):** the header
+variant scales from 22px → 36px (live-review feedback — header needs
+to read as a dashboard quick view). 36px still holds at the 720px
+mobile breakpoint inside the 80px embiggened header. No `--mobile`
+variant added; the decision to skip per-viewport scaling stands.
+
+### 2026-05-16 — D-single-state-indicator — only the live-status chip carries operational state
+
+Resolved 2026-05-16 (sprint-7 polish hotfix, lane-1). Before the
+polish pass the header carried TWO daemon-up indicators: a static
+`.daemon-state-dot` next to the cd-archivist slug AND the
+`.live-status` chip with idle / ripping state. The static dot
+duplicated signal — daemon-up is implied by the page loading at
+all — so it was removed from both the rendered markup and the
+cda.css rule set. The `.live-status` chip is the single state
+indicator going forward. A deliberate fossil comment in cda.css
+marks where the rule used to live so a future engineer can trace
+the removal.
+
+### 2026-05-16 — D-card-toggle-removed — drawer card-toggle button removed; click-outside replaces it
+
+Resolved 2026-05-16 (sprint-7 polish hotfix, lane-1). The
+`.drawer-toggle--card` button shipped under impl-drawer-mode-toggles
+turned out to have no coherent affordance: clicking a card already
+opens the drawer in card-mode, there is no "go back to drive mode"
+action that warrants its own button, and the operator never has
+to re-find a card they just clicked away from. Polish removes the
+button entirely. The single remaining drawer affordance is
+`.drawer-toggle--drive` which now round-trips
+(open→close→open) and is augmented by:
+- an explicit `.drawer-close` button at the drawer head (44px tap
+  target, Unicode close cross glyph per voice rules)
+- a JS click-outside handler that closes the drawer when a click
+  lands outside `#right-drawer` and outside the drive-toggle
+The 4 Wave-1 test_right_drawer tests that pinned the card-toggle
+were rewritten (NOT deleted) to pin the new contract: card-toggle
+must be absent; drive-toggle round-trips; close button + click-
+outside both close the drawer; the toggle hides while the drawer
+is open so it cannot overlap the close button.
+
 ## Ratification Log
 
 > User-ratified decisions. Format:
@@ -780,6 +820,70 @@ sprint-8 planning. -->
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-16 — lane-1 (polish hotfix) — header embiggen + state-indicator merge + drawer affordances
+
+Live-review feedback drove four UI cleanup changes. Failing tests
+landed first in tests/service/test_header_polish.py (new file, 9
+tests) + tests/service/test_right_drawer.py additions; impl followed;
+full suite green at 626 passed. Single commit
+`fix(sprint-7): header polish …`.
+
+**(1) Merged state indicators** (D-single-state-indicator settled).
+The legacy `.daemon-state-dot` next to the cd-archivist slug
+duplicated the signal carried by the `.live-status` chip — daemon-up
+is implied by page-load. Removed the dot from kanban_page.py markup
+and from cda.css; left a deliberate-fossil comment in cda.css. The
+`.live-status` chip is now the single state indicator. Updated the
+stale test_kanban_page::test_header_left_carries_wordmark_and_daemon_dot
+assertion to pin the new contract (renamed
+`…_carries_wordmark_and_live_status`).
+
+**(2) Removed the .drawer-toggle--card button** (D-card-toggle-removed
+settled). The card-toggle had no coherent affordance — clicking a
+card already opens the drawer in card-mode, and there is no
+"go back to drive mode" action that warrants its own button. The
+single explicit drawer affordance is now `.drawer-toggle--drive`,
+which round-trips (open→close→open on repeated clicks). The 4 Wave-1
+test_right_drawer tests that pinned the card-toggle were rewritten
+(NOT deleted) to pin: card-toggle absent; drive-toggle round-trips
+via aria-hidden state; lastSelectedCard JS state is gone.
+
+**(3) Embiggened the header** (live-review feedback). The bar reads
+as a dashboard quick view, visible from across the room:
+- `.page-header` gains `min-height: 80px` (was implicit ~48px), padding
+  16px 20px.
+- `.cda-brand-mark--header` scales 22px → 36px; stroke 1.5px → 2px;
+  extrude depth 5 layers → 6 layers + a fatter drop shadow. The
+  base recipe (Bricolage 800 italic, --mash-pulp, paint-order, etc.)
+  is preserved verbatim — only sizes scale.
+- `.wordmark` 13px (default) → 16px, weight 700.
+- `.live-status` dot 8px → 14px; text 12px → 16px; chip padding scales.
+- `.rig-stats` stat-value 13px → 22px; cell padding 6/12 → 10/16;
+  min-width 64 → 80. Labels stay 10px (CSS-uppercased eyebrows).
+- D-mobile-brand-mark-size **superseded**: header keeps 36px across
+  viewports (still fits the 720px breakpoint inside the 80px bar).
+
+**(4) Drawer click-outside-to-close + .drawer-close button**.
+- New `.drawer-close` button at the right-drawer head: 44px tap
+  target (WCAG 2.1), Unicode close cross (×) glyph per voice rules
+  (no emoji), `aria-label="close drawer"`.
+- JS gains `closeRightDrawer()` + `isRightDrawerOpen()` helpers,
+  plus a document-level click listener that closes the drawer when
+  the click lands outside `#right-drawer` and outside
+  `.drawer-toggle--drive`. The drive-toggle now round-trips state
+  (its handler reads aria-hidden on the drawer).
+- `setDrawerHidden` also mirrors the open state onto
+  `body[data-right-drawer-open]` so CSS can hide
+  `.drawer-toggle--drive` while the drawer is open
+  (prevents overlap with the close button at the drawer head).
+
+**Test sweep:** the new contracts surfaced two stale assertions:
+test_brand_mark::test_cda_css_defines_brand_mark_size_variant
+(parametrised on 22px) → updated to 36px; test_kanban_page::
+test_header_left_carries_wordmark_and_daemon_dot → renamed +
+re-pointed at `.live-status`. No tests deleted; no impl bugs
+surfaced. 626 passed, 1 skipped.
 
 ### 2026-05-16 — lane-1 (hotfix, picking up from lane-2) — 12 cross-lane test regressions fixed; full suite green
 

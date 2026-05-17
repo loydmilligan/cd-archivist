@@ -128,8 +128,11 @@ def test_cda_css_defines_brand_mark_base_recipe(client: TestClient) -> None:
 # ---------------- (c) size variants exist -------------------------------
 
 
+# Sprint-7 polish (header embiggen): the --header variant scaled from
+# 22px → 36px so the mark reads as a dashboard quick view. The splash
+# and marketing variants keep the original build-prompt sizes.
 @pytest.mark.parametrize("variant,px", [
-    ("cda-brand-mark--header", "22px"),
+    ("cda-brand-mark--header", "36px"),
     ("cda-brand-mark--splash", "84px"),
     ("cda-brand-mark--marketing", "240px"),
 ])

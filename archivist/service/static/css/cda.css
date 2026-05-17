@@ -960,7 +960,22 @@ body {
    shows up in operator-driven smoke (Wave 3).
    ========================================================================= */
 
-.cda-brand-mark--header    { font-size: 22px; }
+/* Sprint-7 polish: header variant scales from 22px → 36px so the
+   mark reads as a dashboard quick view. Stroke and extrude depth
+   step up proportionally to keep the chunky-extruded recipe in
+   balance with the larger glyph. */
+.cda-brand-mark--header {
+  font-size: 36px;
+  -webkit-text-stroke: 2px var(--mash-pulp-edge);
+  text-shadow:
+    0 1px 0 var(--mash-pulp-edge),
+    0 2px 0 var(--mash-pulp-edge),
+    0 3px 0 var(--mash-pulp-edge),
+    0 4px 0 var(--mash-pulp-edge),
+    0 5px 0 var(--mash-pulp-edge),
+    0 6px 0 var(--mash-pulp-edge),
+    0 8px 14px rgba(0,0,0,0.55);
+}
 .cda-brand-mark--splash    {
   font-size: 84px;
   -webkit-text-stroke: 2px var(--mash-pulp-edge);
@@ -991,26 +1006,27 @@ body {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: 12px 16px;
+  padding: 16px 20px;
+  min-height: 80px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   position: sticky;
   top: 0;
   z-index: 5;
 }
-.header-left   { display: flex; gap: 8px; align-items: center; }
+.header-left   { display: flex; gap: 14px; align-items: center; }
 .header-stats  { display: flex; gap: 12px; justify-self: center; color: var(--fg-quiet); }
-.header-right  { display: flex; gap: 8px; justify-self: end; }
+.header-right  { display: flex; gap: 8px; justify-self: end; align-items: center; }
 
-.wordmark { font-weight: 700; color: var(--fg); }
-.daemon-state-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  background: var(--moss);
-}
-.daemon-state-dot[data-daemon-state="stopped"] { background: var(--ember); }
+/* Sprint-7 polish: wordmark steps up one rung on the type scale so it
+   reads at a glance next to the embiggened brand mark. */
+.wordmark { font-weight: 700; font-size: 16px; color: var(--fg); }
+
+/* D-single-state-indicator (sprint-7 polish, settled 2026-05-16):
+   the legacy .daemon-state-dot was removed — daemon-up is implied
+   by page-load; the .live-status chip is the single state indicator.
+   This comment is the deliberate fossil so a future engineer can
+   trace the removal. */
 
 main.kanban {
   display: grid;
@@ -1210,20 +1226,22 @@ main.kanban {
  */
 
 /* --- Live-status chip ----------------------------------------------- */
+/* Sprint-7 polish: live-status reads at a glance — dot 8→14px,
+   text 12→16px, chip padding scales to match the embiggened header. */
 .live-status {
   display: inline-flex;
   align-items: center;
   gap: var(--s-2, 8px);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs, 11px);
-  padding: 2px 8px;
+  font-size: 16px;
+  padding: 6px 14px;
   border-radius: var(--r-full, 999px);
   border: 1px solid var(--ink-4);
   background: var(--ink-1);
 }
 .live-status .dot {
-  width: 8px;
-  height: 8px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   display: inline-block;
 }
@@ -1253,17 +1271,20 @@ main.kanban {
 .rig-stats .stat-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 10px 16px;
   border-right: 1px solid var(--ink-4);
-  min-width: 64px;
+  min-width: 80px;
 }
 .rig-stats .stat-cell:last-child { border-right: 0; }
+/* Sprint-7 polish: stat numbers go from 13px → 22px so the
+   rig-stats group reads as a dashboard quick view. Labels stay
+   small — they're CSS-uppercased eyebrows. */
 .stat-value {
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: var(--fs-sm, 13px);
-  color: var(--ink, #eee);
+  font-size: 22px;
+  color: var(--fg);
 }
 .stat-label {
   font-family: var(--font-mono);
@@ -1273,23 +1294,51 @@ main.kanban {
   text-transform: uppercase;
 }
 
-/* Sprint-7 hotfix — additional kanban class names referenced from
-   markup that need a presence in this stylesheet so the class-name
-   resolution test passes. Minimal recipes; visual refinement deferred
-   to sprint-8. */
-.drawer-toggle--drive,
-.drawer-toggle--card {
-  /* Modifier markers on .btn. The base styling comes from .btn; the
-     active state is signalled via aria-pressed (not a class). */
+/* Sprint-7 polish — single drawer-open affordance (D-card-toggle-
+   removed). The card-toggle was removed; only the drive-toggle
+   remains and it round-trips (open→close→open). aria-pressed="true"
+   signals the drawer is open. The toggle hides while the drawer is
+   open so it can't overlap the .drawer-close button at the drawer head. */
+.drawer-toggle--drive {
   background: var(--surface);
+  padding: 8px 14px;
+  font-size: 14px;
 }
-.drawer-toggle--drive[aria-pressed="true"],
-.drawer-toggle--card[aria-pressed="true"] {
+.drawer-toggle--drive[aria-pressed="true"] {
   background: var(--mash-pulp);
   color: var(--ink-0);
   border-color: var(--mash-pulp);
 }
+body[data-right-drawer-open="true"] .drawer-toggle--drive {
+  display: none;
+}
+
+/* Sprint-7 polish: live-status text bumps 12px → 16px to match the
+   embiggened header scale. */
 .live-status-text {
-  font: 500 12px/1 var(--font-mono);
+  font: 500 16px/1 var(--font-mono);
   color: var(--fg);
 }
+
+/* Sprint-7 polish: explicit drawer-close button at the right-drawer
+   head. 44px tap target (WCAG 2.1). Glyph is a Unicode close cross. */
+.drawer-head {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px 8px 0;
+}
+.drawer-close {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2, 4px);
+  color: var(--fg);
+  font: 700 22px/1 var(--font-body);
+  cursor: pointer;
+}
+.drawer-close:hover { background: var(--surface-2); }

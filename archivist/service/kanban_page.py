@@ -650,10 +650,12 @@ def _render_header_bar(
     return (
         '<header class="page-header">'
         '<div class="header-left">'
+        # Sprint-7 polish: brand mark scales to 36px; the legacy
+        # .daemon-state-dot is removed per D-single-state-indicator —
+        # daemon-up is implied by page-load; the live-status chip is
+        # the single state indicator.
         '<span class="cda-brand-mark cda-brand-mark--header">cd/a</span>'
         '<span class="wordmark">cd-archivist</span>'
-        '<span class="daemon-state-dot" data-daemon-state="active" '
-        'aria-label="daemon active"></span>'
         f'{_render_live_status(active_rip, active_disc)}'
         '</div>'
         '<div class="header-stats">'
@@ -663,16 +665,15 @@ def _render_header_bar(
         '</div>'
         f'{_render_rig_stats(stats)}'
         '<div class="header-right">'
-        # Sprint-7 / impl-drawer-mode-toggles. Explicit drive/card mode
-        # buttons in the header nav. drive defaults pressed (no card
-        # selected at first render); card-toggle re-opens the last
-        # selected card (no-op when none).
+        # Sprint-7 polish (D-card-toggle-removed): the .drawer-toggle--card
+        # button is removed — the drawer auto-opens to card-mode on
+        # card click, and click-outside-to-close handles the inverse.
+        # The .drawer-toggle--drive button is the single explicit
+        # drawer-open affordance and now round-trips: clicking it
+        # while the drawer is open closes it.
         '<button type="button" class="btn drawer-toggle--drive" '
-        'aria-controls="right-drawer" aria-pressed="true">'
-        'drive</button>'
-        '<button type="button" class="btn drawer-toggle--card" '
         'aria-controls="right-drawer" aria-pressed="false">'
-        'card</button>'
+        'drive</button>'
         '<button type="button" class="btn" '
         'aria-controls="bottom-drawer" data-drawer-toggle="bottom">'
         'logs</button>'
@@ -686,6 +687,16 @@ def _render_right_drawer() -> str:
     return (
         '<aside id="right-drawer" class="drawer drawer--right" '
         'aria-hidden="true">'
+        # Sprint-7 polish: explicit close button at the drawer head.
+        # 44px tap target; targets aria-hidden="true" on #right-drawer
+        # via the JS click-outside handler. Glyph is a Unicode close
+        # cross (×) per voice rules (no emoji).
+        '<div class="drawer-head">'
+        '<button type="button" class="drawer-close" '
+        'aria-controls="right-drawer" aria-label="close drawer">'
+        '×'
+        '</button>'
+        '</div>'
         '<div class="drawer-body" data-drawer-template="drive-status">'
         '<div class="thumb thumb--placeholder thumb--placeholder--lg" '
         'aria-hidden="true"></div>'
@@ -914,53 +925,70 @@ document.addEventListener('keydown', (e) => {
 });
 
 // --- Right drawer ---------------------------------------------------------
+// Sprint-7 polish (D-card-toggle-removed, D-single-state-indicator):
+// the drawer has a single explicit open affordance (.drawer-toggle--drive)
+// that round-trips. Closing happens via the .drawer-close button OR by
+// clicking outside the drawer (click-outside-to-close).
 function setDrawerHidden(id, hidden) {
   const el = document.getElementById(id);
   if (el) el.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+  if (id === 'right-drawer') {
+    // Mirror the open state onto <body> so CSS can hide the drive
+    // toggle while the drawer is open (avoids overlap with .drawer-close).
+    document.body.dataset.rightDrawerOpen = hidden ? 'false' : 'true';
+  }
 }
 
-// Sprint-7 impl-drawer-mode-toggles: track the most-recently-opened
-// card so the .drawer-toggle--card button can re-open it after the
-// operator has flipped to drive-mode.
-let lastSelectedCard = null;
+function isRightDrawerOpen() {
+  const el = document.getElementById('right-drawer');
+  return el && el.getAttribute('aria-hidden') === 'false';
+}
 
-function setDrawerMode(mode) {
-  // mode: 'drive' | 'card'. Updates aria-pressed on the two header
-  // toggles so screen readers + CSS get the active state.
+function closeRightDrawer() {
+  setDrawerHidden('right-drawer', true);
   const driveBtn = document.querySelector('.drawer-toggle--drive');
-  const cardBtn  = document.querySelector('.drawer-toggle--card');
-  if (driveBtn) driveBtn.setAttribute(
-    'aria-pressed', mode === 'drive' ? 'true' : 'false'
-  );
-  if (cardBtn)  cardBtn.setAttribute(
-    'aria-pressed', mode === 'card' ? 'true' : 'false'
-  );
+  if (driveBtn) driveBtn.setAttribute('aria-pressed', 'false');
 }
 
 function openRightDrawerForCard(card) {
   setDrawerHidden('right-drawer', false);
-  lastSelectedCard = card;
-  setDrawerMode('card');
+  const driveBtn = document.querySelector('.drawer-toggle--drive');
+  if (driveBtn) driveBtn.setAttribute('aria-pressed', 'false');
   const folder = card.getAttribute('data-card-id');
   // card-detail population — fetch /api/disc/<folder>/log/tail
   fetch(`/api/disc/${folder}/log/tail`).then(r => r.ok ? r.text() : '');
 }
 
+// .drawer-toggle--drive round-trips: open→close→open. Each click flips
+// the drawer state. aria-pressed reflects open=true, closed=false.
 document.querySelectorAll('.drawer-toggle--drive').forEach(btn => {
-  btn.addEventListener('click', () => {
-    // Clear the selected card and swap the drawer body to drive-mode.
-    setDrawerHidden('right-drawer', false);
-    setDrawerMode('drive');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isRightDrawerOpen()) {
+      closeRightDrawer();
+    } else {
+      setDrawerHidden('right-drawer', false);
+      btn.setAttribute('aria-pressed', 'true');
+    }
   });
 });
 
-document.querySelectorAll('.drawer-toggle--card').forEach(btn => {
-  btn.addEventListener('click', () => {
-    // Re-open the last-selected card; no-op when none selected this
-    // session.
-    if (!lastSelectedCard) return;
-    openRightDrawerForCard(lastSelectedCard);
+// Explicit .drawer-close button at the drawer head closes the drawer.
+document.querySelectorAll('.drawer-close').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeRightDrawer();
   });
+});
+
+// Click-outside-to-close: any click NOT inside #right-drawer and NOT on
+// .drawer-toggle--drive closes the drawer (when open). Mimics the
+// bottom-drawer toggle dismissal pattern.
+document.addEventListener('click', (e) => {
+  if (!isRightDrawerOpen()) return;
+  const inDrawer = e.target.closest && e.target.closest('#right-drawer');
+  const onToggle = e.target.closest && e.target.closest('.drawer-toggle--drive');
+  if (!inDrawer && !onToggle) closeRightDrawer();
 });
 
 // --- Bottom drawer + localStorage ---------------------------------------

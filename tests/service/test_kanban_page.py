@@ -513,14 +513,16 @@ def test_header_renders_three_regions(client: TestClient) -> None:
     assert 'class="header-right"' in html
 
 
-def test_header_left_carries_wordmark_and_daemon_dot(
+def test_header_left_carries_wordmark_and_live_status(
     client: TestClient,
 ) -> None:
+    """Sprint-7 polish (D-single-state-indicator): the legacy
+    .daemon-state-dot was removed — daemon-up is implied by page-load;
+    the .live-status chip is the single state indicator. The wordmark
+    + brand mark + live-status chip all live in .header-left."""
     html = client.get("/").text
     assert "cd-archivist" in html
-    # Daemon state dot: derives presence from kanban-payload-presence;
-    # element carries a discoverable class/marker.
-    assert "daemon-state-dot" in html or 'data-daemon-state' in html
+    assert 'class="live-status"' in html
 
 
 def test_header_stats_show_compact_counts(

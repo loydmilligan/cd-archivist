@@ -230,62 +230,151 @@ def test_header_nav_has_drawer_drive_toggle(client: TestClient) -> None:
     )
 
 
-def test_header_nav_has_drawer_card_toggle(client: TestClient) -> None:
+# Sprint-7 polish hotfix — D-card-toggle-removed. The .drawer-toggle--card
+# button had no coherent affordance (clicking a card auto-opens the drawer
+# in card-mode, and there's no obvious "go back to drive mode" action
+# that warrants its own button). The card-toggle was removed entirely;
+# the drive-toggle below is the single explicit drawer-open affordance.
+
+
+def test_drawer_card_toggle_button_removed(client: TestClient) -> None:
+    """D-card-toggle-removed: the .drawer-toggle--card button must
+    NOT appear in the rendered header nav."""
     html = client.get("/").text
-    assert "drawer-toggle--card" in html, (
-        "header nav missing `.drawer-toggle--card` button"
-    )
-    m = re.search(
-        r'<button[^>]*\bdrawer-toggle--card\b[^>]*>',
-        html,
-    )
-    assert m is not None, (
-        "expected a <button> element carrying class drawer-toggle--card"
-    )
-    assert "aria-pressed" in m.group(0), (
-        "drawer-toggle--card button must carry aria-pressed"
+    assert "drawer-toggle--card" not in html, (
+        "the .drawer-toggle--card button was removed per "
+        "D-card-toggle-removed; the click-card-to-open + click-outside"
+        "-to-close flow replaces it"
     )
 
 
-def test_drawer_toggles_default_aria_pressed_state(
-    client: TestClient,
-) -> None:
-    """At first render no card is selected, so drive-mode is active —
-    drive-toggle aria-pressed=\"true\" and card-toggle aria-pressed=\"false\"."""
+def test_drive_toggle_is_a_real_toggle_in_js(client: TestClient) -> None:
+    """The .drawer-toggle--drive button must round-trip: clicking it
+    while the drawer is open closes it; clicking it while closed
+    opens it (mirrors the bottom-drawer toggle behavior). The JS
+    source must reference the drawer's open/closed state so the
+    handler can branch on it."""
     html = client.get("/").text
-    drive_m = re.search(
-        r'<button[^>]*\bdrawer-toggle--drive\b[^>]*>', html,
-    )
-    card_m = re.search(
-        r'<button[^>]*\bdrawer-toggle--card\b[^>]*>', html,
-    )
-    assert drive_m is not None and card_m is not None
-    assert 'aria-pressed="true"' in drive_m.group(0), (
-        "drive-toggle should start aria-pressed=\"true\" (default mode)"
-    )
-    assert 'aria-pressed="false"' in card_m.group(0), (
-        "card-toggle should start aria-pressed=\"false\" with no selection"
-    )
-
-
-def test_drawer_toggle_click_handlers_referenced_in_js(
-    client: TestClient,
-) -> None:
-    """The kanban JS module must wire click handlers for both toggles.
-    The drive-toggle clears the selected card and swaps the drawer
-    body to drive-mode; the card-toggle re-opens the last-selected
-    card (or no-ops when none was ever selected this session)."""
-    html = client.get("/").text
-    # Both selector strings appear in the JS source.
     assert ".drawer-toggle--drive" in html, (
         "JS missing querySelector for `.drawer-toggle--drive`"
     )
-    assert ".drawer-toggle--card" in html, (
-        "JS missing querySelector for `.drawer-toggle--card`"
+    # The handler reads aria-hidden on #right-drawer to decide
+    # whether to open or close.
+    assert "right-drawer" in html
+    # Some kind of round-trip / toggle logic — accept either an
+    # explicit `aria-hidden` read or a toggle-flag literal.
+    assert (
+        "aria-hidden" in html or "toggleDrawer" in html
+    ), "drive-toggle handler must round-trip the drawer state"
+
+
+# ============== Sprint-7 polish hotfix — drawer close affordances =========
+#
+# Two new affordances added per live-review feedback:
+#   (a) explicit `.drawer-close` button at the top-right of the drawer
+#       head — large enough to tap (44px target)
+#   (b) click-outside-to-close handler on the kanban JS — clicks not
+#       inside #right-drawer and not on .drawer-toggle--drive close
+#       the drawer.
+
+
+def test_right_drawer_renders_explicit_close_button(
+    client: TestClient,
+) -> None:
+    html = client.get("/").text
+    assert "drawer-close" in html, (
+        "right drawer must render an explicit .drawer-close button "
+        "at the top-right of its head"
     )
-    # The card-toggle behavior depends on a stored last-selected ref —
-    # JS source must reference it by a stable name.
-    assert "lastSelectedCard" in html or "last_selected_card" in html, (
-        "JS missing `lastSelectedCard` state for the card-toggle re-open "
-        "behavior"
+    m = re.search(r'<button[^>]*\bdrawer-close\b[^>]*>([^<]*)</button>', html)
+    assert m is not None, "expected <button class=\"drawer-close\">…</button>"
+    glyph = m.group(1).strip()
+    # Allowed Unicode glyphs only per voice rules (× / ✕ / ✖ are
+    # acceptable; ASCII X is also fine; no emoji).
+    assert glyph and glyph not in ("​",), (
+        "drawer-close button must carry a visible glyph"
+    )
+    # The button must target the drawer aria-state — either by id ref
+    # or by a JS-readable data attribute.
+    btn_open_tag = re.search(
+        r'<button[^>]*\bdrawer-close\b[^>]*>', html,
+    ).group(0)
+    assert (
+        "aria-controls" in btn_open_tag
+        or "data-drawer-close" in btn_open_tag
+    ), "drawer-close button must reference the drawer it closes"
+
+
+def test_drawer_close_button_styled_for_tap_target(
+    client: TestClient,
+) -> None:
+    """The .drawer-close button must be at least 44px on each side so
+    it is a real touch target per WCAG 2.1 sizing guidance."""
+    cda = client.get("/static/css/cda.css").text
+    block = re.search(r"\.drawer-close\s*\{([^}]*)\}", cda, re.DOTALL)
+    assert block is not None, "missing .drawer-close rule in cda.css"
+    body = block.group(1)
+    wm = re.search(r"(?:min-)?width\s*:\s*(\d+)px", body)
+    hm = re.search(r"(?:min-)?height\s*:\s*(\d+)px", body)
+    assert wm is not None and hm is not None, (
+        ".drawer-close must set explicit width/height (or min-width/min-height)"
+    )
+    assert int(wm.group(1)) >= 44 and int(hm.group(1)) >= 44, (
+        f".drawer-close sized {wm.group(1)}x{hm.group(1)}; both axes "
+        "must be >=44px for tap-target accessibility"
+    )
+
+
+def test_click_outside_handler_referenced_in_js(
+    client: TestClient,
+) -> None:
+    """The kanban JS must wire a click-outside handler that closes the
+    right drawer. Asserted via source content."""
+    html = client.get("/").text
+    # The handler is a document-level click listener that checks
+    # whether the event target is inside #right-drawer / on the
+    # drive-toggle. Pin the marker string the impl uses so the
+    # contract is observable.
+    assert "closeRightDrawer" in html or "drawer-click-outside" in html, (
+        "JS missing click-outside handler that closes the right drawer"
+    )
+    # The handler must reference both anchors that DON'T trigger close.
+    assert "right-drawer" in html
+    assert ".drawer-toggle--drive" in html or "drawer-toggle--drive" in html
+
+
+def test_drive_toggle_hidden_while_drawer_open(
+    client: TestClient,
+) -> None:
+    """When the drawer is open, the .drawer-toggle--drive button is
+    visually hidden so it cannot overlap the close button — asserted
+    via the CSS rule that hides it under the [aria-hidden=\"false\"]
+    drawer-open state."""
+    cda = client.get("/static/css/cda.css").text
+    # The hide rule must reference BOTH the drawer-open state AND
+    # the drawer-toggle selector in a single rule. Accept either:
+    #   - a `:has(.drawer--right[aria-hidden="false"])` ancestor query
+    #   - a `body[data-right-drawer-open="true"]` JS-applied marker
+    #   - a sibling combinator from .drawer--right[aria-hidden=...]
+    # The impl picks one; the test just requires that some selector
+    # couples the two and sets display:none on the toggle.
+    coupled = re.findall(
+        r"([^{}]*\.drawer-toggle--drive[^{}]*)\{([^}]*)\}",
+        cda, re.DOTALL,
+    )
+    found = False
+    for selector, body in coupled:
+        if "display: none" not in body and "display:none" not in body:
+            continue
+        if (
+            "aria-hidden" in selector
+            or "drawer-open" in selector
+            or ":has(" in selector
+        ):
+            found = True
+            break
+    assert found, (
+        "cda.css must hide .drawer-toggle--drive while the right "
+        "drawer is open (e.g. a `:has(.drawer--right[aria-hidden=\"false\"])` "
+        "ancestor selector or a body[data-right-drawer-open] marker)"
     )
