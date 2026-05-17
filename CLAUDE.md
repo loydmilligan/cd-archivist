@@ -2,6 +2,11 @@
 
 This file gives Claude Code project-specific instructions.
 
+For workflow rules — commits, deployment, documentation cycle, version
+control, escalation paths, backlog processes — see
+[docs/WORKFLOW.md](docs/WORKFLOW.md). WORKFLOW.md governs HOW work
+flows; CLAUDE.md governs HOW agents behave.
+
 ## Project summary
 
 CD Archivist is a Raspberry Pi + Power Mac G4 archival system for ripping old CDs and preserving visual/physical metadata from burned mix CDs.

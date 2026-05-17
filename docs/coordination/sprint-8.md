@@ -110,7 +110,7 @@ status: draft
   Commit: `docs(sprint-8): WORKFLOW.md — version-control + workflow
   process`.
 
-- [ ] {agent: lane-3, id: workflow-claude-ref}
+- [x] {agent: lane-3, id: workflow-claude-ref}
   Add a one-paragraph reference to WORKFLOW.md from `CLAUDE.md`
   (immediately after the existing project-instructions block).
   Single edit; small commit. Format:
