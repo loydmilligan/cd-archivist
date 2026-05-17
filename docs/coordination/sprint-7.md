@@ -167,7 +167,7 @@ status: draft
 
 #### Bucket C — Card anatomy refactor (lane-2 / pipeline)
 
-- [ ] {agent: lane-2, id: test-card-header-row}
+- [x] {agent: lane-2, id: test-card-header-row}
   Failing tests for the new card header row.
   `tests/service/test_card_anatomy.py`: (a) each card renders a
   `.card-head` element containing a 56×56 `.thumb` (either
@@ -178,7 +178,7 @@ status: draft
   thumbnail-left then text-block-right; (c) the slug uses
   `font-family: var(--font-mono)` per `cda.css`.
 
-- [ ] {agent: lane-2, id: test-status-line}
+- [x] {agent: lane-2, id: test-status-line}
   Failing tests for the status line format.
   `tests/service/test_card_anatomy.py` additions:
   (a) cards in Capture-active state render a status line like
@@ -195,7 +195,7 @@ status: draft
   styles `font-family: var(--font-mono); color: var(--ink-7); font-size:
   12px;`.
 
-- [ ] {agent: lane-2, id: test-chip-row}
+- [x] {agent: lane-2, id: test-chip-row}
   Failing tests for the chip row.
   `tests/service/test_card_anatomy.py` additions:
   (a) `.chip-row` element holds 0–4 chips depending on card state;
@@ -211,7 +211,7 @@ status: draft
   `.card--accent-amber`, `.card--accent-ember`,
   `.card--accent-moss`.
 
-- [ ] {agent: lane-2, id: test-track-segments}
+- [x] {agent: lane-2, id: test-track-segments}
   Failing tests for track-segment rendering.
   `tests/service/test_card_anatomy.py` additions:
   (a) `.track-bar` element with `style="--track-count: N"` where N
@@ -274,7 +274,7 @@ status: draft
   modifier); (c) headlamp colors do NOT render as full column
   background tints.
 
-- [ ] {agent: lane-2, id: test-live-status-chip}
+- [x] {agent: lane-2, id: test-live-status-chip}
   Failing tests for the header live-status chip.
   `tests/service/test_kanban_page.py` additions:
   (a) the header renders a `.live-status` element with a `.dot`
@@ -287,7 +287,7 @@ status: draft
   (d) `cda.css` defines a `@keyframes pulse` used by
   `.dot--pulse-moss` with `var(--moss)`.
 
-- [ ] {agent: lane-2, id: test-rig-stats-group}
+- [x] {agent: lane-2, id: test-rig-stats-group}
   Failing tests for the centered rig-stats group.
   `tests/service/test_kanban_page.py` additions:
   (a) the header contains a `.rig-stats` element with 5 `.stat-cell`
@@ -350,7 +350,7 @@ status: draft
 
 #### Bucket F — Destructive-action gates + transitions (lane-2)
 
-- [ ] {agent: lane-2, id: test-destructive-gate}
+- [x] {agent: lane-2, id: test-destructive-gate}
   Failing tests for second-click destructive-action confirmation.
   `tests/service/test_destructive_gate.py`:
   (a) clicking `redo` / `rerip-tracks` / `skip` / `delete` once
@@ -362,7 +362,7 @@ status: draft
   ("Destructive actions require a second click to confirm. The
   partial flac files stay on disk until you choose.").
 
-- [ ] {agent: lane-2, id: test-transitions}
+- [x] {agent: lane-2, id: test-transitions}
   Failing tests for card transitions + live-update flash.
   `tests/service/test_transitions.py`:
   (a) `cda.css` defines a `.card--entering` class with
@@ -754,6 +754,49 @@ sprint-8 planning. -->
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-16 — lane-1 — Wave 1 failing tests landed (Buckets A, B, E slice)
+
+- All 6 lane-1 Wave-1 tasks complete; each test file fails for the
+  right reason (impl not yet written). Five atomic commits:
+  - `test(sprint-7): test-static-mount` — new
+    `tests/service/test_static_mount.py`: asserts
+    `/static/css/{tokens,cda}.css` + `/static/img/brand/*` +
+    `/static/manifest.webmanifest` resolve, head emits favicon
+    family + apple-touch + manifest + `theme-color #07090c`, and
+    tokens.css loads BEFORE cda.css.
+  - `test(sprint-7): test-font-loading` — new
+    `tests/service/test_font_loading.py`: asserts Google Fonts
+    preconnect (fonts.googleapis.com + fonts.gstatic.com) + family
+    `<link>` for Bricolage Grotesque (600+800) / Inter Tight
+    (400+500+700) / JetBrains Mono (400+500); tokens.css `@import`s
+    the same; no `-apple-system` / `BlinkMacSystemFont` fallback
+    overrides in shipped HTML.
+  - `test(sprint-7): test-inline-css-removed,test-column-headlamps`
+    — appended to `tests/service/test_kanban_page.py`: at most one
+    `<style>` element and only CSS-custom-property-as-data inline
+    style allowed per D-inline-css-whitelist; every class in the
+    rendered HTML resolves against tokens.css or cda.css; 8px
+    `.headlamp` dots in each column header with `--pulp` / `--sky`
+    / `--amber` / `--moss` modifiers backed by recipes in cda.css;
+    forbidden full-column tint classes asserted absent.
+  - `test(sprint-7): test-brand-mark` — new
+    `tests/service/test_brand_mark.py`: asserts
+    `<span class="cda-brand-mark cda-brand-mark--header">cd/a</span>`
+    in header; cda.css `.cda-brand-mark` declares font-display 800
+    italic, -0.05em letter-spacing, `var(--mash-pulp)`,
+    `-webkit-text-stroke`, `paint-order: stroke fill`, and a 5+
+    layer `text-shadow` extrude; size variants `--header` (22px),
+    `--splash` (84px), `--marketing` (240px) all defined.
+  - `test(sprint-7): test-drawer-mode-toggles` — appended to
+    `tests/service/test_right_drawer.py` (plus `import re`):
+    asserts header nav `.drawer-toggle--drive` + `.drawer-toggle--card`
+    buttons with `aria-pressed`; drive-toggle defaults
+    `aria-pressed="true"` at first render; both selector strings +
+    a `lastSelectedCard` (or `last_selected_card`) state reference
+    appear in the inline JS.
+- Sprint-7 plan boxes for the six lane-1 Wave-1 tasks all ticked.
+- Lane-2 and lane-3 Wave-1 tasks still pending; no file overlap.
 
 ### 2026-05-16 — planner — sprint-7 plan drafted
 
