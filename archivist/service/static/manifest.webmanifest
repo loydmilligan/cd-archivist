@@ -1,0 +1,20 @@
+{
+  "name": "cd-archivist",
+  "short_name": "cd/a",
+  "description": "Mash Co. operator UI for the CD ingestion pipeline on the CM4.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07090c",
+  "theme_color": "#07090c",
+  "icons": [
+    { "src": "cd-a-favicon-32x32.png",   "sizes": "32x32",   "type": "image/png" },
+    { "src": "cd-a-favicon-64x64.png",   "sizes": "64x64",   "type": "image/png" },
+    { "src": "cd-a-favicon-180x180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "cd-a-favicon-256x256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "cd-a-favicon-512x512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "cd-a-favicon-1024x1024.png", "sizes": "1024x1024", "type": "image/png" },
+    { "src": "cd-a-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "cd-a-apple-touch-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

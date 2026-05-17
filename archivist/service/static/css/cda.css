@@ -739,3 +739,38 @@ body {
 .flash-moss {
   animation: flash-moss 200ms var(--ease-out);
 }
+
+/* =========================================================== sprint-7 == */
+/* impl-disc-photo-placeholder: CSS-drawn fallback when the pi-camera
+   photo has not been captured yet. Renders as a 56×56 circle with a
+   conic-gradient glow that echoes the prototype's disc-photo recipe.
+   Larger variant (`.thumb--placeholder--lg`) ships into the right-
+   drawer drive-mode body so the operator sees the disc-photo slot
+   even when no card is selected. */
+.thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  flex: 0 0 56px;
+  background: var(--ink-2, #141921);
+  border: 1px solid var(--ink-4, #283039);
+  overflow: hidden;
+  object-fit: cover;
+}
+.thumb--placeholder {
+  position: relative;
+  background:
+    radial-gradient(closest-side at 50% 50%, var(--ink-1, #0d1116) 0 38%, transparent 40%),
+    conic-gradient(from 0deg,
+      rgba(255,91,46,0.18) 0deg 30deg,
+      rgba(90,163,255,0.12) 30deg 90deg,
+      rgba(62,194,122,0.10) 90deg 180deg,
+      rgba(232,168,58,0.12) 180deg 240deg,
+      rgba(255,91,46,0.16) 240deg 300deg,
+      rgba(90,163,255,0.14) 300deg 360deg);
+}
+.thumb--placeholder--lg {
+  width: 160px;
+  height: 160px;
+  flex: 0 0 160px;
+}

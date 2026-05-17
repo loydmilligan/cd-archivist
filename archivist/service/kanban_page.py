@@ -169,9 +169,11 @@ def _thumbnail_src(card: DiscCard) -> str | None:
 def _render_thumbnail(card: DiscCard) -> str:
     src = _thumbnail_src(card)
     if src is None:
-        return ""
+        # Sprint-7 / impl-disc-photo-placeholder: CSS-drawn conic-gradient
+        # glow stands in until the pi-camera photo lands on disk.
+        return '<div class="thumb thumb--placeholder" aria-hidden="true"></div>'
     return (
-        f'<img class="card-thumb" loading="lazy" alt="" src="{src}">'
+        f'<img class="thumb card-thumb" loading="lazy" alt="" src="{src}">'
     )
 
 
@@ -453,6 +455,8 @@ def _render_right_drawer() -> str:
         '<aside id="right-drawer" class="drawer drawer--right" '
         'aria-hidden="true">'
         '<div class="drawer-body" data-drawer-template="drive-status">'
+        '<div class="thumb thumb--placeholder thumb--placeholder--lg" '
+        'aria-hidden="true"></div>'
         '<h3>drive status</h3>'
         '<div data-target="drive-status-body">'
         '<p class="meta">idle</p>'

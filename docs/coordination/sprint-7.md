@@ -516,7 +516,7 @@ status: draft
   Uses `shutil.disk_usage` and a module-init `time.monotonic`
   start. Module-init time captured in `app.py` at startup.
 
-- [ ] {agent: lane-3, depends: test-disc-photo-placeholder, id: impl-disc-photo-placeholder}
+- [x] {agent: lane-3, depends: test-disc-photo-placeholder, id: impl-disc-photo-placeholder}
   Card render helper emits `<div class="thumb thumb--placeholder">`
   for cards without a real photo. Right-drawer drive-mode body
   uses a larger variant. CSS already in `cda.css`.

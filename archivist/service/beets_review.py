@@ -491,7 +491,7 @@ def _page_shell(title: str, body_inner: str) -> str:
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<title>cd-archivist · {_esc(title)}</title>'
-        '<link rel="stylesheet" href="/static/tokens.css">'
+        '<link rel="stylesheet" href="/static/css/tokens.css">'
         + _BASE_STYLES +
         '</head>'
         '<body>'

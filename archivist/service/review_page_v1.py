@@ -118,7 +118,7 @@ def render_review_v1(
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<title>cd-archivist · review</title>'
-        '<link rel="stylesheet" href="/static/tokens.css">'
+        '<link rel="stylesheet" href="/static/css/tokens.css">'
         f'<style>{_STYLES}</style>'
         '</head>'
         '<body>'
