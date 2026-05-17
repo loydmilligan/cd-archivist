@@ -46,6 +46,7 @@ from archivist.pipeline.pairing import attach_pairing, make_pairing
 from archivist.pipeline.post_rip_hook import run_process_ready_hook
 from archivist.pipeline.rip import cleanup_wavs, rip_disc
 from archivist.pipeline.rip_progress import parse_cdparanoia_progress
+from archivist.state_machine.drive_status import update_from_progress_line
 from archivist.pipeline.source_json import build_source_json
 
 logger = logging.getLogger(__name__)
@@ -339,8 +340,16 @@ class ArchivistLoop:
 
         def _on_progress(line: str) -> None:
             label = parse_cdparanoia_progress(line)
-            if label is not None and self._loop_state is not None:
+            if self._loop_state is None:
+                return
+            if label is not None:
                 self._loop_state.rip_progress = label
+            # Sprint-6.5: also fan the raw line into the DriveStatus
+            # snapshot so /api/drive/status surfaces the live sector +
+            # retry numbers the kanban needs for the per-track bar.
+            ds = getattr(self._loop_state, "drive_status", None)
+            if ds is not None:
+                update_from_progress_line(ds, line)
 
         self._cycle.timestamps.rip_started_at = datetime.now().astimezone()
         try:
@@ -540,7 +549,13 @@ class ArchivistLoop:
         assert self._cycle.disc_dir is not None
         captures: list[Any] = []
         capture_error: str | None = None
+        # Sprint-6.5: walk drive_status.photo_state through the
+        # documented pending → capturing → done lifecycle. Failure
+        # leaves it at "capturing" so the UI shows the partial state
+        # until the next reset.
+        self._set_photo_state("pending")
         try:
+            self._set_photo_state("capturing")
             captures = capture_disc(
                 self._cycle.disc_dir,
                 camera=self._camera,
@@ -549,6 +564,8 @@ class ArchivistLoop:
         except Exception as exc:
             capture_error = f"capture failed: {type(exc).__name__}: {exc}"
             logger.exception("capture_disc raised; preserving rip record")
+        else:
+            self._set_photo_state("done")
 
         if self._sprint4_mode:
             self._from_capture_sprint4(captures, capture_error)
@@ -661,7 +678,9 @@ class ArchivistLoop:
         # photo copy below is what we care about for the failed_dir
         # folder's visual context.
         capture_error: str | None = None
+        self._set_photo_state("pending")
         try:
+            self._set_photo_state("capturing")
             capture_disc(
                 disc_dir,
                 camera=self._camera,
@@ -670,6 +689,8 @@ class ArchivistLoop:
         except Exception as exc:
             capture_error = f"capture failed: {type(exc).__name__}: {exc}"
             logger.exception("capture_disc raised in STABILIZE_PARTIAL; continuing")
+        else:
+            self._set_photo_state("done")
 
         photo_path: Path | None = None
         try:
@@ -724,6 +745,15 @@ class ArchivistLoop:
 
     # ------------------------- helpers --------------------------------
 
+    def _set_photo_state(self, value: str | None) -> None:
+        """Update `drive_status.photo_state` under the lock. No-op when
+        loop_state is unset (sprint-3 tests sometimes omit it)."""
+        if self._loop_state is None or not hasattr(self._loop_state, "drive_status"):
+            return
+        ds = self._loop_state.drive_status
+        with ds.lock:
+            ds.photo_state = value  # type: ignore[assignment]
+
     def _heartbeat(self) -> None:
         """Advance last_tick_at on every tick (not just transitions)."""
         if self._loop_state is not None:
@@ -742,6 +772,51 @@ class ArchivistLoop:
         for k, v in patch.items():
             if hasattr(self._loop_state, k):
                 setattr(self._loop_state, k, v)
+
+        # Sprint-6.5 / impl-drive-status-snapshot. The drive_status
+        # snapshot tracks a coarser phase than the State enum (4 buckets
+        # for the operator UI: idle / stabilizing / ripping / capturing).
+        # Returning to IDLE-equivalent states resets all transient fields.
+        self._sync_drive_status_for_transition(new_state, patch)
+
+    def _sync_drive_status_for_transition(
+        self, new_state: State, patch: dict[str, Any],
+    ) -> None:
+        if self._loop_state is None or not hasattr(self._loop_state, "drive_status"):
+            return
+        ds = self._loop_state.drive_status
+
+        # Idle-equivalent states clear every transient field.
+        if new_state in (State.IDLE, State.WAITING, State.WAITING_REMOVE, State.ERROR):
+            with ds.lock:
+                ds.state = "idle"
+                ds.current_disc = None
+                ds.current_track = None
+                ds.track_total = None
+                ds.sector_current = None
+                ds.sector_total = None
+                ds.retries_on_current_track = None
+                ds.photo_state = None
+                ds.elapsed_seconds = None
+            return
+
+        # Active-cycle phase mapping. EJECT and CAPTURE both map to
+        # "capturing" because from the operator's perspective the drive
+        # is opening the tray for the photo step.
+        phase: str = {
+            State.STABILIZE: "stabilizing",
+            State.STABILIZE_PARTIAL: "stabilizing",
+            State.RIP: "ripping",
+            State.EJECT: "capturing",
+            State.CAPTURE: "capturing",
+        }.get(new_state, "idle")
+
+        with ds.lock:
+            ds.state = phase  # type: ignore[assignment]
+            # Folder name comes through the patch (set on STABILIZE→RIP).
+            new_disc = patch.get("disc_id")
+            if new_disc is not None:
+                ds.current_disc = new_disc
 
 
 ArchivistLoop._TRIGGER_STATES = {

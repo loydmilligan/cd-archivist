@@ -456,7 +456,7 @@ status: draft
 
 #### Bucket F — Drive-status snapshot (drivers)
 
-- [ ] {agent: drivers, depends: test-drive-status-snapshot, id: impl-drive-status-snapshot}
+- [x] {agent: drivers, depends: test-drive-status-snapshot, id: impl-drive-status-snapshot}
   Implement `archivist/state_machine/drive_status.py::DriveStatus`
   dataclass + `LoopState.drive_status` attribute + thread-safe
   updates from the ripper progress callback and state-machine
@@ -555,11 +555,52 @@ pipeline confirms or adjusts and pins.
 Open. Sprint-6.5 proposes 1000ms during active rip / 5000ms idle;
 pipeline confirms based on perceived CM4 load and pins.
 
-### 2026-05-16 — D-drive-status-snapshot-schema — **OPEN** (drivers pins during impl-drive-status-snapshot)
+### 2026-05-16 — D-drive-status-snapshot-schema — RLock + state-transition mapping
 
-Open. The `DriveStatus` dataclass field set is specified in the test;
-drivers locks the thread-safety mechanism (lock vs atomic swap) and
-the exact transition rules between `state` values.
+Resolved during `impl-drive-status-snapshot`. Final decisions:
+
+**Thread-safety mechanism: `threading.RLock`** (not `Lock`, not
+atomic-swap). Rationale: state-transition paths (`_set_state` →
+`_sync_drive_status_for_transition`) and the `_set_photo_state`
+helper both acquire the lock; the inner `update_from_progress_line`
+helper acquires it too. With a plain `Lock`, a caller that already
+held the lock and then invoked a helper would deadlock. `RLock`
+permits re-entry from the same thread. Atomic-swap-via-replacement-
+dataclass was rejected because the LoopState field is a long-lived
+reference held by FastAPI handlers; rebinding the field per update
+introduces a separate read-after-rebind race and forces every reader
+to re-resolve the attribute.
+
+**State-transition mapping** (State enum → `drive_status.state`):
+
+| State enum             | `drive_status.state` | Side effects             |
+| ---------------------- | -------------------- | ------------------------ |
+| IDLE / WAITING /       | `"idle"`             | **Reset all transient    |
+| WAITING_REMOVE / ERROR |                      | fields to None**         |
+| STABILIZE /            | `"stabilizing"`      | (current_disc set via    |
+| STABILIZE_PARTIAL      |                      | `patch["disc_id"]`)      |
+| RIP                    | `"ripping"`          | progress callback fans   |
+|                        |                      | sector / retry / track   |
+|                        |                      | into snapshot            |
+| EJECT                  | `"capturing"`        | (drive opens tray)       |
+| CAPTURE                | `"capturing"`        | photo_state walks        |
+|                        |                      | pending → capturing →    |
+|                        |                      | done                     |
+
+Rationale: 4-bucket `state` is for the operator UI's coarse phase
+indicator; EJECT is folded into "capturing" because from the operator
+view the post-rip step is the photo capture (the tray opening is
+just the mechanical prerequisite). ERROR maps to "idle" + full reset
+because the operator's recovery action is "eject and try again" —
+the snapshot should reflect "nothing happening right now" rather
+than holding stale rip context.
+
+**photo_state lifecycle:** `pending` set at the top of
+`_from_capture` / `_from_stabilize_partial`; `capturing` set
+immediately before `capture_disc(...)`; `done` set on successful
+return; left at `capturing` (NOT cleared) when `capture_disc` raises,
+so the UI shows the partial state until the next idle reset clears
+it.
 
 ## Ratification Log
 
@@ -645,6 +686,55 @@ sprint-7 planning. -->
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-16 — drivers — Wave 2 impl-drive-status-snapshot landed (1 task, 1 commit)
+
+Single drivers Wave 2 task closed; landed early per the roster note
+so pipeline can wire `impl-drive-status-endpoint` against it.
+
+- **impl-drive-status-snapshot** (this commit) — new
+  `archivist/state_machine/drive_status.py` with the `DriveStatus`
+  dataclass (9 fields per the test contract + `lock:
+  threading.RLock` factory, `repr=False, compare=False` so equality
+  is data-only) and a `update_from_progress_line(ds, line)` parser
+  that bumps `current_track` on `:outputting track N` (resets
+  retries to 0 on track change), `sector_current` /
+  `retries_on_current_track` on `scsi_read error:` lines, no-ops on
+  unrelated lines. Mutations all wrap in `with ds.lock:`.
+- LoopState (`archivist/service/app.py`): minimal additive touch —
+  one new field
+  `drive_status: DriveStatus = field(default_factory=DriveStatus)`
+  + the `from archivist.state_machine.drive_status import
+  DriveStatus` import. **Cross-agent note:** `service/app.py` is
+  pipeline-owned per the roster but the field is a sibling of
+  `rip_progress` / `last_tick_at` and required to satisfy the
+  test contract; touch scope held to the one field + import.
+- `archivist/state_machine/loop.py`: three update sites added.
+  (1) `_set_state` calls a new `_sync_drive_status_for_transition`
+  helper that maps the State enum to the 4-bucket `drive_status.
+  state` and resets all transient fields on return-to-idle states
+  (IDLE / WAITING / WAITING_REMOVE / ERROR). Active-cycle mapping:
+  STABILIZE & STABILIZE_PARTIAL → "stabilizing"; RIP → "ripping";
+  EJECT & CAPTURE → "capturing". (2) The rip's `_on_progress`
+  callback fans the raw line into `update_from_progress_line` so
+  sector/retry/track updates land live during the rip. (3)
+  `_from_capture` and `_from_stabilize_partial` walk `photo_state`
+  through `pending → capturing → done` via a new `_set_photo_state`
+  helper (left at `capturing` on exception so the UI shows the
+  partial state until the next idle reset).
+- D-drive-status-snapshot-schema resolved: `threading.RLock` (not
+  Lock, not atomic-swap), State→drive_status.state mapping table,
+  photo_state lifecycle pinned in the Decision Log entry.
+
+Verified: pytest tests/state_machine/test_drive_status.py → 13/13
+PASS; full drivers + state-machine + pipeline + test_main_logging
+suites → 218/218 PASS; ruff check clean on touched code (the
+pre-existing F841 at loop.py:620 is sprint-4 era, not in this
+task's slice). The 64 failures elsewhere in `pytest tests/` are
+pipeline's in-flight Wave 2 reds under `tests/service/`.
+
+Unblocks: pipeline's `impl-drive-status-endpoint` (reads from
+`loop_state.drive_status` for `GET /api/drive/status`).
 
 ### 2026-05-16 — drivers — Wave 1 failing test landed (1 task, 1 commit)
 
