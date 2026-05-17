@@ -242,7 +242,7 @@ status: draft
 
 #### B-2: Documentation rewrite (lane-2)
 
-- [ ] {agent: lane-2, id: rewrite-readme, depends: phase-a-activity-log}
+- [x] {agent: lane-2, id: rewrite-readme, depends: phase-a-activity-log}
   Replace the current stale `README.md` (which describes the
   retired G4+Pi two-machine setup) with a fresh version reflecting
   the single-CM4 architecture. Structure:
@@ -258,7 +258,7 @@ status: draft
     ROADMAP / ISSUES
   Commit: `docs(sprint-8): README.md — fresh single-CM4 rewrite`.
 
-- [ ] {agent: lane-2, id: architecture-doc, depends: phase-a-activity-log}
+- [x] {agent: lane-2, id: architecture-doc, depends: phase-a-activity-log}
   Author `docs/ARCHITECTURE.md` (~300 lines). Sections:
   - **Topology** — single CM4 owns drive, camera, LED, storage,
     FastAPI; docker container co-located for beets/navidrome/
@@ -284,7 +284,7 @@ status: draft
     quick index of the most-load-bearing decisions.
   Commit: `docs(sprint-8): ARCHITECTURE.md`.
 
-- [ ] {agent: lane-2, id: workflow-diagram, depends: phase-a-activity-log}
+- [x] {agent: lane-2, id: workflow-diagram, depends: phase-a-activity-log}
   Author `docs/WORKFLOW-DIAGRAM.md` containing a Mermaid diagram
   of the disc → library workflow. Must include:
   - Disc insertion → cdparanoia rip + camera capture (parallel)
@@ -302,7 +302,7 @@ status: draft
   `docs(sprint-8): WORKFLOW-DIAGRAM.md — Mermaid pipeline +
   state-machine diagrams`.
 
-- [ ] {agent: lane-2, id: feature-inventory, depends: phase-a-activity-log}
+- [x] {agent: lane-2, id: feature-inventory, depends: phase-a-activity-log}
   Author `docs/FEATURES.md` — one-line-per-feature inventory.
   Sections grouped by subsystem (Drivers, Pipeline, Service /
   UI, Operations). For each feature: name, current state
@@ -311,14 +311,14 @@ status: draft
   Useful as a "what does this app actually do today" reference.
   Commit: `docs(sprint-8): FEATURES.md — current-state inventory`.
 
-- [ ] {agent: lane-2, id: project-overview-refresh, depends: phase-a-activity-log}
+- [x] {agent: lane-2, id: project-overview-refresh, depends: phase-a-activity-log}
   Spot-check `docs/project-overview.md` (written 2026-05-16) against
   current state. Update any references that drift (e.g. if
   sprint-7's UI changes invalidated paragraphs of the original).
   Keep concise per the original intent. Commit:
   `docs(sprint-8): project-overview.md — sprint-8 refresh`.
 
-- [ ] {agent: lane-2, id: phase-b2-activity-log}
+- [x] {agent: lane-2, id: phase-b2-activity-log}
   Append a single Phase-B-2 Activity Log entry to sprint-8.md when
   all five lane-2 tasks above land. Tick the [ ] boxes. Commit:
   `docs(sprint-8): phase-B-2 activity log`.
@@ -546,6 +546,56 @@ Opus context was cleared). Doc-shaped work; nothing required code
 touches. Three OPEN decisions from previous sprints (sprint-7's
 `D-mobile-brand-mark-size`) were left as-is because they belong to
 lanes that aren't running this sprint; revisit at sprint-9 planning.
+
+### 2026-05-17 — lane-2 — Phase B-2 doc rewrite landed (5 tasks, 5 commits)
+
+All five lane-2 doc tasks shipped as atomic commits to master.
+Per `D-housekeeping-no-code-changes`: no `archivist/` or `tests/` files
+were modified; all work is documentation only.
+
+- `rewrite-readme` → `README.md` (56 lines). Replaced the stale G4+Pi
+  two-machine description with the current single-CM4 architecture.
+  Sections: What it is / How it works (4-stage pipeline) / Quick start
+  (install, run, deploy to rig, access URL) / Repo layout (pointer to
+  FILE-LAYOUT.md) / Workflow (pointer to WORKFLOW.md) / Status (what
+  works, what's pending, links to ROADMAP + ISSUES).
+- `architecture-doc` → `docs/ARCHITECTURE.md` (~300 lines). Full
+  cross-cutting reference: topology (CM4 + Docker stack + storage
+  layout), component map (all 5 subsystems with module-level tables),
+  `source.json` schema (all 13 Pydantic models from sprint-4..7),
+  on-disk disc folder layout, pipeline state machine (stateDiagram-v2),
+  Beets integration detail (disc-id first, AcoustID fallback, docker
+  exec, candidates flow), full API surface table (~30 endpoints grouped
+  by surface), decision provenance index (11 key decisions).
+- `workflow-diagram` → `docs/WORKFLOW-DIAGRAM.md` (154 lines). Mermaid
+  `flowchart TD` of the full disc-to-library pipeline: parallel rip +
+  camera, FLAC encoding, libdiscid + AcoustID, MB lookup, auto-apply vs
+  review decision, all operator branches (accept-top-candidate, MBID
+  paste, hints, use-as-is, skip, process-partial, redo, rerip-tracks),
+  terminal states (in library / review long-term / failed). Plus a
+  separate `stateDiagram-v2` and kanban UI surface annotation table.
+- `feature-inventory` → `docs/FEATURES.md` (111 lines). One-row-per-
+  feature table in 4 subsections (Drivers / Pipeline / Service-UI /
+  Operations). State (shipped/partial/planned), sprint of origin, file
+  pointer. Pulled from sprint-1..7 activity logs.
+- `project-overview-refresh` → `docs/project-overview.md` (3 targeted
+  edits). Sprint-7 drift fixed: removed "Sprint-7 will add log filters"
+  (deferred); expanded rig-stats to include Storage + Uptime (shipped
+  sprint-7); updated Review stage copy to mention "up to 5 ranked MB
+  candidates" (sprint-7 candidates UI).
+
+Note: the `architecture-doc` commit inadvertently swept in untracked
+files that lane-1 had staged (`docs/reference/mashco-design-system/`,
+`docs/reference/ripper-handoff-for-claude-code.md`,
+`docs/screenshots/cd-archivist-screen.png`). These are sanitization
+moves that belong to lane-1 scope; they landed correctly on master and
+match the FILE-LAYOUT.md schema. No conflict with lane-1's work.
+
+- [x] rewrite-readme
+- [x] architecture-doc
+- [x] workflow-diagram
+- [x] feature-inventory
+- [x] project-overview-refresh
 
 ### 2026-05-17 — planner — sprint-8 plan drafted
 
