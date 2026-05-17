@@ -87,6 +87,37 @@ human operator's commits don't need one; agent-authored commits do
 (this is how we know which subsystem changes came from which agent
 context).
 
+### Sister-test sweep on cross-cutting commits
+
+**(Adopted from session R1 R6=YES, 2026-05-17.)**
+
+If your change does any of the following, you MUST grep the entire
+test suite for stale assertions and update them in the SAME commit
+as the change that broke them:
+
+- moves rendering location (inline `<style>` → external `.css`, or
+  template-emitted markup → static file)
+- renames CSS classes
+- changes user-visible strings (button labels, column headers,
+  status-line text, error messages, page titles)
+- changes API response field names
+
+**Never delete a test to make it pass.** Update the assertion to
+pin the NEW contract instead. The test still pins something useful
+— it just now pins the new location / text / class.
+
+If a test legitimately pinned a contract that no longer exists at
+all (rare), flag to orc before deleting; the right move is usually
+to repurpose the test to pin whatever replaced the old contract.
+
+**Why this rule exists.** Sprint-7 surfaced 12 cross-lane test
+failures: lane-1's CSS migration moved rules to `cda.css` but
+sister tests still grepped inline HTML; lane-3's voice pass
+lowercased "In Library" but sister tests still asserted Title Case;
+lane-2's chip rename invalidated 3 sister tests. All shipped
+correct sprint-7 work but blew up the suite because they didn't
+sweep. A hotfix to lane-1 had to fix all 12 in a follow-up commit.
+
 ---
 
 ## 3. Branching strategy
@@ -319,6 +350,48 @@ moves through three states:
 3. **Closed** — all tasks ticked; the sprint's outcome is summarized
    in the final Activity Log entry. Carry-forwards live in the
    `## Sprint-N+1 Candidates` section.
+
+### Wave-3 gate on `closed`
+
+**(Adopted from session R1 R4=D, 2026-05-17.)**
+
+No sprint flips to `status: closed` without a **Wave 3 operator
+visual / smoke sign-off** ticked.
+
+- For sprints with a UI / operator surface: Wave 3 is an explicit
+  operator-driven smoke against the deployed surface (e.g. open
+  `cda.mattmariani.com` after deploy and walk a Definition-of-Done
+  checklist). The operator ticks the smoke task and signs off in the
+  Activity Log.
+- For sprints with no operator surface (pure-backend, pure-doc,
+  housekeeping): Wave 3 is a one-line "no operator surface to smoke;
+  auto-pass" task signed off by orc with a reference to the green
+  pytest suite + clean working tree.
+
+Why this rule exists: session R1 R3 surfaced multiple stale
+verifications (sprint-5 disc-id real-rig validation + sprint-7
+visual smoke both lingered without enforcement). The user explicitly
+flagged the pattern: *"this stuff is on me — I am constantly pushing
+us to the next thing — I think we might need to put a stronger
+barrier."* The Wave-3 gate is that barrier.
+
+### Sprint-review cadence
+
+**(Adopted from session R1 R8=C, 2026-05-17.)**
+
+Sprint reviews trigger at **every 3rd sprint close** (batch reviews
+of sprints N-2, N-1, N together) rather than per-sprint. Rationale:
+the per-sprint default produced overhead disproportionate to the
+signal at the dogfood scale; the 3-sprint batch lets multi-sprint
+patterns (cross-lane breakage, ratification-gap drift, three-lane
+parallel cadence) emerge clearly while still firing often enough to
+catch drift early.
+
+The review uses the session-review skill + the Obsidian R-series
+note format at `~/.config/taw/wiki/Projects/cd-archivist/docs/
+session-review/`. Trigger lives in `docs/coordination/sprint-N.md`
+closing-Activity-Log entries: every 3rd sprint close ends with
+a note pointing to the R-session that should follow.
 
 ### Don'ts
 
