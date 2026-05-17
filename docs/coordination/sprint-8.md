@@ -171,7 +171,7 @@ status: draft
   (per WORKFLOW.md §11). Commit: `docs(sprint-8): ISSUES.md —
   defect backlog with sprint-5..7 carry-overs`.
 
-- [ ] {agent: lane-3, id: file-layout-schema}
+- [x] {agent: lane-3, id: file-layout-schema}
   Author `docs/FILE-LAYOUT.md` (~100 lines) — the canonical
   "where things go" map. Inventory the existing tree, define the
   intended layout, call out current violations (orphan
