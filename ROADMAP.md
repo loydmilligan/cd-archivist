@@ -85,6 +85,12 @@ Add date: 2026-05-17
 
 Medium-term thematic groups; not the next sprint, but soon.
 
+### Cloudflare Access + spooty service-token wiring
+
+Sprint-11 shipped `/settings` unauthenticated (per `D-settings-unauth-v1`); spooty's own REST API has no auth (audited 2026-05-20 — stock `raiper34/spooty` with zero `@UseGuards`). Once the operator stands up Cloudflare Access in front of `cda.mattmariani.com` + `spooty.mattmariani.com`, the cda → spooty call needs `CF-Access-Client-Id` + `CF-Access-Client-Secret` headers (per `~/Projects/spooty-curator/CLOUDFLARE_ACCESS_SETUP.md`). Add `spooty_cf_client_id` + `spooty_cf_client_secret` to the `Config` dataclass + settings page; have `spooty_client.py` send the headers when set. Deferred until the operator finishes the Cloudflare Access setup — current testing is intentionally LAN-friendly.
+
+Add date: 2026-05-20
+
 ### Review v2 — in-UI candidate selection
 
 Sprint-6.5 deferred the in-UI beets candidate picker because of

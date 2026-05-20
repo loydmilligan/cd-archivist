@@ -97,9 +97,14 @@ def test_live_status_chip_still_renders(client: TestClient) -> None:
 
 
 def test_page_header_height_bumped_to_80px(client: TestClient) -> None:
-    """The page-header padding scales such that the bar reads ~80px
-    tall. We pin the min-height token directly so a future spacing-
-    scale rebalance doesn't silently shrink the header back."""
+    """The page-header padding declares a min-height token.
+
+    Sprint-7 embiggened to 80px ("dashboard quick view"). Sprint-11.1
+    trimmed back to 56px after live-operator feedback that the header
+    consumed disproportionate visual real estate on smaller viewports
+    once the panel surface had real content to scroll through. The
+    canonical band is now 56–80px — pinning a hard floor here keeps
+    the header from collapsing to nothing in a future refactor."""
     cda = _cda(client)
     block = re.search(r"\.page-header\s*\{([^}]*)\}", cda, re.DOTALL)
     assert block is not None, "missing .page-header rule"
@@ -110,8 +115,9 @@ def test_page_header_height_bumped_to_80px(client: TestClient) -> None:
     )
     m = re.search(r"min-height\s*:\s*(\d+)px", body)
     assert m is not None, "expected .page-header min-height in px"
-    assert int(m.group(1)) >= 80, (
-        f".page-header min-height is {m.group(1)}px; embiggen to >=80px"
+    assert 56 <= int(m.group(1)) <= 80, (
+        f".page-header min-height is {m.group(1)}px; must be in the "
+        f"56–80 band (sprint-7 embiggen + sprint-11.1 trim)"
     )
 
 

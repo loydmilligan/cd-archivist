@@ -141,7 +141,17 @@
   display: grid;
   grid-template-columns: 220px 1fr;
   height: 100%;
+  /* Sprint-11.1 / scroll-architecture: min-height:0 is the flex-child
+     fix that lets .cda-lib-viewport's overflow-y:auto actually scroll
+     when this shell is a flex:1 child of body. */
+  min-height: 0;
   overflow: hidden;
+}
+/* Settings page mirrors the shell pattern — single scroll column. */
+main.cda-settings-main {
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--bg);
 }
 .cda-lib-sidebar {
   background: var(--surface);

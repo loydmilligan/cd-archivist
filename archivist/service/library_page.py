@@ -194,7 +194,7 @@ def render_library_page(
         '</head>'
         '<body data-surface="library">'
         f'{_render_header_bar(stats, links, active_rip=active_rip, active_disc=active_disc, active_surface="library", rip_telemetry=rip_telemetry, library_telemetry=library_telemetry)}'
-        '<main class="cda-lib-main">'
+        '<main class="cda-lib-shell">'
         f'{sidebar_html}'
         f'{viewport_html}'
         '</main>'
