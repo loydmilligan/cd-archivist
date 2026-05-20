@@ -56,7 +56,7 @@ Disk · Inbox · Downloads · Library — replace the "in design" placeholders w
 - [ ] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: downloads-impl} Implement the Downloads (Spooty) panel end-to-end. New `archivist/service/clients/spooty_client.py` proxying the spooty REST API at `$SPOOTY_API_URL` (default `http://192.168.6.38:3003/api`). Read-only methods: `list_playlists()`, `list_tracks(playlist_id)`. Mutating methods: `submit_playlist(url)`, `retry_track(id)`, `delete_track(id)`, `retry_playlist(id)`. Use `requests` with a 5s timeout; raise `SpootyUnavailable` on connection failure. New endpoints in `app.py` under `/api/library/downloads/*` matching the client methods (the proxy is thin — cda forwards the operator action and returns the spooty response verbatim). New `archivist/service/library_downloads_panel.py` rendering one row per playlist + per-track pip strip (green=ok, pulp=active, ember=error, empty=pending) + submit-playlist form + per-track retry/delete affordances + retry-whole-playlist button. Stats header: Playlists · Tracks · Done · Errors. Refresh cadence: 1000ms during active, 5000ms idle.
   - **Acceptance:** `tests/service/test_library_downloads.py` covers the spooty_client with a mocked requests session (happy paths + SpootyUnavailable on connection error), each `/api/library/downloads/*` endpoint, and the rendered HTML structure (playlist rows, per-track pips with correct state classes, action buttons). Live `/library/downloads` shows real spooty state if `SPOOTY_API_URL` is reachable; degrades to a "spooty unavailable" empty state otherwise. Existing suite still green.
 
-- [ ] {agent: lane-1, depends: setup-clients-package, id: library-impl} Implement the Library (browse) panel end-to-end. New `archivist/service/clients/subsonic_client.py` with read-only Subsonic API calls against `$NAVIDROME_URL` using `$NAVIDROME_USER` / `$NAVIDROME_PASS` (Subsonic auth — username + token + salt). Methods: `search(query: str, limit: int = 20)` (uses `search3.view`) and `get_newest_albums(limit: int = 10)` (uses `getAlbumList2.view` with `type=newest`). Raise `NavidromeUnavailable` on connection failure. New `/api/library/browse` endpoint (search; takes `?q=`) + `/api/library/browse/recent` endpoint (10 most-recent). New `archivist/service/library_browse_panel.py` rendering a search input (debounced 300ms client-side, fires `/api/library/browse?q=`) + the 10 most-recent imports list + a prominent "Open Navidrome ↗" CTA linking to `$NAVIDROME_URL`. No polling — search is on-input. Recent list refreshes only on full panel load.
+- [x] {agent: lane-1, depends: setup-clients-package, id: library-impl} Implement the Library (browse) panel end-to-end. New `archivist/service/clients/subsonic_client.py` with read-only Subsonic API calls against `$NAVIDROME_URL` using `$NAVIDROME_USER` / `$NAVIDROME_PASS` (Subsonic auth — username + token + salt). Methods: `search(query: str, limit: int = 20)` (uses `search3.view`) and `get_newest_albums(limit: int = 10)` (uses `getAlbumList2.view` with `type=newest`). Raise `NavidromeUnavailable` on connection failure. New `/api/library/browse` endpoint (search; takes `?q=`) + `/api/library/browse/recent` endpoint (10 most-recent). New `archivist/service/library_browse_panel.py` rendering a search input (debounced 300ms client-side, fires `/api/library/browse?q=`) + the 10 most-recent imports list + a prominent "Open Navidrome ↗" CTA linking to `$NAVIDROME_URL`. No polling — search is on-input. Recent list refreshes only on full panel load.
   - **Acceptance:** `tests/service/test_library_browse.py` covers the subsonic_client search + getAlbumList2 calls with a mocked requests session, each `/api/library/browse*` endpoint, and the rendered HTML structure (search input wired to the endpoint, recent list with thumb + name + relative-time, Navidrome CTA href). Live `/library/library` shows real recent-imports if `NAVIDROME_URL` is reachable; degrades to an empty state with the CTA still working otherwise. Existing suite still green.
 
 - [ ] {agent: lane-1, depends: disk-impl,inbox-impl,downloads-impl,library-impl, id: deploy-and-smoke} Final integration. Verify all four panel routes render real data end-to-end on the deployed CM4 surface. Update `docs/operations/cm4-setup.md` (or sibling) with the new env vars: `SPOOTY_API_URL`, `NAVIDROME_URL`, `NAVIDROME_USER`, `NAVIDROME_PASS`, `MUSIC_INBOX_DIR`, `MUSIC_REVIEW_DIR`, `MUSIC_ARCHIVE_DIR`. Update `archivist.service` systemd unit (or note in the docs) for any new env vars the operator needs to set. Hard-refresh `cda.mattmariani.com/library/{downloads,inbox,disk,library}` and confirm each renders the real surface. Update `CHANGELOG.md` with sprint-10 entries. Update `FEATURES.md` to mark the four panels as `shipped` (was `placeholder` after sprint-9).
@@ -97,6 +97,51 @@ _No contract changes yet._
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-20 — lane-1 — library-impl closed
+
+- New `archivist/service/clients/subsonic_client.py`. Read-only
+  Subsonic API client targeting Navidrome via `NAVIDROME_URL` /
+  `NAVIDROME_USER` / `NAVIDROME_PASS`. Auth uses fresh salt-per-call
+  (md5(password + salt)) so transport sniffers can't replay. Two
+  methods: `search(query, limit=20)` → `search3.view` and
+  `get_newest_albums(limit=10)` → `getAlbumList2.view?type=newest`.
+  Returns frozen `AlbumSummary` dataclasses. Raises
+  `NavidromeUnavailable` on transport failure, non-JSON body, missing
+  `subsonic-response`, non-`ok` status, or missing credentials.
+  Normalizes Subsonic's quirk of returning a single dict instead of a
+  list when one album matches. Empty query short-circuits to `[]`
+  without hitting the API. 5s timeout per the clients README contract.
+- New `archivist/service/library_browse_panel.py` exposes `render(spec)`.
+  Header (eyebrow / h1 / sub) on the left; prominent "Open Navidrome ↗"
+  CTA on the right that always works (independent of API health) as
+  long as `NAVIDROME_URL` is set. Search input (`data-cda-browse-search`)
+  is debounced 300ms client-side and fires `/api/library/browse?q=`;
+  results are rendered into `[data-cda-browse-results]` by the inline
+  search JS (small + self-contained). Below that, the 10 most-recent
+  imports as a list. When Navidrome is unavailable, the recent block
+  degrades to a friendly "is-unavailable" empty state but the CTA
+  still works. Per the chassis_js contract, this panel emits **no**
+  polling meta tags — the dispatcher is a no-op for it, matching the
+  "Library: none" cadence from the sprint plan.
+- New `/api/library/browse` and `/api/library/browse/recent` endpoints
+  in `app.py` (thin projections of the client; 503 with `{albums: [],
+  error: ...}` on `NavidromeUnavailable` so the JS can render an empty
+  state without parsing exception text). Note: these route definitions
+  rode in on lane-2's inbox-impl commit (0f35ce0) because we share the
+  working tree and `git add app.py` swept them in; functionally
+  equivalent and tests cover the routes regardless. The dedicated
+  library-impl commit lands the subsonic_client + browse panel module
+  + tests.
+- `tests/service/test_library_browse.py` (17 tests): subsonic_client
+  search (happy path + empty-query short-circuit + single-dict
+  normalization + ConnectionError → NavidromeUnavailable + failed
+  subsonic status + missing-credentials guard), `get_newest_albums`
+  (happy path with endpoint/param assertions), both `/api/library/browse*`
+  endpoints (happy + 503 on unavailable), and the rendered panel
+  (search input wiring, CTA href, recent list rows, degraded state with
+  working CTA, no polling meta tags, header copy).
+- Full suite green (765 = previous 748 + 17 new).
 
 ### 2026-05-19 — lane-2 — inbox-impl closed
 
