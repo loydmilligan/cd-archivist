@@ -60,7 +60,7 @@ Settings page with read-write JSON config + reload endpoint — no more ssh to u
 - [x] {agent: lane-1, depends: settings-api-endpoints, id: settings-page-render} New `/settings` route + `archivist/service/settings_page.py` renderer. The page is a single form using the existing Mash Co. design system (tokens.css + cda.css + library.css). Layout: shared chassis header (the breadcrumb switcher must include `settings` as a third row — see `settings-link-in-switcher`), then a single-column form with sections (`Spooty`, `Navidrome`, `Music paths`) each holding the relevant fields. Field types: `url`, `text`, `password` (for secrets — masked, with placeholder `●●●●●●●●` when stored value is set). Save button posts to `/api/config`. After save: in-page banner shows `Saved at <HH:MM>` (moss accent) or the validation error (ember accent). No client-side framework — vanilla `<form>` POST with `fetch` + small inline JS.
   - **Acceptance:** `tests/service/test_settings_page.py` covers route returns 200, form contains all 10 fields with correct `type` attributes, password fields have placeholder when set, save button posts to `/api/config`. Visual smoke via `bash -c 'curl -sk https://cda.mattmariani.com/settings | grep -c "<input"'` returns 10. Full suite stays green.
 
-- [ ] {agent: lane-2, depends: setup-config-store, id: settings-link-in-switcher} Extend the brand-lockup breadcrumb switcher in `archivist/service/library_switcher.py` to include a `settings` row alongside `rip` and `library`. Telemetry hint: `<N> knobs · saved <T> ago` where N is the count of non-default values and T is the human-relative time since the last config.json mtime (or `never` if file missing). Pull both via a tiny `get_config_summary() -> dict[str, int | str]` helper in `archivist/service/config.py` (lane-2 adds this helper as part of this task — it's a read-only consumer of config_store). The switcher's `active` param now accepts `"settings"`. Update existing tests in `tests/service/test_breadcrumb_switcher.py` accordingly.
+- [x] {agent: lane-2, depends: setup-config-store, id: settings-link-in-switcher} Extend the brand-lockup breadcrumb switcher in `archivist/service/library_switcher.py` to include a `settings` row alongside `rip` and `library`. Telemetry hint: `<N> knobs · saved <T> ago` where N is the count of non-default values and T is the human-relative time since the last config.json mtime (or `never` if file missing). Pull both via a tiny `get_config_summary() -> dict[str, int | str]` helper in `archivist/service/config.py` (lane-2 adds this helper as part of this task — it's a read-only consumer of config_store). The switcher's `active` param now accepts `"settings"`. Update existing tests in `tests/service/test_breadcrumb_switcher.py` accordingly.
   - **Acceptance:** Switcher dropdown has three rows in order (`rip`, `library`, `settings`). On `/settings`, the `settings` row carries `is-on`. Telemetry hint format verified in tests. Full suite stays green.
 
 - [ ] {agent: lane-1, depends: settings-api-endpoints,config-runtime-wiring,settings-page-render,settings-link-in-switcher, id: deploy-and-smoke} Final integration. Pull lane-2's commits, run full suite locally green. Deploy: `ssh cm4 → git pull → systemctl restart`. Walk `/settings` in the browser: confirm the form loads with current values (URLs filled in, passwords showing the masked placeholder), edit one URL, save, observe the success banner, hit `/library/downloads` (or whichever panel matches the edited URL), confirm the panel reflects the change. Update `docs/operations/cm4-setup.md` adding a `Library Manager config` section noting (a) `~/.config/cd-archivist/config.json` is the new source of truth, (b) env vars + systemd Environment= still work as bootstrap fallbacks, (c) the `/settings` page is the primary editing surface. **Security note:** add a clear paragraph that `/settings` is currently unauthenticated; if the cda surface is publicly reachable, operator should either restrict to LAN or stand up Cloudflare Access before sharing the URL. Update `CHANGELOG.md` with the sprint-11 entry. Update `FEATURES.md` adding the Settings surface. Mark sprint-11 `status: closed`, append the final activity log entry.
@@ -115,6 +115,39 @@ _No ratifications yet._
      - what changed
      - why
      - links: PRs, audit entries -->
+
+### 2026-05-20 — lane-2 — settings-link-in-switcher closed
+
+- New `get_config_summary() -> dict[str, int | str]` at the bottom of
+  `archivist/service/config.py` (lane-2's read-only consumer of the
+  config store per the cross-lane coordination note). Returns
+  `{knobs, saved}` — `knobs` counts fields whose effective value
+  differs from the dataclass default (env-set + file-set both count),
+  `saved` is a human-relative string (`just now` / `5m ago` /
+  `2h ago` / `3d ago` / `never`). Hardened: never raises — a
+  transient filesystem error degrades to `{0, "never"}` so the
+  switcher can't break the page.
+- `library_switcher.render_switcher` now accepts `active="settings"`
+  alongside `"rip"` and `"library"` (the contract change pre-logged
+  by orc). New `settings_telemetry` kwarg with default `None`; when
+  None, the switcher pulls the hint via `get_config_summary()` so
+  callers like `kanban_page` don't have to plumb the value through.
+  Pass an explicit string (including `""`) to override / suppress.
+  Added a third `_row("settings", ...)` to the popover so the
+  dropdown shows three rows in order: `rip`, `library`, `settings`.
+- `settings_page.py`'s try/except around `render_switcher(active="settings")`
+  (lane-1's bootstrap fallback) now lands in the success branch and
+  the settings row carries `is-on` on the /settings surface.
+- Tests: 8 new in `tests/service/test_breadcrumb_switcher.py` plus
+  edits to the existing telemetry test. Covers the third-row order,
+  `is-on` mark for the new active value, settings href, default
+  telemetry pulling from `get_config_summary`, the `never` path
+  when the config file is missing, the explicit-empty-string
+  override, and direct unit tests for `get_config_summary` itself
+  (zero knobs on empty store, knob count after `save_config`, the
+  never-saved path). Same autouse `_isolated_config` fixture as
+  the four client tests pins per-test isolation.
+- Full suite green: 857/857.
 
 ### 2026-05-20 — lane-2 — config-runtime-wiring closed
 

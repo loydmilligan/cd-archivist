@@ -230,3 +230,64 @@ def as_dict(config: Config) -> dict[str, Any]:
     """Plain-dict projection of `config` (no masking). API layers that
     return JSON should mask `SECRET_FIELDS` themselves."""
     return asdict(config)
+
+
+# --------------------------------------------------------------------- summary
+# Sprint-11 / settings-link-in-switcher: lane-2 read-only consumer.
+# The brand-lockup switcher renders a `<N> knobs · saved <T> ago`
+# telemetry hint on the settings row. This helper is the single
+# source of truth for those two values so the switcher (and
+# anything else that wants the same hint) stays consistent.
+
+import datetime as _dt
+
+
+def _format_relative(delta_seconds: float) -> str:
+    """Human-relative time string: `just now`, `5m ago`, `2h ago`,
+    `3d ago`. Anchored at one decimal place is overkill for this UI."""
+    s = int(delta_seconds)
+    if s < 60:
+        return "just now"
+    if s < 3600:
+        return f"{s // 60}m ago"
+    if s < 86400:
+        return f"{s // 3600}h ago"
+    return f"{s // 86400}d ago"
+
+
+def get_config_summary() -> dict[str, Any]:
+    """Return `{knobs: int, saved: str}` for UI consumers.
+
+    - `knobs` counts config fields whose effective resolved value
+      differs from the built-in default. Mirrors "how many knobs has
+      the operator actually touched" — env vars + file edits both
+      contribute, since both override the default.
+    - `saved` is the human-relative time since the config file was
+      last written (file mtime). `"never"` when the file is missing.
+
+    Read-only. Never raises — degrades to zero / `"never"` on any
+    transient filesystem error so the switcher can't break the page.
+    """
+    try:
+        cfg = get_config()
+    except Exception:  # noqa: BLE001 — UI helper must not raise
+        return {"knobs": 0, "saved": "never"}
+
+    default = Config()
+    knobs = 0
+    for f in fields(Config):
+        if getattr(cfg, f.name) != getattr(default, f.name):
+            knobs += 1
+
+    path = _config_path()
+    if not path.is_file():
+        saved = "never"
+    else:
+        try:
+            mtime = path.stat().st_mtime
+            now = _dt.datetime.now(_dt.UTC).timestamp()
+            saved = _format_relative(max(0.0, now - mtime))
+        except OSError:
+            saved = "never"
+
+    return {"knobs": knobs, "saved": saved}
