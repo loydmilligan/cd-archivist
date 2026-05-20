@@ -53,7 +53,7 @@ Disk · Inbox · Downloads · Library — replace the "in design" placeholders w
 - [x] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: inbox-impl} Implement the Inbox panel end-to-end. New `archivist/service/clients/inbox_client.py` with `list_inbox_folders() -> list[InboxFolder]` walking `$MUSIC_INBOX_DIR` and `$MUSIC_INBOX_DIR/spooty/`. Each `InboxFolder`: `name`, `path`, `source` (`"cd_rip"` or `"spooty"`), `file_count`, `size_bytes`, `last_modified` (ISO), `ready_marker_present` (bool). New `/api/library/inbox` endpoint (list). New `/api/library/inbox/import-now` POST endpoint taking `{folder: str}` and invoking the appropriate beets path (`bin/process-ready-auto <folder>` for CD rips, `spooty-import.sh <folder>` for spooty content) via subprocess — fire-and-forget with a 30s timeout; returns `{status: "started"|"failed", message: str}`. New `archivist/service/library_inbox_panel.py` rendering one row per folder with name, source tag, file count, size, last-modified, READY pip, and an "import now" button. Refresh cadence: 5s via the chassis-poll-dispatcher.
   - **Acceptance:** `tests/service/test_library_inbox.py` covers inbox_client folder enumeration (tmp_path fixture with both subdirs + READY markers), `/api/library/inbox` endpoint shape, `/api/library/inbox/import-now` happy + error paths, and rendered HTML structure (row count, source tag, READY pip, import-now button). Live walk of `/srv/music/inbox/` on the CM4 returns real folders. Existing suite still green.
 
-- [ ] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: downloads-impl} Implement the Downloads (Spooty) panel end-to-end. New `archivist/service/clients/spooty_client.py` proxying the spooty REST API at `$SPOOTY_API_URL` (default `http://192.168.6.38:3003/api`). Read-only methods: `list_playlists()`, `list_tracks(playlist_id)`. Mutating methods: `submit_playlist(url)`, `retry_track(id)`, `delete_track(id)`, `retry_playlist(id)`. Use `requests` with a 5s timeout; raise `SpootyUnavailable` on connection failure. New endpoints in `app.py` under `/api/library/downloads/*` matching the client methods (the proxy is thin — cda forwards the operator action and returns the spooty response verbatim). New `archivist/service/library_downloads_panel.py` rendering one row per playlist + per-track pip strip (green=ok, pulp=active, ember=error, empty=pending) + submit-playlist form + per-track retry/delete affordances + retry-whole-playlist button. Stats header: Playlists · Tracks · Done · Errors. Refresh cadence: 1000ms during active, 5000ms idle.
+- [x] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: downloads-impl} Implement the Downloads (Spooty) panel end-to-end. New `archivist/service/clients/spooty_client.py` proxying the spooty REST API at `$SPOOTY_API_URL` (default `http://192.168.6.38:3003/api`). Read-only methods: `list_playlists()`, `list_tracks(playlist_id)`. Mutating methods: `submit_playlist(url)`, `retry_track(id)`, `delete_track(id)`, `retry_playlist(id)`. Use `requests` with a 5s timeout; raise `SpootyUnavailable` on connection failure. New endpoints in `app.py` under `/api/library/downloads/*` matching the client methods (the proxy is thin — cda forwards the operator action and returns the spooty response verbatim). New `archivist/service/library_downloads_panel.py` rendering one row per playlist + per-track pip strip (green=ok, pulp=active, ember=error, empty=pending) + submit-playlist form + per-track retry/delete affordances + retry-whole-playlist button. Stats header: Playlists · Tracks · Done · Errors. Refresh cadence: 1000ms during active, 5000ms idle.
   - **Acceptance:** `tests/service/test_library_downloads.py` covers the spooty_client with a mocked requests session (happy paths + SpootyUnavailable on connection error), each `/api/library/downloads/*` endpoint, and the rendered HTML structure (playlist rows, per-track pips with correct state classes, action buttons). Live `/library/downloads` shows real spooty state if `SPOOTY_API_URL` is reachable; degrades to a "spooty unavailable" empty state otherwise. Existing suite still green.
 
 - [x] {agent: lane-1, depends: setup-clients-package, id: library-impl} Implement the Library (browse) panel end-to-end. New `archivist/service/clients/subsonic_client.py` with read-only Subsonic API calls against `$NAVIDROME_URL` using `$NAVIDROME_USER` / `$NAVIDROME_PASS` (Subsonic auth — username + token + salt). Methods: `search(query: str, limit: int = 20)` (uses `search3.view`) and `get_newest_albums(limit: int = 10)` (uses `getAlbumList2.view` with `type=newest`). Raise `NavidromeUnavailable` on connection failure. New `/api/library/browse` endpoint (search; takes `?q=`) + `/api/library/browse/recent` endpoint (10 most-recent). New `archivist/service/library_browse_panel.py` rendering a search input (debounced 300ms client-side, fires `/api/library/browse?q=`) + the 10 most-recent imports list + a prominent "Open Navidrome ↗" CTA linking to `$NAVIDROME_URL`. No polling — search is on-input. Recent list refreshes only on full panel load.
@@ -97,6 +97,61 @@ _No contract changes yet._
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-20 — lane-2 — downloads-impl closed
+
+- New `archivist/service/clients/spooty_client.py`. Thin proxy over
+  the spooty REST API at `$SPOOTY_API_URL` (default
+  `http://192.168.6.38:3003/api`). All `requests` calls go through
+  a shared `_request()` helper with a 5s timeout that wraps every
+  `RequestException`, non-2xx status, and non-JSON body in
+  `SpootyUnavailable` so callers (panel + endpoints) need only
+  one `except` clause. Optional `$SPOOTY_API_TOKEN` becomes a
+  `Bearer` header when set — sprint-10 ships LAN-only per the plan,
+  but the seam is in place for the Cloudflare Access follow-up.
+- Read methods return typed dataclasses: `list_playlists()` →
+  `list[SpootyPlaylist]` (with embedded `tracks: list[SpootyTrack]`,
+  done/error counters), `list_tracks(id)` → `list[SpootyTrack]`.
+  Both `_coerce_*` helpers tolerate either bare-list or
+  `{playlists|tracks: [...]}` envelope shapes so the spooty API
+  surface can evolve without breaking us.
+- Mutating methods (`submit_playlist`, `retry_playlist`,
+  `retry_track`, `delete_track`) return spooty's JSON response
+  verbatim. Transport failure → `SpootyUnavailable`; spooty's
+  own "rejected" responses come back as a 4xx and surface as
+  `SpootyUnavailable` (the panel UX shows the error message).
+- Six new endpoints in `app.py` under the existing Library Manager
+  block (after lane-1's `/api/library/disk` and the inbox routes,
+  before lane-1's `/api/library/browse` block):
+  `GET /api/library/downloads`,
+  `GET /api/library/downloads/playlists/{id}/tracks`,
+  `POST /api/library/downloads/playlists` (submit; `{url}` body),
+  `POST /api/library/downloads/playlists/{id}/retry`,
+  `POST /api/library/downloads/tracks/{id}/retry`,
+  `DELETE /api/library/downloads/tracks/{id}`. All return 503 with
+  `{error}` on `SpootyUnavailable`; submit returns 400 on missing
+  url.
+- New `archivist/service/library_downloads_panel.render(spec)`
+  emits the stats header (playlists · tracks · done · errors),
+  the submit-playlist form (`<form data-action=...>`), one
+  `<section>` per playlist with a `cda-dl-pipstrip` (per-track
+  pips: `pip--ok` / `pip--active` / `pip--error` / `pip--pending`),
+  a `cda-dl-tracks` list with retry+delete buttons per track,
+  and a "retry playlist" button. Cadence-aware: emits
+  `library-poll-ms=1000` when any track is in `active|running`,
+  `5000` otherwise — per sprint-10 plan. Empty queue +
+  `SpootyUnavailable` both degrade to a meta-tagged empty state
+  inside the same panel shell (submit form still visible).
+- Tests: 33 new in `tests/service/test_library_downloads.py`. Mocks
+  `requests.request` to cover happy paths for each read +
+  mutating method, the `SpootyUnavailable` paths (connection
+  error, timeout, non-2xx, non-JSON body), envelope-shape
+  tolerance, token-header injection, each endpoint (including
+  503 + 400 paths), and the rendered HTML (poll cadence
+  switching, stats header, submit form, pipstrip state classes,
+  per-track + per-playlist retry/delete buttons, unavailable +
+  empty degradations, dispatcher seam).
+- Full suite green: 798/798.
 
 ### 2026-05-20 — lane-1 — library-impl closed
 

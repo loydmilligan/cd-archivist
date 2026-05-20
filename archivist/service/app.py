@@ -649,6 +649,118 @@ def create_app(
                 ],
             })
 
+        # ---- Downloads (Spooty) panel (sprint-10 / downloads-impl) ----
+        # Thin proxy: forwards operator actions to the spooty REST API
+        # at $SPOOTY_API_URL and returns the response verbatim. spooty
+        # is the source of truth for queue state.
+        @app.get("/api/library/downloads")
+        def api_library_downloads() -> JSONResponse:
+            from archivist.service.clients.spooty_client import (
+                SpootyUnavailable,
+                list_playlists,
+            )
+            try:
+                playlists = list_playlists()
+            except SpootyUnavailable as exc:
+                return JSONResponse(
+                    {"playlists": [], "error": str(exc)},
+                    status_code=503,
+                )
+            return JSONResponse(
+                {"playlists": [p.to_dict() for p in playlists]}
+            )
+
+        @app.get("/api/library/downloads/playlists/{playlist_id}/tracks")
+        def api_library_downloads_tracks(playlist_id: str) -> JSONResponse:
+            from archivist.service.clients.spooty_client import (
+                SpootyUnavailable,
+                list_tracks,
+            )
+            try:
+                tracks = list_tracks(playlist_id)
+            except SpootyUnavailable as exc:
+                return JSONResponse(
+                    {"tracks": [], "error": str(exc)}, status_code=503,
+                )
+            return JSONResponse({"tracks": [t.to_dict() for t in tracks]})
+
+        @app.post("/api/library/downloads/playlists")
+        async def api_library_downloads_submit(
+            request: Request,
+        ) -> JSONResponse:
+            import json as _json
+            from archivist.service.clients.spooty_client import (
+                SpootyUnavailable,
+                submit_playlist,
+            )
+            try:
+                body = _json.loads(await request.body() or b"{}")
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="invalid json body",
+                )
+            url = (body or {}).get("url")
+            if not url or not isinstance(url, str):
+                raise HTTPException(
+                    status_code=400,
+                    detail="missing or non-string `url` field",
+                )
+            try:
+                result = submit_playlist(url)
+            except SpootyUnavailable as exc:
+                return JSONResponse(
+                    {"error": str(exc)}, status_code=503,
+                )
+            return JSONResponse(result)
+
+        @app.post(
+            "/api/library/downloads/playlists/{playlist_id}/retry",
+        )
+        def api_library_downloads_retry_playlist(
+            playlist_id: str,
+        ) -> JSONResponse:
+            from archivist.service.clients.spooty_client import (
+                SpootyUnavailable,
+                retry_playlist,
+            )
+            try:
+                result = retry_playlist(playlist_id)
+            except SpootyUnavailable as exc:
+                return JSONResponse(
+                    {"error": str(exc)}, status_code=503,
+                )
+            return JSONResponse(result)
+
+        @app.post("/api/library/downloads/tracks/{track_id}/retry")
+        def api_library_downloads_retry_track(track_id: str) -> JSONResponse:
+            from archivist.service.clients.spooty_client import (
+                SpootyUnavailable,
+                retry_track,
+            )
+            try:
+                result = retry_track(track_id)
+            except SpootyUnavailable as exc:
+                return JSONResponse(
+                    {"error": str(exc)}, status_code=503,
+                )
+            return JSONResponse(result)
+
+        @app.delete("/api/library/downloads/tracks/{track_id}")
+        def api_library_downloads_delete_track(
+            track_id: str,
+        ) -> JSONResponse:
+            from archivist.service.clients.spooty_client import (
+                SpootyUnavailable,
+                delete_track,
+            )
+            try:
+                result = delete_track(track_id)
+            except SpootyUnavailable as exc:
+                return JSONResponse(
+                    {"error": str(exc)}, status_code=503,
+                )
+            return JSONResponse(result)
+
     # ---------------- library browser (sprint-3 / impl-library) ----------
 
     if discs_root is not None:
