@@ -45,7 +45,7 @@ def client(music_root: Path, tmp_path: Path) -> TestClient:
 
 
 def test_bucket_tabs_nav_present_in_markup(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="bucket-tabs"' in html or "bucket-tabs" in html
     # Four tabs, one per bucket — pin the bucket labels.
     # Sprint-7 voice pass: "In Library" → "In library" (sentence case).
@@ -69,7 +69,7 @@ def test_mobile_breakpoint_is_720px(client: TestClient) -> None:
 def test_bucket_tab_state_persists_in_localstorage(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "cd-archivist:mobile-bucket" in html
 
 
@@ -77,7 +77,7 @@ def test_bucket_tab_state_persists_in_localstorage(
 
 
 def test_default_mobile_bucket_is_capture(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Pin a discoverable marker — the impl's JS module-scope default
     # value or a data attribute on the tab control.
     assert 'data-default-bucket="capture"' in html or (

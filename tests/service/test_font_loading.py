@@ -45,7 +45,7 @@ def client(music_root: Path, tmp_path: Path) -> TestClient:
 
 
 def test_head_emits_google_fonts_preconnect(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Preconnect to fonts.googleapis.com AND fonts.gstatic.com per
     # Google Fonts' recommended two-host preconnect.
     assert re.search(
@@ -59,7 +59,7 @@ def test_head_emits_google_fonts_preconnect(client: TestClient) -> None:
 
 
 def test_head_loads_bricolage_grotesque_weights(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Bricolage Grotesque at weights 600 + 800.
     m = re.search(
         r'fonts\.googleapis\.com/css2\?[^"\']*family=Bricolage[+ ]Grotesque[^"\']*',
@@ -72,7 +72,7 @@ def test_head_loads_bricolage_grotesque_weights(client: TestClient) -> None:
 
 
 def test_head_loads_inter_tight_weights(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     m = re.search(
         r'fonts\.googleapis\.com/css2\?[^"\']*family=Inter[+ ]Tight[^"\']*',
         html,
@@ -84,7 +84,7 @@ def test_head_loads_inter_tight_weights(client: TestClient) -> None:
 
 
 def test_head_loads_jetbrains_mono_weights(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     m = re.search(
         r'fonts\.googleapis\.com/css2\?[^"\']*family=JetBrains[+ ]Mono[^"\']*',
         html,
@@ -124,7 +124,7 @@ def test_no_system_font_fallback_style_override(client: TestClient) -> None:
     `font-family: -apple-system, BlinkMacSystemFont, ...` that would
     short-circuit Bricolage. The brand fonts win — any such inline
     override is a bug per the build prompt's anti-pattern list."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     forbidden_stacks = (
         "-apple-system",
         "BlinkMacSystemFont",

@@ -106,7 +106,7 @@ def test_candidates_section_js_conditional_render_guard(
     /api/disc/<folder>/candidates on expand and only renders the section
     when the candidates array is non-empty."""
     _seed_review_card(music_root / "review", "cs-guard")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "/candidates" in html, "candidates endpoint URL not referenced"
     # Conditional render guard discoverable in JS source.
     lower = html.lower()
@@ -124,7 +124,7 @@ def test_candidates_section_row_anatomy_classes_present(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed_review_card(music_root / "review", "cs-rows")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The JS template strings reference the three row-anatomy class names.
     assert "score-chip" in html
     assert "candidate-meta" in html
@@ -138,7 +138,7 @@ def test_candidates_section_top_row_marker_class(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed_review_card(music_root / "review", "cs-top")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "candidate--top" in html
 
 
@@ -149,7 +149,7 @@ def test_apply_button_posts_to_accept_top_candidate_with_mbid_body(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed_review_card(music_root / "review", "cs-apply")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Endpoint reference present.
     assert "accept-top-candidate" in html
     # data-mbid attribute is the wire from row → button click.

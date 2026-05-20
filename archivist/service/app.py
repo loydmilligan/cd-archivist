@@ -478,10 +478,51 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
+        # Per sprint-9 build-prompt §6, `/` redirects to `/rip`. We
+        # serve a tiny meta-redirect HTML so curl-without-follow still
+        # gets a 200 and the legacy callers that read the body see the
+        # link target. Browsers follow instantly.
+        if music_root is not None:
+            return HTMLResponse(
+                '<!doctype html><meta charset="utf-8">'
+                '<meta http-equiv="refresh" content="0; url=/rip">'
+                '<title>cd-archivist</title>'
+                '<p>Redirecting to <a href="/rip">/rip</a>…</p>'
+            )
+        return HTMLResponse(_PAGE_HTML)
+
+    @app.get("/rip", response_class=HTMLResponse)
+    def rip_index() -> HTMLResponse:
         if music_root is not None:
             from archivist.service.kanban_page import render_kanban_page
             return HTMLResponse(render_kanban_page(music_root, loop_state))
         return HTMLResponse(_PAGE_HTML)
+
+    # ---------------- Library Manager surface (sprint-9) ----------------
+    # Build-prompt: docs/reference/mashco-design-system/cd-archivist-library/handoff/build-prompt.md
+
+    if music_root is not None:
+        from archivist.service.library_page import (
+            V1_PANEL_IDS,
+            render_library_page,
+        )
+
+        @app.get("/library", response_class=HTMLResponse)
+        def library_index() -> HTMLResponse:
+            return HTMLResponse(
+                render_library_page(music_root, loop_state, panel_id=None)
+            )
+
+        @app.get("/library/{panel_id}", response_class=HTMLResponse)
+        def library_panel(panel_id: str) -> HTMLResponse:
+            # v2 panel ids (`review`, `recent`, `cron`) are not
+            # addressable yet — build-prompt §3 + §7 explicitly defer
+            # them. Any unknown id 404s.
+            if panel_id not in V1_PANEL_IDS:
+                raise HTTPException(status_code=404, detail="unknown panel")
+            return HTMLResponse(
+                render_library_page(music_root, loop_state, panel_id=panel_id)
+            )
 
     # ---------------- library browser (sprint-3 / impl-library) ----------
 

@@ -44,7 +44,7 @@ def client(music_root: Path, tmp_path: Path) -> TestClient:
 def test_bottom_drawer_element_exists_with_default_hidden(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'id="bottom-drawer"' in html
     # Default aria-hidden="true" — collapsed by default.
     assert 'aria-hidden="true"' in html
@@ -56,7 +56,7 @@ def test_bottom_drawer_slide_up_uses_css_transform(
     """Sprint-7 / impl-css-migration moved the slide-up transform rule
     from the inline <style> block to /static/css/cda.css; the assertion
     follows the CSS to its new home."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "bottom-drawer" in html
     cda = client.get("/static/css/cda.css").text
     assert "transform" in cda
@@ -69,7 +69,7 @@ def test_bottom_drawer_slide_up_uses_css_transform(
 def test_bottom_drawer_references_logs_tail_endpoint(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "/api/logs/tail" in html
     # Default tail size: 200 lines per the test-logs-tail-endpoint
     # contract (matches the plan).
@@ -81,7 +81,7 @@ def test_bottom_drawer_body_uses_pre_element(
 ) -> None:
     """Tail content renders inside a <pre> so formatting (and the
     monospace voice) is preserved."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The drawer body markup includes a <pre> (id or class observable).
     assert "<pre" in html
     # Pinned to the drawer scope so it's clear which <pre>.
@@ -97,6 +97,6 @@ def test_bottom_drawer_state_persists_in_localstorage(
     """The JS reads/writes localStorage under
     'cd-archivist:bottom-drawer:open' to remember the drawer state
     across reloads."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "localStorage" in html
     assert "cd-archivist:bottom-drawer:open" in html

@@ -112,7 +112,7 @@ def test_card_without_disc_photo_renders_placeholder_div(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "thumb-none")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="thumb thumb--placeholder"' in html or \
            'thumb thumb--placeholder' in html
     # And the placeholder must NOT be wrapped in an <img> tag.
@@ -144,7 +144,7 @@ def test_thumb_placeholder_uses_conic_gradient_in_css() -> None:
 def test_right_drawer_drive_mode_uses_placeholder_variant(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The drive-mode drawer body shows the placeholder so the operator
     # sees the disc-photo slot even when no card is selected. A larger
     # size variant lives on cda.css; the markup tags both the size-

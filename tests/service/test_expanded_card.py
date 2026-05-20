@@ -113,7 +113,7 @@ def test_expanded_body_renders_hints_section(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "ec-hints")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-section="hints"' in html
 
 
@@ -121,7 +121,7 @@ def test_expanded_body_renders_manual_steps_section_for_review_card(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "ec-manual")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-section="manual-steps"' in html
 
 
@@ -136,7 +136,7 @@ def test_expanded_body_renders_damaged_actions_section_for_damaged_card(
             "failed_tracks": [3],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-section="damaged-actions"' in html
 
 
@@ -147,7 +147,7 @@ def test_hints_section_contains_operator_hint_controls(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "ec-hint-controls")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The two toggles + two text inputs from impl-operator-hints UI
     # live INSIDE the hints section block. We can't easily scope an
     # HTML substring without DOM parsing, so we pin presence of both
@@ -169,7 +169,7 @@ def test_hints_section_per_track_table_appears_when_both_toggles_on(
             "artist": None, "album": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-section="hints"' in html
     # Per-track table present (DOM-absent unless both toggles on).
     assert 'name="track-1-artist"' in html
@@ -189,7 +189,7 @@ def test_manual_steps_section_absent_for_library_card(
             "label": None, "catalog_number": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Library bucket doesn't get a manual-steps section.
     assert 'data-section="manual-steps"' not in html
 
@@ -206,7 +206,7 @@ def test_manual_steps_section_pulls_review_explainer_text(
             "beets_review_reason": "beets returned no candidates",
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Explainer text surfaces in the manual-steps section.
     assert "no candidates" in html.lower()
 
@@ -218,7 +218,7 @@ def test_damaged_actions_section_absent_for_healthy_card(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "ec-healthy")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-section="damaged-actions"' not in html
 
 
@@ -233,5 +233,5 @@ def test_damaged_actions_section_present_for_failed_card(
             "failed_tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-section="damaged-actions"' in html

@@ -126,7 +126,7 @@ def test_damaged_capture_card_renders_process_partial_button(
             "failed_tracks": [3],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Process partial" in html
     assert f"/api/disc/{folder.name}/process-partial" in html
 
@@ -142,7 +142,7 @@ def test_damaged_capture_card_renders_redo_button(
             "failed_tracks": [3],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Redo" in html
     assert f"/api/disc/{folder.name}/redo?confirm=true" in html
 
@@ -165,7 +165,7 @@ def test_high_confidence_review_renders_accept_top_match_button(
         "artist": "Foo",
         "album": "Bar",
     }))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Accept top match" in html
     assert f"/api/disc/{folder.name}/accept-top-candidate" in html
 
@@ -180,7 +180,7 @@ def test_low_confidence_review_does_not_render_accept_button(
         "artist": "Foo",
         "album": "Bar",
     }))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Accept top match" not in html
     assert f"/api/disc/{folder.name}/accept-top-candidate" not in html
 
@@ -189,7 +189,7 @@ def test_review_card_with_no_candidate_does_not_render_accept_button(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "cca-no-cand")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Accept top match" not in html
 
 
@@ -200,7 +200,7 @@ def test_healthy_capture_card_renders_no_action_buttons(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "inbox", "cca-ok")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Healthy Capture card surfaces no collapsed-card action buttons.
     assert "Process partial" not in html
     assert "Redo" not in html
@@ -219,7 +219,7 @@ def test_library_card_renders_no_action_buttons(
             "label": None, "catalog_number": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Process partial" not in html
     assert "Redo" not in html
     assert "Accept top match" not in html

@@ -158,7 +158,7 @@ def test_card_detail_template_uses_cda_json_pre_block(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "sj-card")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The card-detail template references the source.json render slot
     # using the cda-json class — the JS substitutes the highlighted HTML
     # when a card is clicked.

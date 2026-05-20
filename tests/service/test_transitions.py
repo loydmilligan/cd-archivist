@@ -140,7 +140,7 @@ def test_kanban_js_adds_card_entering_to_new_cards(
     """The inline JS poll handler diffs each kanban response against
     the previous and adds `.card--entering` to cards that did not
     exist last cycle."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "card--entering" in html
 
 
@@ -149,7 +149,7 @@ def test_kanban_js_adds_flash_moss_to_changed_cards(
 ) -> None:
     """`.flash-moss` lands on cards whose source.json hash (or
     equivalent diff key) changed since the previous poll."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "flash-moss" in html
 
 
@@ -159,5 +159,5 @@ def test_kanban_js_removes_leaving_cards_after_animation(
     """`.card--leaving` lands on cards present last cycle but absent
     this cycle; the JS removes them from the DOM after the 200ms
     animation completes."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "card--leaving" in html

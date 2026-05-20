@@ -141,7 +141,7 @@ def test_card_head_renders_for_each_card(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "2026-05-16_1200_disc-h1")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="card-head"' in html
 
 
@@ -151,7 +151,7 @@ def test_card_head_carries_56x56_thumb(
     """The thumb is either <img class="thumb"> with a src OR a
     placeholder <div class="thumb thumb--placeholder">."""
     _seed(music_root / "review", "2026-05-16_1200_disc-h2")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="thumb"' in html or 'class="thumb ' in html
 
 
@@ -165,7 +165,7 @@ def test_card_head_renders_slug_title_artist(
             "label": None, "catalog_number": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="slug"' in html
     assert 'class="title"' in html
     assert 'class="artist"' in html
@@ -176,7 +176,7 @@ def test_thumb_uses_placeholder_when_no_photo(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "2026-05-16_1200_disc-h3")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "thumb--placeholder" in html
 
 
@@ -203,7 +203,7 @@ def test_status_line_uses_cda_status_class(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "2026-05-16_1200_disc-sl1")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="cda-status"' in html
 
 
@@ -225,7 +225,7 @@ def test_status_line_capture_active(
         snap.elapsed_seconds = 252.0  # 04:12
         snap.current_disc = "disc-sl-active"
 
-    body = client.get("/").text
+    body = client.get("/rip").text
     assert "ripping track 7" in body
     assert "sector 24,318" in body
     assert "1 retry" in body
@@ -245,7 +245,7 @@ def test_status_line_review_weak_match(
             "beets_review_reason": "weak match: score 0.42 below threshold",
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "weak match" in html
     assert "0.42" in html
 
@@ -263,7 +263,7 @@ def test_status_line_review_no_match(
             "beets_review_reason": "beets returned no candidates",
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "no match" in html
     assert "13 tracks" in html
 
@@ -288,7 +288,7 @@ def test_status_line_library_stored(
         "mbid": "abc", "score": 0.97,
     }))
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "stored" in html
     assert "0.97" in html
 
@@ -305,7 +305,7 @@ def test_status_line_capture_damaged(
             "partial": True, "failed_tracks": [6],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "halted" in html
     assert "track 6" in html
 
@@ -330,7 +330,7 @@ def test_chip_row_element_renders(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "disc-cr1")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="chip-row"' in html
 
 
@@ -344,7 +344,7 @@ def test_va_chip_when_various_artists_set(
             "artist": None, "album": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "VA" in html
     # Operator-asserted → dashed.
     assert "chip--asserted" in html
@@ -360,7 +360,7 @@ def test_burned_chip_when_burned_cd_set(
             "artist": None, "album": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "BURNED" in html
 
 
@@ -374,7 +374,7 @@ def test_mix_chip_when_both_va_and_burned(
             "artist": None, "album": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "MIX" in html
 
 
@@ -394,7 +394,7 @@ def test_weak_match_chip_renders_with_score(
     (folder / "top_candidate.json").write_text(json.dumps({
         "mbid": "x", "score": 0.42,
     }))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "WEAK MATCH" in html
     assert "0.42" in html
 
@@ -422,7 +422,7 @@ def test_musicbrainz_chip_renders_for_disc_id_match(
     (folder / "top_candidate.json").write_text(json.dumps({
         "mbid": "abc-mbid", "score": 0.97,
     }))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "MUSICBRAINZ" in html
     # System-confirmed → solid + halo.
     assert "chip--confirmed" in html
@@ -471,7 +471,7 @@ def test_card_carries_per_column_accent_class(
         },
     ))
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "card--accent-moss" in html
     assert "card--accent-ember-damaged" in html
     assert "card--accent-amber" in html
@@ -493,7 +493,7 @@ def test_track_bar_carries_track_count_custom_property(
     _seed(music_root / "review", "disc-tc1", _base_source(
         "disc-tc1", track_count=7,
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="track-bar"' in html
     assert "--track-count: 7" in html or "--track-count:7" in html
 
@@ -502,7 +502,7 @@ def test_clean_tracks_carry_clean_state_class(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "library" / "Art", "Alb", _base_source("Alb"))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "track-cell--clean" in html
 
 
@@ -517,7 +517,7 @@ def test_unrecoverable_tracks_carry_unrecoverable_state_class(
             "failed_tracks": [3, 4, 5],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "track-cell--unrecoverable" in html
 
 
@@ -534,7 +534,7 @@ def test_ripping_cell_carries_progress_custom_property(
         snap.track_total = 10
         snap.current_disc = "disc-tc-prog"
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "track-cell--ripping" in html
     # The in-flight cell carries the progress custom prop (whitelisted).
     assert "--progress: 65%" in html or "--progress:65%" in html
@@ -552,7 +552,7 @@ def test_pending_tracks_carry_pending_state_class(
         snap.current_track = 2
         snap.track_total = 8
         snap.current_disc = "disc-tc-pend"
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "track-cell--pending" in html
 
 
@@ -584,7 +584,7 @@ def test_identified_track_carries_identified_class(
             ],
         },
     )))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "track-cell--identified" in html
 
 

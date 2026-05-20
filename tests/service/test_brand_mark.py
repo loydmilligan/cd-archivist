@@ -49,7 +49,7 @@ def client(music_root: Path, tmp_path: Path) -> TestClient:
 
 
 def test_header_renders_cda_brand_mark_span(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Must literally render `cd/a` inside a span carrying the brand-mark
     # class and the --header size variant.
     assert re.search(
@@ -69,7 +69,7 @@ def test_header_brand_mark_replaces_plain_wordmark(client: TestClient) -> None:
     brand-mark recipe replaces it. Asserts the old class no longer
     carries the 'cd-archivist' text alone — the brand mark must be
     present (slug `cd-archivist` may still appear as a sibling label)."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "cda-brand-mark" in html, (
         "header is still using the legacy text wordmark; the cd/a "
         "brand mark must be rendered per the build prompt"

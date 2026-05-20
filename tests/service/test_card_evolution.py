@@ -137,7 +137,7 @@ def test_identified_tracks_carry_data_attribute(
             ],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-track-identified-1="true"' in html
     assert 'data-track-identified-2="true"' in html
     assert 'data-track-identified-3="true"' in html
@@ -149,7 +149,7 @@ def test_unidentified_tracks_do_not_carry_data_attribute(
     """No disc-id + no detected_metadata.tracks → no track is marked
     identified, regardless of other state."""
     _seed(music_root / "review", "disc-noid")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-track-identified-1="true"' not in html
 
 
@@ -180,7 +180,7 @@ def test_confirmed_chips_carry_confirmed_class(
         "mbid": "abc-mbid", "score": 0.97,
         "artist": "Foo", "title": "Bar",
     }))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "chip--confirmed" in html
 
 
@@ -201,7 +201,7 @@ def test_asserted_chips_carry_asserted_class(
             "artist": None, "album": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "chip--asserted" in html
     # The confirmed class must NOT appear for this card — there's no
     # system-confirmed match to drive a MUSICBRAINZ / confirmed chip.
@@ -239,7 +239,7 @@ def test_confirmed_wins_over_asserted_when_both_present(
         "mbid": "abc-mbid", "score": 0.97,
         "artist": "Foo", "title": "Bar",
     }))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "chip--confirmed" in html
 
 
@@ -257,7 +257,7 @@ def test_partial_card_carries_damaged_class(
             "partial": True, "failed_tracks": [3, 4, 5],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "card--damaged" in html
 
 
@@ -265,7 +265,7 @@ def test_healthy_card_does_not_carry_damaged_class(
     client: TestClient, music_root: Path,
 ) -> None:
     _seed(music_root / "review", "disc-healthy")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "card--damaged" not in html
 
 
@@ -285,7 +285,7 @@ def test_library_card_thumbnail_prefers_album_cover(
             "label": None, "catalog_number": None, "tracks": [],
         },
     ))
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The library-cover URL convention is the sprint-5 endpoint.
     assert "/library/" in html
     assert "album-cover" in html
@@ -298,7 +298,7 @@ def test_review_card_thumbnail_falls_back_to_disc_photo(
     """Review-bucket cards (no library entry yet) fall back to the
     disc-photo path under the disc folder."""
     folder = _seed(music_root / "review", "disc-rev1")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Falls back to disc-photo.jpg under the folder; the exact URL
     # convention may route via /review/<folder>/disc-photo.jpg or a
     # /api/disc/<folder>/photo endpoint — pin the filename so the

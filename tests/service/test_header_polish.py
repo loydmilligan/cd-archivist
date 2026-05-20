@@ -62,7 +62,7 @@ def _cda(client: TestClient) -> str:
 def test_daemon_state_dot_removed_from_rendered_html(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "daemon-state-dot" not in html, (
         "the legacy daemon-state-dot element must be removed; the "
         "live-status chip is the single state indicator per "
@@ -85,7 +85,7 @@ def test_daemon_state_dot_removed_from_cda_css(
 
 def test_live_status_chip_still_renders(client: TestClient) -> None:
     """The single remaining state indicator must still be present."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="live-status"' in html
 
 

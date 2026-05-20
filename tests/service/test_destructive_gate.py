@@ -129,7 +129,7 @@ def test_destructive_buttons_carry_destructive_marker(
     delete) carries a discoverable marker so the gate JS can attach.
     The plan calls out `data-destructive="true"`."""
     _seed_damaged(music_root / "failed", "dg-1")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # At least the redo + rerip-tracks buttons (sprint-6 endpoints
     # already wired) surface on a damaged card. They must carry
     # data-destructive="true" so the gate handler picks them up.
@@ -143,7 +143,7 @@ def test_destructive_button_action_names_present(
     name to interpolate. Each destructive button carries
     data-action="<name>" naming the action."""
     _seed_damaged(music_root / "failed", "dg-2")
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Both redo + rerip-tracks render in the damaged-actions section.
     assert 'data-action="redo"' in html
     assert 'data-action="rerip-tracks"' in html
@@ -156,7 +156,7 @@ def test_kanban_js_arms_button_on_first_click(client: TestClient) -> None:
     """Gate logic lives in the inline <script type="module"> JS source.
     First click swaps the label to `confirm: <action>` and toggles
     `.btn--confirm-armed`."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "btn--confirm-armed" in html
     # The label-swap template `confirm: <action>` is a string literal
     # in the JS source.
@@ -166,7 +166,7 @@ def test_kanban_js_arms_button_on_first_click(client: TestClient) -> None:
 def test_kanban_js_disarms_after_5_seconds(client: TestClient) -> None:
     """The arm window is 5000ms. JS source contains a setTimeout
     (or equivalent) keyed to a 5-second revert."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Either literal `5000` near a setTimeout, or a named constant.
     assert "5000" in html or "5 * 1000" in html or "CONFIRM_TIMEOUT" in html
 
@@ -174,7 +174,7 @@ def test_kanban_js_disarms_after_5_seconds(client: TestClient) -> None:
 def test_kanban_js_disarms_on_click_elsewhere(client: TestClient) -> None:
     """Clicking elsewhere reverts an armed button. The JS source
     listens at the document level so any outside click resets."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Pin a document-level click handler that the gate uses to revert.
     assert "document.addEventListener('click'" in html or (
         'document.addEventListener("click"' in html
@@ -194,7 +194,7 @@ def test_confirm_hint_paragraph_renders_with_verbatim_text(
      partial flac files stay on disk until you choose.'
     """
     _seed_damaged(music_root / "failed", "dg-hint")
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="confirm-hint"' in html
     assert "Destructive actions require a second click to confirm" in html
     assert "The partial flac files stay on disk until you choose" in html
@@ -211,7 +211,7 @@ def test_confirm_hint_absent_on_healthy_card(
     _write_flac(folder / "01.flac")
     (folder / "source.json").write_text(json.dumps(_base_source("Alb")))
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Library-only seed → no damaged-actions section → no hint
     # paragraph. Pin via the hint class so the test doesn't trip on
     # the literal hint text appearing elsewhere (it shouldn't, but

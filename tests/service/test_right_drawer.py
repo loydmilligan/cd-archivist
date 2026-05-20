@@ -97,7 +97,7 @@ def client(music_root: Path, tmp_path: Path) -> TestClient:
 def test_right_drawer_element_exists_with_default_hidden(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'id="right-drawer"' in html
     # Default aria-hidden="true" so screen readers skip it until opened.
     assert 'aria-hidden="true"' in html
@@ -110,7 +110,7 @@ def test_right_drawer_uses_css_transform_for_slide_in(
     transition can be animated. Sprint-7 / impl-css-migration moved the
     rule from the inline <style> block onto /static/css/cda.css; the
     assertion follows the CSS to its new home."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "right-drawer" in html
     cda = client.get("/static/css/cda.css").text
     assert "transform" in cda
@@ -124,7 +124,7 @@ def test_right_drawer_uses_css_transform_for_slide_in(
 def test_default_drawer_body_renders_drive_status_template(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Discoverable marker so the front-end JS can target the
     # drive-status body when no card is selected.
     assert 'data-drawer-template="drive-status"' in html
@@ -135,7 +135,7 @@ def test_drive_status_template_polls_drive_status_endpoint(
 ) -> None:
     """The drawer's drive-status template fetches from
     /api/drive/status (provided by drivers' impl-drive-status-snapshot)."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "/api/drive/status" in html
 
 
@@ -149,7 +149,7 @@ def test_card_detail_template_referenced_in_drawer_markup(
     _write_flac(folder / "01.flac")
     _write_source_minimal(folder, folder.name)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Discoverable marker; impl can use a <template> or hidden div.
     assert 'data-drawer-template="card-detail"' in html
 
@@ -160,7 +160,7 @@ def test_card_detail_template_references_disc_log_endpoint(
     """Card-detail body fetches /api/disc/<folder>/log/tail. Folder
     placeholder lives in the template; the JS substitutes the
     clicked-card id."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Pin the URL fragment so the impl is observable; the placeholder
     # convention is impl-chosen.
     assert "/api/disc/" in html
@@ -173,7 +173,7 @@ def test_card_detail_template_references_disc_log_endpoint(
 def test_header_drawer_toggle_targets_right_drawer(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Pinned in test-header-bar as well; re-asserted here so the
     # right-drawer test is independently verifying the wiring.
     assert 'aria-controls="right-drawer"' in html
@@ -189,7 +189,7 @@ def test_card_click_handler_opens_right_drawer_in_js(
     _write_flac(folder / "01.flac")
     _write_source_minimal(folder, folder.name)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Pin the JS-source reference to the drawer-open call so the
     # one-step click → expand + drawer-populate flow is observable.
     assert "right-drawer" in html
@@ -211,7 +211,7 @@ def test_card_click_handler_opens_right_drawer_in_js(
 
 
 def test_header_nav_has_drawer_drive_toggle(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The drive-mode toggle button lives in the header nav and uses
     # the `.drawer-toggle--drive` modifier class plus an aria-pressed
     # attribute that JS flips between "true" and "false".
@@ -240,7 +240,7 @@ def test_header_nav_has_drawer_drive_toggle(client: TestClient) -> None:
 def test_drawer_card_toggle_button_removed(client: TestClient) -> None:
     """D-card-toggle-removed: the .drawer-toggle--card button must
     NOT appear in the rendered header nav."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "drawer-toggle--card" not in html, (
         "the .drawer-toggle--card button was removed per "
         "D-card-toggle-removed; the click-card-to-open + click-outside"
@@ -254,7 +254,7 @@ def test_drive_toggle_is_a_real_toggle_in_js(client: TestClient) -> None:
     opens it (mirrors the bottom-drawer toggle behavior). The JS
     source must reference the drawer's open/closed state so the
     handler can branch on it."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert ".drawer-toggle--drive" in html, (
         "JS missing querySelector for `.drawer-toggle--drive`"
     )
@@ -281,7 +281,7 @@ def test_drive_toggle_is_a_real_toggle_in_js(client: TestClient) -> None:
 def test_right_drawer_renders_explicit_close_button(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "drawer-close" in html, (
         "right drawer must render an explicit .drawer-close button "
         "at the top-right of its head"
@@ -330,7 +330,7 @@ def test_click_outside_handler_referenced_in_js(
 ) -> None:
     """The kanban JS must wire a click-outside handler that closes the
     right drawer. Asserted via source content."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The handler is a document-level click listener that checks
     # whether the event target is inside #right-drawer / on the
     # drive-toggle. Pin the marker string the impl uses so the

@@ -105,7 +105,7 @@ def client(
 
 
 def test_page_renders_four_column_headers(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Capture" in html
     assert "Beets ID" in html
     assert "Review" in html
@@ -124,7 +124,7 @@ def test_card_renders_collapsed_state_markup(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Collapsed-state markup: status line + progress bar + per-track bar.
     assert "track-bar" in html
     assert folder.name in html
@@ -137,7 +137,7 @@ def test_card_has_aria_expanded_toggle(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Each card carries an aria-expanded attribute (initially "false").
     assert 'aria-expanded="false"' in html
 
@@ -151,7 +151,7 @@ def test_page_carries_poll_interval_meta_tag(client: TestClient) -> None:
     contract is covered by test_page_emits_both_adaptive_poll_meta_tags
     below; this sprint-6 assertion now just confirms at least one
     poll-interval meta tag is present."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     m = re.search(
         r'<meta\s+name=["\']kanban-poll-ms[^"\']*["\']\s+content=["\'](\d+)["\']',
         html,
@@ -163,7 +163,7 @@ def test_page_carries_poll_interval_meta_tag(client: TestClient) -> None:
 
 
 def test_page_applies_mash_tokens(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Sprint-7 / impl-asset-wire-up moved tokens to /static/css/tokens.css.
     assert "/static/css/tokens.css" in html
     # Sprint-7 / impl-css-migration moved component CSS from the inline
@@ -180,7 +180,7 @@ def test_page_applies_mash_tokens(client: TestClient) -> None:
 
 def test_page_dark_first_theme(client: TestClient) -> None:
     """Mash Co. voice/visual contract: dark-first, data-theme="dark"."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'data-theme="dark"' in html
 
 
@@ -194,7 +194,7 @@ def test_active_rip_renders_capture_card_with_progress(
     loop_state.disc_id = "disc-000077"
     loop_state.rip_progress = "track 7/10 (70%)"
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "disc-000077" in html
     # Progress bar / percentage surfaced in collapsed view.
     assert "70" in html
@@ -223,7 +223,7 @@ def test_expanded_card_renders_hint_checkboxes(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Each checkbox carries name= matching the PATCH body shape and an
     # accessible label.
     assert 'name="various_artists"' in html
@@ -243,7 +243,7 @@ def test_expanded_card_renders_artist_album_text_inputs(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'name="artist"' in html
     assert 'name="album"' in html
     # Front-end disables these when either toggle is checked.
@@ -260,7 +260,7 @@ def test_save_hints_button_targets_patch_endpoint(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Form / button references the PATCH route. We don't pin verb-in-HTML
     # specifics (forms POST in raw HTML; JS handler issues PATCH) — we
     # require the endpoint URL to be present.
@@ -279,7 +279,7 @@ def test_collapsed_card_chip_various_artists_only(
     _write_source(folder)
     _patch_hints(client, folder.name, {"various_artists": True})
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Chip on the collapsed card shows the VA label.
     assert "VA" in html
 
@@ -292,7 +292,7 @@ def test_collapsed_card_chip_burned_only(
     _write_source(folder)
     _patch_hints(client, folder.name, {"burned_cd": True})
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "burned" in html.lower()
 
 
@@ -304,7 +304,7 @@ def test_collapsed_card_chip_album_text_when_no_toggles(
     _write_source(folder)
     _patch_hints(client, folder.name, {"artist": "Foo", "album": "Bar"})
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Chip shows the artist/album text when no toggle is set.
     assert "Foo" in html
     assert "Bar" in html
@@ -318,7 +318,7 @@ def test_collapsed_card_no_chip_when_hints_empty(
     _write_source(folder)
     # No PATCH — hints stay defaulted.
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # No chip text — assert the marker class is absent for this card.
     # (We don't pin the marker class name; we pin behavior: none of the
     # toggle labels surface for a hint-less card.)
@@ -342,7 +342,7 @@ def test_per_track_table_absent_when_only_va(
     _write_source(folder)
     _patch_hints(client, folder.name, {"various_artists": True})
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Per-track inputs are absent from the DOM when only one toggle is on.
     assert 'name="track-1-artist"' not in html
     assert 'name="track-1-title"' not in html
@@ -356,7 +356,7 @@ def test_per_track_table_absent_when_only_burned(
     _write_source(folder)
     _patch_hints(client, folder.name, {"burned_cd": True})
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'name="track-1-artist"' not in html
 
 
@@ -371,7 +371,7 @@ def test_per_track_table_present_when_both_on(
         "various_artists": True, "burned_cd": True,
     })
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # One row per track, with artist + title inputs named per spec.
     assert 'name="track-1-artist"' in html
     assert 'name="track-1-title"' in html
@@ -398,7 +398,7 @@ def test_per_track_table_row_count_from_toc_when_present(
         "various_artists": True, "burned_cd": True,
     })
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'name="track-4-artist"' in html
     # Fifth track must NOT render — TOC count is 4.
     assert 'name="track-5-artist"' not in html
@@ -419,7 +419,7 @@ def test_per_track_table_row_count_falls_back_to_audio_file_count(
         "various_artists": True, "burned_cd": True,
     })
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'name="track-1-artist"' in html
     assert 'name="track-3-artist"' in html
     assert 'name="track-4-artist"' not in html
@@ -438,7 +438,7 @@ def test_collapsed_card_chip_mix_cd_count_when_both_on(
         "various_artists": True, "burned_cd": True,
     })
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Per spec: "Mix CD ({N} tracks)" — N sourced from TOC (track_count).
     assert "Mix CD (8 tracks)" in html
 
@@ -459,7 +459,7 @@ def test_cards_carry_tabindex_for_keyboard_nav(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Cards must be focusable for spacebar to land on them.
     assert 'tabindex="0"' in html
 
@@ -467,7 +467,7 @@ def test_cards_carry_tabindex_for_keyboard_nav(
 def test_keyboard_help_button_renders_with_tooltip_payload(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Tooltip element: <button aria-label="keyboard help">?</button>
     # carrying a data-keyboard-help attribute with the keymap.
     assert 'aria-label="keyboard help"' in html
@@ -479,7 +479,7 @@ def test_keyboard_help_button_renders_with_tooltip_payload(
 def test_page_emits_module_script_with_spacebar_handler(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert '<script type="module"' in html
     # Spacebar key check + preventDefault to suppress browser scroll.
     assert "preventDefault" in html
@@ -492,7 +492,7 @@ def test_page_js_carries_one_at_a_time_expand_guard(
     """One card may be expanded at a time. The JS source carries a
     module-scope reference tracking the currently-expanded card so
     opening a second one collapses the first."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Pin a recognisable marker — the impl module-scope variable name
     # is contractual for this test and called out in the plan.
     assert "currentlyExpanded" in html or "currentExpanded" in html
@@ -506,7 +506,7 @@ def test_page_js_carries_one_at_a_time_expand_guard(
 
 
 def test_header_renders_three_regions(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "<header" in html
     assert 'class="header-left"' in html
     assert 'class="header-stats"' in html
@@ -520,7 +520,7 @@ def test_header_left_carries_wordmark_and_live_status(
     .daemon-state-dot was removed — daemon-up is implied by page-load;
     the .live-status chip is the single state indicator. The wordmark
     + brand mark + live-status chip all live in .header-left."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "cd-archivist" in html
     assert 'class="live-status"' in html
 
@@ -533,7 +533,7 @@ def test_header_stats_show_compact_counts(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Header stats include labels for the three counts called out by
     # the spec; values come from the kanban payload.
     assert "total" in html.lower()
@@ -544,7 +544,7 @@ def test_header_stats_show_compact_counts(
 def test_header_right_carries_drawer_toggles_with_aria_controls(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Two drawer-toggle buttons: one for the right drawer, one for
     # the bottom drawer; both carry aria-controls pointing at the
     # drawer element ids.
@@ -554,7 +554,7 @@ def test_header_right_carries_drawer_toggles_with_aria_controls(
 
 def test_header_has_no_alert_strip(client: TestClient) -> None:
     """D-no-alerts-v1 — header carries no notification/alert strip."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     # No element with the discoverable alert-strip marker class.
     assert "alert-strip" not in html
     assert 'data-alerts' not in html
@@ -588,7 +588,7 @@ def test_column_header_carries_count_badge(
         _write_flac(folder / "01.flac")
         _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "count-badge" in html
     # The count "3" appears alongside the bucket label.
     assert ">3<" in html or "(3)" in html
@@ -610,7 +610,7 @@ def test_column_header_is_position_sticky(client: TestClient) -> None:
 def test_page_emits_both_adaptive_poll_meta_tags(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     import re
     active = re.search(
         r'<meta\s+name=["\']kanban-poll-ms-active["\']\s+content=["\'](\d+)["\']',
@@ -655,7 +655,7 @@ def test_page_js_switches_interval_based_on_active_rip(
 ) -> None:
     """The JS source contains both interval references and a guard
     that reads `active_rip` from the response."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "active_rip" in html
     # Both interval names referenced so the front-end can flip
     # between them at the end of each response cycle.
@@ -683,7 +683,7 @@ def test_kanban_page_has_no_inline_style_block(
     """At most one <style> element may exist, and if present it must
     contain ONLY CSS-custom-property-as-data documentation comments
     (or be empty). The component CSS lives in /static/css/cda.css."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     style_blocks = re.findall(r"<style[^>]*>(.*?)</style>", html, re.DOTALL)
     assert len(style_blocks) <= 1, (
         f"expected at most one <style> element; found {len(style_blocks)}"
@@ -710,7 +710,7 @@ def test_kanban_page_class_names_resolve_against_static_css(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     tokens = client.get("/static/css/tokens.css").text
     cda = client.get("/static/css/cda.css").text
     haystack = tokens + "\n" + cda
@@ -747,7 +747,7 @@ def test_kanban_page_inline_style_attrs_only_use_custom_properties(
     _write_flac(folder / "01.flac")
     _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     for m in re.finditer(r'style="([^"]+)"', html):
         body = m.group(1).strip()
         # Each declaration must start with `--`.
@@ -785,7 +785,7 @@ _HEADLAMP_MODIFIERS = [
 def test_column_header_renders_headlamp_dot(
     client: TestClient, bucket: str, modifier: str,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The headlamp element sits inside the column header for `bucket`.
     # Asserted by finding the column section, then asserting the
     # base `.headlamp` class and the per-stage modifier both appear
@@ -841,7 +841,7 @@ def test_headlamp_is_not_full_column_tint(client: TestClient) -> None:
     """The build prompt is explicit: headlamps are 8px dots, NEVER a
     full-column background tint. Asserted by checking that the column
     element itself does not carry a stage-color background class."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     forbidden_column_bgs = (
         "column--pulp", "column--sky", "column--amber", "column--moss",
         "bg-pulp", "bg-sky", "bg-amber", "bg-moss",
@@ -873,12 +873,12 @@ def _read_cda_css_for_pulse() -> str:
 
 
 def test_header_live_status_element_renders(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="live-status"' in html
 
 
 def test_live_status_carries_dot_child(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # The dot is a child element of .live-status, discoverable by class.
     assert 'class="dot' in html
 
@@ -896,13 +896,13 @@ def test_live_status_active_text_and_pulse_class(
         snap.state = "ripping"
         snap.current_disc = "DISC-A4F2"
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "ripping · DISC-A4F2" in html
     assert "dot--pulse-moss" in html
 
 
 def test_live_status_idle_text_and_quiet_class(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "dot--quiet" in html
     assert "idle" in html
 
@@ -924,23 +924,23 @@ def test_cda_css_defines_pulse_keyframes(client: TestClient) -> None:
 
 
 def test_header_renders_rig_stats_group(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="rig-stats"' in html
 
 
 def test_rig_stats_has_five_stat_cells(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert html.count('class="stat-cell"') == 5
 
 
 def test_rig_stats_labels_present(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     for label in ("Ripped", "In review", "Partial", "Storage", "Uptime"):
         assert label in html, f"missing rig-stats label: {label!r}"
 
 
 def test_stat_value_and_label_subclasses_present(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert 'class="stat-value"' in html
     assert 'class="stat-label"' in html
 
@@ -993,7 +993,7 @@ def test_stat_values_derive_from_kanban_payload(
         _write_flac(folder / "01.flac")
         _write_source(folder)
 
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "Ripped" in html
     assert "In review" in html
     assert "Partial" in html
@@ -1005,5 +1005,5 @@ def test_storage_and_uptime_reference_rig_stats_endpoint(
     """Storage + Uptime values come from /api/rig/stats (lane-3
     ships that endpoint). The page references the endpoint in its
     inline JS so the front-end can fetch + populate."""
-    html = client.get("/").text
+    html = client.get("/rip").text
     assert "/api/rig/stats" in html

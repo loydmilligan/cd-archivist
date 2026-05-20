@@ -122,7 +122,7 @@ def test_no_title_case_or_marketing_in_status_phrases():
 def test_button_labels_are_sentence_case_in_rendered_html(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Extract <button>…</button> text bodies.
     button_bodies = re.findall(
         r"<button[^>]*>([^<]+)</button>", html, flags=re.IGNORECASE,
@@ -223,7 +223,7 @@ def test_no_smart_quotes_in_template_sources():
 
 
 def test_no_emoji_in_rendered_kanban(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     scrubbed = html
     for g in _ALLOWED_GLYPHS:
         scrubbed = scrubbed.replace(g, "")

@@ -82,7 +82,7 @@ def test_static_pwa_manifest_served(client: TestClient) -> None:
 def test_head_emits_favicon_family_manifest_theme_color(
     client: TestClient,
 ) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     # Per build prompt's snippet: 32, 64, 256 PNG favicons + apple-touch
     # + manifest + theme-color meta.
     assert 'href="/static/img/brand/cd-a-favicon-32x32.png"' in html
@@ -101,7 +101,7 @@ def test_head_emits_favicon_family_manifest_theme_color(
 
 
 def test_tokens_css_loads_before_cda_css(client: TestClient) -> None:
-    html = client.get("/").text
+    html = client.get("/rip").text
     tokens_pos = html.find("/static/css/tokens.css")
     cda_pos = html.find("/static/css/cda.css")
     assert tokens_pos != -1, "tokens.css link not in <head>"
