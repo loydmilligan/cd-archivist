@@ -2,7 +2,8 @@
 project: cd-archivist
 sprint: sprint-2
 created: 2026-05-14T00:00:00.000Z
-updated: 2026-05-14T00:00:00.000Z
+updated: 2026-05-19T00:00:00.000Z
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-2)
@@ -381,6 +382,11 @@ _No contract changes yet. Note: `archivist/drivers/drive.py` gains an `eject` fu
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc — sprint-2 closed (24/25, one operator smoke deferred)
+
+- Bookkeeping pass during cross-sprint review.
+- Only outstanding task is `smoke-camera-recovery` (manual recovery test that requires the cam to flake on `VIDIOC_STREAMON` after ≥10min idle on the real rig). Real-rig validation is paused until the RMA drive replacement arrives — see `ISSUES.md` drive-hardware-failure. Deferred, not dropped; smoke can run alongside sprint-9's real-rig revalidation.
 
 ### 2026-05-14 — pipeline — smoke-checklist doc written (Wave 3)
 

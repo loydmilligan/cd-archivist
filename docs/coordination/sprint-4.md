@@ -2,7 +2,8 @@
 project: cd-archivist
 sprint: sprint-4
 created: 2026-05-15T00:00:00.000Z
-updated: 2026-05-15T00:00:00.000Z
+updated: 2026-05-19T00:00:00.000Z
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-4)
@@ -1590,6 +1591,14 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc — sprint-4 closed (36/43 ticked, tech debt routed to ISSUES.md)
+
+- Bookkeeping pass during cross-sprint review. The music-pipeline contract work shipped end-to-end (MUSIC_INBOX_DIR/MUSIC_WORKING_DIR/MUSIC_FAILED_DIR consumed in `archivist/__main__.py`, atomic `READY.tmp → READY` write in `archivist/state_machine/loop.py`, `archivist/pipeline/post_rip_hook.py` + downstream `process-ready-auto` hook). Sprint-4 was effectively complete weeks ago; the unticked tasks are bookkeeping debt, not shipped-functionality debt.
+- Unticked tasks dispositioned:
+  - `test-music-paths`, `test-ready-marker`, `impl-ready-marker` (and the dependent `impl-failed-marker`): impl code shipped; standalone tests never written. Routed to `ISSUES.md` as `sprint-4-missing-tests` (severity: minor) — tech debt to land in a future test-backfill sprint.
+  - `impl-source-json-sha256`, `impl-musicbrainz-disc-id`: explicitly marked `_Stretch_, drop if Wave 2 runs long`. Dropped. `musicbrainz_disc_id` is independently tracked in `ROADMAP.md` ("Real-rig validation against sprint-7 UI").
+  - `install-process-ready-timer`: operator-owned belt-and-suspenders systemd timer install on the CM4. Operator decides at next CM4 maintenance touch; the primary in-process hook is already shipping.
 
 ### 2026-05-15 — pipeline — Wave 2 impls landed (16 commits, 256/256 green)
 

@@ -2,7 +2,8 @@
 project: cd-archivist
 sprint: sprint-1
 created: 2026-05-13T02:38:44.641Z
-updated: 2026-05-13T02:38:44.641Z
+updated: 2026-05-19T00:00:00.000Z
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-1)
@@ -201,6 +202,11 @@ _No contract changes yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc — frontmatter flipped to `status: closed`
+
+- Bookkeeping pass during cross-sprint review (orc-tower session).
+- All 17/17 Active Sprint Plan tasks ticked; sprint already had an in-log "sprint-1 closed" entry from 2026-05-14 but the frontmatter `status` field was never set. Flipped now for dashboard correctness.
 
 ### 2026-05-14 — orc — sprint-1 closed
 

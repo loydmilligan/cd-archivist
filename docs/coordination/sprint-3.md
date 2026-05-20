@@ -2,7 +2,8 @@
 project: cd-archivist
 sprint: sprint-3
 created: 2026-05-14T00:00:00.000Z
-updated: 2026-05-14T00:00:00.000Z
+updated: 2026-05-19T00:00:00.000Z
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-3)
@@ -1102,6 +1103,11 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc — frontmatter flipped to `status: closed`
+
+- Bookkeeping pass during cross-sprint review.
+- 26/27 ticked; the single unchecked task is `test-log-stream`, explicitly marked _optional, can be deferred_ in the plan. Dropped — does not block close.
 
 ### 2026-05-15 — orc — sprint-3 closed
 

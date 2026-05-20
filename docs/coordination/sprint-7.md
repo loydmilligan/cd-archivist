@@ -2,8 +2,8 @@
 project: cd-archivist
 sprint: sprint-7
 created: 2026-05-16T00:00:00.000Z
-updated: 2026-05-16T00:00:00.000Z
-status: draft
+updated: 2026-05-19T00:00:00.000Z
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-7)
@@ -820,6 +820,11 @@ sprint-8 planning. -->
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-19 — orc — sprint-7 closed (draft → closed; operator smoke deferred)
+
+- Bookkeeping pass during cross-sprint review.
+- 34/35 ticked; only outstanding task is `smoke-visual-pass` (operator), blocked behind the RMA drive replacement per `ISSUES.md` drive-hardware-failure. The smoke is already on `ROADMAP.md` as "Real-rig validation against sprint-7 UI" and will run alongside sprint-9.
 
 ### 2026-05-16 — lane-1 (polish hotfix) — header embiggen + state-indicator merge + drawer affordances
 

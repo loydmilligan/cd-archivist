@@ -2,8 +2,8 @@
 project: cd-archivist
 sprint: sprint-6.5
 created: 2026-05-16T00:00:00.000Z
-updated: 2026-05-16T00:00:00.000Z
-status: draft
+updated: 2026-05-19T00:00:00.000Z
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-6.5)
@@ -735,6 +735,11 @@ sprint-7 planning. -->
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc — sprint-6.5 closed (draft → closed; operator smoke deferred)
+
+- Bookkeeping pass during cross-sprint review.
+- 30/31 ticked; only outstanding task is `smoke-deploy-and-validate` (operator), blocked behind the RMA drive replacement per `ISSUES.md` drive-hardware-failure. Smoke will run alongside sprint-9's real-rig revalidation.
 
 ### 2026-05-16 — pipeline — Wave 2 impls landed (14 tasks, 4 commits)
 

@@ -100,6 +100,15 @@ Add date: 2026-05-17
 
 Add date: 2026-05-17
 
+### Sprint-4 missing tests — music-paths + ready-marker test backfill
+
+- Severity: minor
+- Owner: pipeline
+- Repro: `tests/test_main_music_paths.py` and `tests/pipeline/test_ready_marker.py` (and `tests/state_machine/test_ready_marker.py`) do not exist, but the impl they were meant to cover is shipping in production: `archivist/__main__.py` consumes `MUSIC_INBOX_DIR` / `MUSIC_WORKING_DIR` / `MUSIC_FAILED_DIR` (with `ARCHIVIST_DISCS_ROOT` deprecation aliasing), and `archivist/state_machine/loop.py` does the atomic `READY.tmp → READY` write. Both are exercised end-to-end via higher-level tests but lack the targeted unit tests sprint-4 had planned.
+- Notes: sprint-4 ticked 36/43 Active Sprint Plan tasks; the unticked test tasks (`test-music-paths`, `test-ready-marker`, `impl-ready-marker`) describe tests that were never written even though the corresponding impl shipped. Routed here at sprint-4 close (2026-05-19) so the debt is visible. Land in a future test-backfill sprint or piggyback onto the next sprint that touches `__main__.py` or `loop.py`. Also covers: the dependent `impl-failed-marker` checkbox, which is similarly impl-shipped/test-missing.
+
+Add date: 2026-05-19
+
 ---
 
 ## Resolved

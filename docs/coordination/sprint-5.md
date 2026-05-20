@@ -2,7 +2,8 @@
 project: cd-archivist
 sprint: sprint-5
 created: 2026-05-15T00:00:00.000Z
-updated: 2026-05-15T00:00:00.000Z
+updated: 2026-05-19T00:00:00.000Z
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-5)
@@ -1214,6 +1215,11 @@ _No ratifications yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc — sprint-5 closed
+
+- Bookkeeping pass during cross-sprint review.
+- 23/23 Active Sprint Plan tasks ticked. Frontmatter `status` field was never set; flipped now for dashboard correctness.
 
 ### 2026-05-16 — operator — Wave 0 + Bucket C #4 landed (3 tasks ticked)
 
