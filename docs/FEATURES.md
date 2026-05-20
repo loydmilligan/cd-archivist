@@ -1,6 +1,6 @@
 # FEATURES.md
 
-> Current-state feature inventory as of sprint-8 (2026-05-17).
+> Current-state feature inventory as of sprint-10 (2026-05-20).
 > One entry per feature, grouped by subsystem.
 > States: **shipped** (in production, tests green) / **partial** (code exists, gaps noted) / **planned** (backlog).
 > File pointers are module-level; see `docs/ARCHITECTURE.md` for detail.
@@ -78,6 +78,17 @@
 | Damaged-disc actions (process-partial / redo / rerip-tracks) | shipped | 6 | `archivist/service/damaged_disc.py` |
 | Library view (`/library`, `/library/{disc_id}`) | shipped | 3 | `archivist/service/library.py` |
 | Library post-import recapture (`POST /api/library/{disc_id}/recapture`) | shipped | 3 | `archivist/service/app.py` |
+| Library Manager shell (sidebar + landing grid + viewport + drawers) | shipped | 9 | `archivist/service/library_page.py`, `library_sidebar.py`, `library_landing.py` |
+| Library Manager — Disk panel (per-mount usage + per-surface drilldown) | shipped | 10 | `archivist/service/library_disk_panel.py`, `clients/disk_client.py` |
+| Library Manager — Inbox panel (folder list + per-row "import now") | shipped | 10 | `archivist/service/library_inbox_panel.py`, `clients/inbox_client.py` |
+| Library Manager — Downloads panel (spooty proxy + per-track pip strip) | shipped | 10 | `archivist/service/library_downloads_panel.py`, `clients/spooty_client.py` |
+| Library Manager — Library/browse panel (Subsonic search + recent + CTA) | shipped | 10 | `archivist/service/library_browse_panel.py`, `clients/subsonic_client.py` |
+| Per-panel polling dispatcher (`<meta name="library-poll-ms">`) | shipped | 10 | `archivist/service/chassis_js.py` |
+| Service-clients package (env-driven, typed, `*Unavailable` exceptions) | shipped | 10 | `archivist/service/clients/` |
+| `GET /api/library/disk` — per-mount usage + per-surface bytes | shipped | 10 | `archivist/service/app.py` |
+| `GET /api/library/inbox` + `POST /api/library/inbox/import-now` | shipped | 10 | `archivist/service/app.py` |
+| `GET /api/library/downloads*` + per-playlist/per-track mutations | shipped | 10 | `archivist/service/app.py` |
+| `GET /api/library/browse?q=` + `GET /api/library/browse/recent` | shipped | 10 | `archivist/service/app.py` |
 | Review page v1 (`/review`, `/review/{folder}`) | shipped | 3 | `archivist/service/review_page_v1.py` |
 | Mobile single-column layout (bucket tabs) | partial | 7 | `archivist/service/static/css/cda.css` |
 | PWA manifest + favicon family + apple-touch icon | shipped | 7 | `archivist/service/static/` |

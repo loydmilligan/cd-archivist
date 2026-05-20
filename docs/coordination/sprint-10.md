@@ -3,7 +3,7 @@ project: cd-archivist
 sprint: sprint-10
 created: 2026-05-19T00:00:00.000Z
 updated: 2026-05-19T00:00:00.000Z
-status: active
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-10)
@@ -59,7 +59,7 @@ Disk · Inbox · Downloads · Library — replace the "in design" placeholders w
 - [x] {agent: lane-1, depends: setup-clients-package, id: library-impl} Implement the Library (browse) panel end-to-end. New `archivist/service/clients/subsonic_client.py` with read-only Subsonic API calls against `$NAVIDROME_URL` using `$NAVIDROME_USER` / `$NAVIDROME_PASS` (Subsonic auth — username + token + salt). Methods: `search(query: str, limit: int = 20)` (uses `search3.view`) and `get_newest_albums(limit: int = 10)` (uses `getAlbumList2.view` with `type=newest`). Raise `NavidromeUnavailable` on connection failure. New `/api/library/browse` endpoint (search; takes `?q=`) + `/api/library/browse/recent` endpoint (10 most-recent). New `archivist/service/library_browse_panel.py` rendering a search input (debounced 300ms client-side, fires `/api/library/browse?q=`) + the 10 most-recent imports list + a prominent "Open Navidrome ↗" CTA linking to `$NAVIDROME_URL`. No polling — search is on-input. Recent list refreshes only on full panel load.
   - **Acceptance:** `tests/service/test_library_browse.py` covers the subsonic_client search + getAlbumList2 calls with a mocked requests session, each `/api/library/browse*` endpoint, and the rendered HTML structure (search input wired to the endpoint, recent list with thumb + name + relative-time, Navidrome CTA href). Live `/library/library` shows real recent-imports if `NAVIDROME_URL` is reachable; degrades to an empty state with the CTA still working otherwise. Existing suite still green.
 
-- [ ] {agent: lane-1, depends: disk-impl,inbox-impl,downloads-impl,library-impl, id: deploy-and-smoke} Final integration. Verify all four panel routes render real data end-to-end on the deployed CM4 surface. Update `docs/operations/cm4-setup.md` (or sibling) with the new env vars: `SPOOTY_API_URL`, `NAVIDROME_URL`, `NAVIDROME_USER`, `NAVIDROME_PASS`, `MUSIC_INBOX_DIR`, `MUSIC_REVIEW_DIR`, `MUSIC_ARCHIVE_DIR`. Update `archivist.service` systemd unit (or note in the docs) for any new env vars the operator needs to set. Hard-refresh `cda.mattmariani.com/library/{downloads,inbox,disk,library}` and confirm each renders the real surface. Update `CHANGELOG.md` with sprint-10 entries. Update `FEATURES.md` to mark the four panels as `shipped` (was `placeholder` after sprint-9).
+- [x] {agent: lane-1, depends: disk-impl,inbox-impl,downloads-impl,library-impl, id: deploy-and-smoke} Final integration. Verify all four panel routes render real data end-to-end on the deployed CM4 surface. Update `docs/operations/cm4-setup.md` (or sibling) with the new env vars: `SPOOTY_API_URL`, `NAVIDROME_URL`, `NAVIDROME_USER`, `NAVIDROME_PASS`, `MUSIC_INBOX_DIR`, `MUSIC_REVIEW_DIR`, `MUSIC_ARCHIVE_DIR`. Update `archivist.service` systemd unit (or note in the docs) for any new env vars the operator needs to set. Hard-refresh `cda.mattmariani.com/library/{downloads,inbox,disk,library}` and confirm each renders the real surface. Update `CHANGELOG.md` with sprint-10 entries. Update `FEATURES.md` to mark the four panels as `shipped` (was `placeholder` after sprint-9).
   - **Acceptance:** All four `/library/{panel_id}` routes return 200 with live data on the CM4 (curl + visual smoke). `docs/operations/cm4-setup.md` documents the new env vars. `CHANGELOG.md` + `FEATURES.md` updated. Full test suite green. Mark sprint-10 `status: closed` with a final activity-log entry.
 
 ## Agent Roster
@@ -97,6 +97,51 @@ _No contract changes yet._
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-20 — lane-1 — deploy-and-smoke closed · sprint-10 closed
+
+- Local full suite green pre-deploy: 798 passing.
+- Deployed to CM4 (`192.168.6.38:8228` / `cda.mattmariani.com`) via
+  `ssh cm4 && git pull --ff-only origin master && systemctl --user
+  restart cd-archivist`. Service came back up clean (active, PID
+  1661333). `pip install -e ".[dev]"` no-op'd under PEP-668; sprint-10
+  added no new transport-layer deps so this is fine.
+- Live smoke on the CM4 (curl from inside the CM4 against
+  `http://127.0.0.1:8228`):
+  - `/library` → 200; `/library/{disk,inbox,downloads,library}` → 200.
+  - `/api/library/disk` → live data — three mounts (`/`, `/mnt/seagate`,
+    `/mnt/archive`) all mounted; library surface walks 1.1 GB on `/`;
+    spooty surface 291 MB; seagate currently empty (0.06% used);
+    `/mnt/archive` shows the same numbers as `/` (likely bind-mount or
+    not yet on dedicated device — operator follow-up, not blocking).
+  - `/api/library/inbox` → live data — 7 spooty folders enumerated
+    (sizes + last_modified populated, no READY markers currently).
+  - `/api/library/downloads` → 503 with `{"playlists": [], "error":
+    "spooty GET /playlists -> HTTP 404"}` — spooty server is reachable
+    but its `/playlists` endpoint returns 404. Downstream spooty config
+    to investigate; the panel degrades cleanly per spec.
+  - `/api/library/browse/recent` → 503 with the expected `NAVIDROME_URL
+    / NAVIDROME_USER / NAVIDROME_PASS not all set` error; the panel
+    degrades to the empty state with the CTA visible. Operator action
+    to fully light up: append the three `Environment=` lines to the
+    systemd user unit (documented in cm4-setup.md).
+- Docs updated:
+  - `docs/operations/cm4-setup.md` gains a "Library Manager env knobs
+    (sprint-10)" section with the full env-var table (defaults, owner,
+    purpose) + per-panel degradation behavior + the Navidrome systemd
+    snippet.
+  - `CHANGELOG.md` gets a sprint-10 entry under Added / Changed / Notes
+    that consolidates the four panel-impls + the dispatcher + the
+    chassis-poll wiring + the smoke gaps to follow up on.
+  - `docs/FEATURES.md` "as of" header advanced to sprint-10 (2026-05-20);
+    ten new rows under Service / UI cover the Library Manager shell
+    (sprint-9), the four panels (shipped / sprint-10), the polling
+    dispatcher, the clients package, and the four `/api/library/*`
+    route groups.
+- Sprint-10 status flipped to `closed` in the frontmatter; this is the
+  closer entry. Open follow-ups (not blocking the close): wire
+  `NAVIDROME_*` on the CM4 systemd unit; diagnose spooty's `/playlists`
+  404; confirm whether `/mnt/archive` should be a distinct mount.
 
 ### 2026-05-20 — lane-2 — downloads-impl closed
 

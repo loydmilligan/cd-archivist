@@ -27,6 +27,87 @@ provenance, walk that source. Dates reflect each sprint's final
 
 ---
 
+## [sprint-10] — 2026-05-20
+
+The "Library Manager v1 panels" sprint. Two-lane parallel execution
+replaced the four sprint-9 "in design" placeholders with live data
+and real operator actions. The Library Manager moves from honest
+shell to working control panel for the whole CM4 music stack.
+
+### Added
+- Service-clients package (`archivist/service/clients/`) with a
+  README defining the contract: one module per external surface,
+  typed dataclass returns, typed `*Unavailable` exceptions on
+  transport failure, env-var-driven config read at call time, 5s
+  HTTP timeouts. Four clients ship under it: `disk_client`,
+  `inbox_client`, `spooty_client`, `subsonic_client`.
+- `library_panels.py` dispatcher — `render_panel(panel_id)` resolves
+  the per-panel module via a static map and falls back to the
+  sprint-9 placeholder when the per-panel module is absent. Keeps
+  lane-1 and lane-2 off each other's files for the rest of the
+  sprint.
+- Per-panel polling dispatcher in `chassis_js.py` — reads
+  `<meta name="library-poll-ms">` + `<meta name="library-poll-endpoint">`,
+  fires fetch on interval, pauses on `visibilitychange`. Cadences
+  per panel: Disk 30s, Inbox 5s, Downloads 1s active / 5s idle,
+  Library none.
+- **Disk panel** end-to-end (`/library/disk` + `/api/library/disk`).
+  `get_disk_usage()` returns a `DiskUsageSnapshot` of `MountUsage`
+  rows for `/`, `/mnt/seagate`, `/mnt/archive` with per-surface
+  byte breakdown (inbox / library / archive / spooty, attributed by
+  longest-prefix mount, disjoint walks). Panel renders three
+  usage-bar rows (threshold classes `is-pulp` / `is-amber` /
+  `is-ember` from build-prompt §3) + per-surface drilldown table.
+  Missing mounts degrade to "not mounted".
+- **Inbox panel** end-to-end (`/library/inbox` + `/api/library/inbox`
+  + `POST /api/library/inbox/import-now`). Walks `$MUSIC_INBOX_DIR`
+  + `$MUSIC_INBOX_DIR/spooty/`, returns frozen `InboxFolder` rows
+  sorted newest-first. `import-now` POST spawns the matching
+  importer via `subprocess.Popen` (fire-and-forget; argv form;
+  mirrors `post_rip_hook.py`'s pattern).
+- **Downloads panel** end-to-end (`/library/downloads` + the
+  `/api/library/downloads/*` surface). Thin proxy over the spooty
+  REST API at `$SPOOTY_API_URL` — read methods (list_playlists,
+  list_tracks) + mutating methods (submit_playlist, retry_track,
+  delete_track, retry_playlist). Panel renders per-playlist rows
+  with per-track pip strips (green=ok, pulp=active, ember=error,
+  empty=pending) + submit form + retry/delete affordances.
+- **Library/browse panel** end-to-end (`/library/library` +
+  `/api/library/browse?q=` + `/api/library/browse/recent`). Read-only
+  Subsonic client against Navidrome (`search3.view`,
+  `getAlbumList2.view?type=newest`) with fresh-salt-per-call auth.
+  Panel renders a debounced search input + 10 most-recent imports
+  + a prominent "Open Navidrome ↗" CTA that works even when the
+  API is down.
+- New env vars (all read at call time; see
+  `docs/operations/cm4-setup.md` §Library Manager env knobs):
+  `MUSIC_LIBRARY_DIR`, `MUSIC_ARCHIVE_DIR`, `MUSIC_SPOOTY_DIR`,
+  `SPOOTY_API_URL`, `SPOOTY_API_TOKEN`, `NAVIDROME_URL`,
+  `NAVIDROME_USER`, `NAVIDROME_PASS`.
+
+### Changed
+- `library_panels.py` refactored from monolithic placeholder into a
+  thin dispatcher. The placeholder remains as the fallback for
+  unimplemented panels (v2 ghosts).
+- Sprint-9 placeholder tests in `test_library_panels.py` re-pointed
+  from `disk` / `inbox` (which now have real panel modules) to the
+  v2 `review` id, which still exercises the placeholder via the
+  dispatcher.
+
+### Notes
+- Test suite: 798 (677 baseline + 22 disk + 17 library/browse +
+  inbox + downloads + chassis-poll tests).
+- Live smoke against `cda.mattmariani.com` (CM4) on 2026-05-20:
+  all four panel routes return 200; disk + inbox return live data;
+  downloads + library degrade cleanly when their backends are
+  unconfigured/unreachable (spooty `/playlists` 404 upstream;
+  Navidrome creds not yet set on the operator's systemd unit).
+  Operator action to fully light up the Library panel: append
+  `NAVIDROME_URL` / `NAVIDROME_USER` / `NAVIDROME_PASS` to the
+  systemd user unit.
+
+---
+
 ## [sprint-7] — 2026-05-16
 
 The "Mash Co. design system" sprint. Three-lane parallel execution

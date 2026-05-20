@@ -147,6 +147,49 @@ NOT auto-migrated — the library UI surfaces both via
 | `ARCHIVIST_LED_BASE`             | `http://192.168.5.186`                           | Tasmota LED panel endpoint                              |
 | `ARCHIVIST_VIDEO_DEVICE`         | `/dev/video0`                                    | v4l2 device for captures                                |
 
+### Library Manager env knobs (sprint-10)
+
+The four Library panels (`/library/{disk,inbox,downloads,library}`)
+each talk to one external surface via a service-clients module in
+`archivist/service/clients/`. The clients read these env vars at call
+time, so changes take effect on the next request (no restart needed,
+though restart is harmless).
+
+| Env var             | Default                            | Used by               | Purpose                                                                 |
+| ------------------- | ---------------------------------- | --------------------- | ----------------------------------------------------------------------- |
+| `MUSIC_INBOX_DIR`   | `/srv/music/inbox`                 | disk + inbox client   | Root of the inbox walk; also defines `spooty/` subdir.                  |
+| `MUSIC_LIBRARY_DIR` | `/srv/music/library`               | disk client           | Library surface (sized for the disk panel drilldown).                   |
+| `MUSIC_ARCHIVE_DIR` | `/mnt/archive`                     | disk client           | Archive surface (sized for the disk panel drilldown).                   |
+| `MUSIC_SPOOTY_DIR`  | `$MUSIC_INBOX_DIR/spooty`          | disk client           | Spooty surface (sized for the disk panel drilldown).                    |
+| `MUSIC_REVIEW_DIR`  | `/srv/music/review`                | (reserved, v2 review) | Future review panel; reserved here so the env contract is single-sourced.|
+| `SPOOTY_API_URL`    | `http://192.168.6.38:3003/api`     | spooty client         | Spooty REST API base; the Downloads panel proxies through here.         |
+| `SPOOTY_API_TOKEN`  | _(unset; LAN-only for now)_        | spooty client         | Reserved for when spooty grows auth (currently no auth).                |
+| `NAVIDROME_URL`     | _(required for Library panel)_     | subsonic client       | Navidrome base URL (e.g., `https://navidrome.mattmariani.com`).         |
+| `NAVIDROME_USER`    | _(required for Library panel)_     | subsonic client       | Subsonic API username.                                                  |
+| `NAVIDROME_PASS`    | _(required for Library panel)_     | subsonic client       | Subsonic API password (token + salt are computed per request).          |
+
+**Degradation behavior.** All four panels render even when their
+backing surface is unavailable:
+
+- Disk: missing mounts render as `not mounted` rows with zero bars.
+- Inbox: if `MUSIC_INBOX_DIR` is missing/unreadable, the panel shows an empty list.
+- Downloads: if `SPOOTY_API_URL` is unreachable, the panel shows a "spooty unavailable" empty state.
+- Library: if `NAVIDROME_*` are unset or unreachable, the panel shows an empty state but the "Open Navidrome ↗" CTA still works (when `NAVIDROME_URL` is set).
+
+**Dogfood-rig current state** (CM4, 192.168.6.38, as of 2026-05-20):
+the systemd user unit at `~/.config/systemd/user/cd-archivist.service`
+already sets `MUSIC_INBOX_DIR`, `MUSIC_LIBRARY_DIR`, and
+`MUSIC_REVIEW_DIR`. To enable the Library (browse) panel against
+Navidrome, append three `Environment=` lines:
+
+```
+Environment="NAVIDROME_URL=https://navidrome.mattmariani.com"
+Environment="NAVIDROME_USER=<operator>"
+Environment="NAVIDROME_PASS=<password>"
+```
+
+then `systemctl --user daemon-reload && systemctl --user restart cd-archivist`.
+
 
 ## Runtime apt dependencies
 
