@@ -548,6 +548,107 @@ def create_app(
                 ],
             })
 
+        # ---- Inbox panel (sprint-10 / inbox-impl) ---------------------
+        @app.get("/api/library/inbox")
+        def api_library_inbox() -> JSONResponse:
+            """List pending folders under `$MUSIC_INBOX_DIR`. Polled at
+            5s cadence by the Inbox panel's poll meta tags."""
+            from archivist.service.clients.inbox_client import (
+                InboxUnavailable,
+                list_inbox_folders,
+            )
+            try:
+                folders = list_inbox_folders()
+            except InboxUnavailable as exc:
+                return JSONResponse(
+                    {"folders": [], "error": str(exc)},
+                    status_code=503,
+                )
+            return JSONResponse(
+                {"folders": [f.to_dict() for f in folders]}
+            )
+
+        @app.post("/api/library/inbox/import-now")
+        async def api_library_inbox_import_now(
+            request: Request,
+        ) -> JSONResponse:
+            """Kick the importer for one folder (fire-and-forget).
+
+            Body: `{"folder": "<name>"}`. Returns the import_now
+            result verbatim with HTTP 200 on `started`, 409 on
+            `failed` (folder missing, binary not found, etc.)."""
+            import json as _json
+            from archivist.service.clients.inbox_client import import_now
+            try:
+                raw = await request.body()
+                body = _json.loads(raw or b"{}")
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="invalid json body",
+                )
+            folder = (body or {}).get("folder")
+            if not folder or not isinstance(folder, str):
+                raise HTTPException(
+                    status_code=400,
+                    detail="missing or non-string `folder` field",
+                )
+            result = import_now(folder)
+            status_code = 200 if result["status"] == "started" else 409
+            return JSONResponse(result, status_code=status_code)
+
+        # ---- Library (browse) panel (sprint-10 / library-impl) --------
+        @app.get("/api/library/browse")
+        def api_library_browse(q: str = Query("", min_length=0)) -> JSONResponse:
+            """Search Navidrome by query string via Subsonic search3.view.
+            Empty `q` returns an empty list without hitting the API.
+            Navidrome unavailable → 503 with `{albums: [], error: ...}`
+            so the client-side JS can render a friendly empty state."""
+            from archivist.service.clients.subsonic_client import (
+                NavidromeUnavailable,
+                search,
+            )
+            try:
+                albums = search(q)
+            except NavidromeUnavailable as exc:
+                return JSONResponse(
+                    {"albums": [], "error": str(exc)}, status_code=503,
+                )
+            return JSONResponse({
+                "albums": [
+                    {
+                        "id": a.id, "name": a.name, "artist": a.artist,
+                        "cover_art_id": a.cover_art_id,
+                        "created": a.created,
+                    }
+                    for a in albums
+                ],
+            })
+
+        @app.get("/api/library/browse/recent")
+        def api_library_browse_recent() -> JSONResponse:
+            """10 most-recently-added albums via Subsonic
+            getAlbumList2.view?type=newest. 503 on unavailable."""
+            from archivist.service.clients.subsonic_client import (
+                NavidromeUnavailable,
+                get_newest_albums,
+            )
+            try:
+                albums = get_newest_albums(limit=10)
+            except NavidromeUnavailable as exc:
+                return JSONResponse(
+                    {"albums": [], "error": str(exc)}, status_code=503,
+                )
+            return JSONResponse({
+                "albums": [
+                    {
+                        "id": a.id, "name": a.name, "artist": a.artist,
+                        "cover_art_id": a.cover_art_id,
+                        "created": a.created,
+                    }
+                    for a in albums
+                ],
+            })
+
     # ---------------- library browser (sprint-3 / impl-library) ----------
 
     if discs_root is not None:

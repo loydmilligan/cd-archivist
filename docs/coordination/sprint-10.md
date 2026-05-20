@@ -50,7 +50,7 @@ Disk · Inbox · Downloads · Library — replace the "in design" placeholders w
 - [x] {agent: lane-1, depends: setup-clients-package, id: disk-impl} Implement the Disk panel end-to-end. New `archivist/service/clients/disk_client.py` with `get_disk_usage() -> DiskUsageSnapshot` reading `shutil.disk_usage()` for the three mounts (`/`, `/mnt/seagate`, `/mnt/archive`) and filesystem walks under each for per-surface breakdown (inbox / library / archive / spooty). Snapshot is a dataclass with `mounts: list[MountUsage]` where each `MountUsage` carries `mount_path`, `total_bytes`, `used_bytes`, `available_bytes`, `pct_used`, `surfaces: dict[str, int]`. New `/api/library/disk` endpoint in `app.py` returning the snapshot JSON. New `archivist/service/library_disk_panel.py` rendering three usage-bar rows + per-surface drilldown table. Thresholds: `pct_used < 60` → `--mash-pulp`, `60-85` → `--amber`, `> 85` → `--ember` (build-prompt §3). Mounts that don't exist (e.g., dev machine without `/mnt/seagate`) render as "not mounted" — graceful.
   - **Acceptance:** `tests/service/test_library_disk.py` covers the disk_client snapshot (mocked shutil + filesystem), the `/api/library/disk` endpoint shape, and the rendered HTML structure (three rows, threshold classes, drilldown table). `curl https://cda.mattmariani.com/library/disk` shows real per-mount usage live. Existing suite still green.
 
-- [ ] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: inbox-impl} Implement the Inbox panel end-to-end. New `archivist/service/clients/inbox_client.py` with `list_inbox_folders() -> list[InboxFolder]` walking `$MUSIC_INBOX_DIR` and `$MUSIC_INBOX_DIR/spooty/`. Each `InboxFolder`: `name`, `path`, `source` (`"cd_rip"` or `"spooty"`), `file_count`, `size_bytes`, `last_modified` (ISO), `ready_marker_present` (bool). New `/api/library/inbox` endpoint (list). New `/api/library/inbox/import-now` POST endpoint taking `{folder: str}` and invoking the appropriate beets path (`bin/process-ready-auto <folder>` for CD rips, `spooty-import.sh <folder>` for spooty content) via subprocess — fire-and-forget with a 30s timeout; returns `{status: "started"|"failed", message: str}`. New `archivist/service/library_inbox_panel.py` rendering one row per folder with name, source tag, file count, size, last-modified, READY pip, and an "import now" button. Refresh cadence: 5s via the chassis-poll-dispatcher.
+- [x] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: inbox-impl} Implement the Inbox panel end-to-end. New `archivist/service/clients/inbox_client.py` with `list_inbox_folders() -> list[InboxFolder]` walking `$MUSIC_INBOX_DIR` and `$MUSIC_INBOX_DIR/spooty/`. Each `InboxFolder`: `name`, `path`, `source` (`"cd_rip"` or `"spooty"`), `file_count`, `size_bytes`, `last_modified` (ISO), `ready_marker_present` (bool). New `/api/library/inbox` endpoint (list). New `/api/library/inbox/import-now` POST endpoint taking `{folder: str}` and invoking the appropriate beets path (`bin/process-ready-auto <folder>` for CD rips, `spooty-import.sh <folder>` for spooty content) via subprocess — fire-and-forget with a 30s timeout; returns `{status: "started"|"failed", message: str}`. New `archivist/service/library_inbox_panel.py` rendering one row per folder with name, source tag, file count, size, last-modified, READY pip, and an "import now" button. Refresh cadence: 5s via the chassis-poll-dispatcher.
   - **Acceptance:** `tests/service/test_library_inbox.py` covers inbox_client folder enumeration (tmp_path fixture with both subdirs + READY markers), `/api/library/inbox` endpoint shape, `/api/library/inbox/import-now` happy + error paths, and rendered HTML structure (row count, source tag, READY pip, import-now button). Live walk of `/srv/music/inbox/` on the CM4 returns real folders. Existing suite still green.
 
 - [ ] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: downloads-impl} Implement the Downloads (Spooty) panel end-to-end. New `archivist/service/clients/spooty_client.py` proxying the spooty REST API at `$SPOOTY_API_URL` (default `http://192.168.6.38:3003/api`). Read-only methods: `list_playlists()`, `list_tracks(playlist_id)`. Mutating methods: `submit_playlist(url)`, `retry_track(id)`, `delete_track(id)`, `retry_playlist(id)`. Use `requests` with a 5s timeout; raise `SpootyUnavailable` on connection failure. New endpoints in `app.py` under `/api/library/downloads/*` matching the client methods (the proxy is thin — cda forwards the operator action and returns the spooty response verbatim). New `archivist/service/library_downloads_panel.py` rendering one row per playlist + per-track pip strip (green=ok, pulp=active, ember=error, empty=pending) + submit-playlist form + per-track retry/delete affordances + retry-whole-playlist button. Stats header: Playlists · Tracks · Done · Errors. Refresh cadence: 1000ms during active, 5000ms idle.
@@ -97,6 +97,51 @@ _No contract changes yet._
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-19 — lane-2 — inbox-impl closed
+
+- New `archivist/service/clients/inbox_client.py`: `list_inbox_folders()`
+  walks `$MUSIC_INBOX_DIR` (cd_rip folders, default
+  `/srv/music/inbox`) plus `$MUSIC_INBOX_DIR/spooty/` (spooty
+  folders). Returns a list of frozen `InboxFolder` dataclasses
+  (`name`, `path`, `source`, `file_count`, `size_bytes`,
+  `last_modified` ISO-8601 UTC, `ready_marker_present`), sorted
+  newest-first. Raises `InboxUnavailable` on missing/unreadable
+  root so the panel + endpoint can degrade gracefully.
+- `import_now(folder_name)` looks up the folder in the live listing
+  and spawns the matching importer via `subprocess.Popen`
+  (fire-and-forget, mirrors `post_rip_hook.py`'s pattern): default
+  argv is `bin/process-ready-auto <path>` for cd_rip and
+  `spooty-import.sh <path>` for spooty. Operators can override
+  binaries via `CDA_PROCESS_READY_BIN` / `CDA_SPOOTY_IMPORT_BIN`
+  so the dev box can wire smoke binaries. Returns
+  `{status: "started"|"failed", message: str}` — never raises.
+- Two new endpoints on `app.py` (placed inside the existing
+  `if music_root is not None:` Library Manager block, after
+  lane-1's `/api/library/disk`): `GET /api/library/inbox` (lists
+  folders; 503 with `error` on InboxUnavailable) and
+  `POST /api/library/inbox/import-now` (`{folder}` body; 200 on
+  started, 409 on failed, 400 on bad request).
+- New `archivist/service/library_inbox_panel.render(spec)`. The
+  `library_panels.py` dispatcher resolves `inbox` to this module
+  automatically. Emits the two polling meta tags
+  (`library-poll-ms=5000`,
+  `library-poll-endpoint=/api/library/inbox`) for the chassis
+  dispatcher, plus a table of folder rows with source tags,
+  file count / size / last-modified columns, READY pips, and a
+  per-row "import now" button (`data-folder=` for client-side
+  wiring). Empty inbox + InboxUnavailable both degrade to a
+  meta-tagged empty-state inside the same panel shell.
+- Tests: 31 new in `tests/service/test_library_inbox.py` cover
+  the inbox_client (folder enumeration with both subdirs +
+  READY markers + tmp_path fixtures, sort order, missing root,
+  missing spooty subdir, dataclass JSON-safety), `import_now`
+  (folder missing, inbox missing, correct binary per source,
+  FileNotFoundError degradation), both endpoints (happy + 503 +
+  409 + 400 paths), and the rendered HTML (poll meta tags, row
+  count, source tags, READY pip, import-now buttons, empty
+  state, dispatcher seam).
+- Full suite green (748/748).
 
 ### 2026-05-19 — lane-1 — disk-impl closed
 
