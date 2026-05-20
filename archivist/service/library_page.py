@@ -28,6 +28,12 @@ from archivist.service.kanban_page import (
 V1_PANEL_IDS: tuple[str, ...] = ("downloads", "inbox", "disk", "library")
 
 
+def _switcher_js() -> str:
+    """Lazy switcher-JS lookup; mirrors kanban_page._switcher_js."""
+    from archivist.service.library_switcher import SWITCHER_JS
+    return SWITCHER_JS
+
+
 def _render_library_right_drawer() -> str:
     """Library shell's right drawer idle state.
 
@@ -75,6 +81,14 @@ def render_library_page(
         "navidrome": os.environ.get("NAVIDROME_URL", ""),
         "beets_web": os.environ.get("BEETS_WEB_URL", ""),
     }
+
+    # Sprint-9 / breadcrumb-switcher telemetry — same shape as kanban.
+    # Rip-side: live `N ripping · M review`. Library-side: placeholder
+    # per build-prompt §2 (per-panel briefs revisit).
+    rip_telemetry = (
+        f'{"1" if active_rip else "0"} ripping · {stats["review"]} review'
+    )
+    library_telemetry = "3 inbox · 1 download"
 
     # Lane-2 module imports are lazy + tolerated-missing so this shell
     # can land independently. Once lane-2's modules ship, these become
@@ -145,12 +159,13 @@ def render_library_page(
         '<link rel="stylesheet" href="/static/css/library.css">'
         '</head>'
         '<body data-surface="library">'
-        f'{_render_header_bar(stats, links, active_rip=active_rip, active_disc=active_disc)}'
+        f'{_render_header_bar(stats, links, active_rip=active_rip, active_disc=active_disc, active_surface="library", rip_telemetry=rip_telemetry, library_telemetry=library_telemetry)}'
         '<main class="cda-lib-main">'
         f'{sidebar_html}'
         f'{viewport_html}'
         '</main>'
         f'{_render_library_right_drawer()}'
         f'{_render_bottom_drawer()}'
+        f'<script>{_switcher_js()}</script>'
         '</body></html>'
     )

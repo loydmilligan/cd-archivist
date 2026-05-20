@@ -636,7 +636,23 @@ def _render_rig_stats(stats: dict) -> str:
 def _render_header_bar(
     stats: dict, links: dict, *,
     active_rip: bool = False, active_disc: str | None = None,
+    active_surface: str = "rip",
+    rip_telemetry: str = "",
+    library_telemetry: str = "",
 ) -> str:
+    # Sprint-9 / breadcrumb-switcher: the legacy `cd/a` brand-mark span
+    # is replaced by the brand-lockup switcher rendered by
+    # `archivist.service.library_switcher.render_switcher`. The switcher
+    # contains the brand mark itself plus the surface picker, so the
+    # wordmark `cd-archivist` text moves out of the .header-left flex
+    # (it was redundant alongside the brand-lockup recipe).
+    from archivist.service.library_switcher import render_switcher
+    switcher = render_switcher(
+        active=active_surface,
+        rip_telemetry=rip_telemetry,
+        library_telemetry=library_telemetry,
+    )
+
     navidrome = links.get("navidrome") or ""
     beets_web = links.get("beets_web") or ""
     nav_link = (
@@ -650,12 +666,7 @@ def _render_header_bar(
     return (
         '<header class="page-header">'
         '<div class="header-left">'
-        # Sprint-7 polish: brand mark scales to 36px; the legacy
-        # .daemon-state-dot is removed per D-single-state-indicator —
-        # daemon-up is implied by page-load; the live-status chip is
-        # the single state indicator.
-        '<span class="cda-brand-mark cda-brand-mark--header">cd/a</span>'
-        '<span class="wordmark">cd-archivist</span>'
+        f'{switcher}'
         f'{_render_live_status(active_rip, active_disc)}'
         '</div>'
         '<div class="header-stats">'
@@ -1142,6 +1153,13 @@ def _stats(buckets: dict, cards_flat: list[DiscCard]) -> dict:
     }
 
 
+def _switcher_js() -> str:
+    """Return the switcher dropdown toggle JS (imported lazily to keep
+    this module's top-level import graph unchanged)."""
+    from archivist.service.library_switcher import SWITCHER_JS
+    return SWITCHER_JS
+
+
 def render_kanban_page(music_root: Path, loop_state) -> str:
     state = build_kanban_state(music_root, loop_state=loop_state)
     cards_flat = [c for cards in state.buckets.values() for c in cards]
@@ -1158,6 +1176,16 @@ def render_kanban_page(music_root: Path, loop_state) -> str:
         _render_column(key, title, state.buckets.get(key, []))
         for key, title in _COLUMN_TITLES
     )
+
+    # Sprint-9 / breadcrumb-switcher telemetry. Rip-side numbers come
+    # from the live kanban state: ripping = 1 when a capture-bucket
+    # card is mid-rip, 0 otherwise; review = review-bucket count.
+    # Library-side numbers are an honest placeholder per build-prompt
+    # §2 (per-panel briefs revisit).
+    rip_telemetry = (
+        f'{"1" if active_rip else "0"} ripping · {stats["review"]} review'
+    )
+    library_telemetry = "3 inbox · 1 download"
     return (
         '<!doctype html>'
         '<html lang="en" data-theme="dark">'
@@ -1190,9 +1218,14 @@ def render_kanban_page(music_root: Path, loop_state) -> str:
         '?family=JetBrains+Mono:wght@400;500&display=swap">'
         '<link rel="stylesheet" href="/static/css/tokens.css">'
         '<link rel="stylesheet" href="/static/css/cda.css">'
+        # Sprint-9 / breadcrumb-switcher: library.css contains the
+        # `.cda-switcher-*` rules consumed by the shared switcher that
+        # now renders on /rip too. Loaded after cda.css so library
+        # rules cascade correctly.
+        '<link rel="stylesheet" href="/static/css/library.css">'
         '</head>'
         '<body>'
-        f'{_render_header_bar(stats, links, active_rip=active_rip, active_disc=active_disc)}'
+        f'{_render_header_bar(stats, links, active_rip=active_rip, active_disc=active_disc, active_surface="rip", rip_telemetry=rip_telemetry, library_telemetry=library_telemetry)}'
         f'{_render_bucket_tabs()}'
         '<main class="kanban">'
         f'{columns}'
@@ -1201,5 +1234,6 @@ def render_kanban_page(music_root: Path, loop_state) -> str:
         f'{_render_bottom_drawer()}'
         f'{_render_keyboard_help()}'
         f'<script type="module">{_INLINE_JS}</script>'
+        f'<script>{_switcher_js()}</script>'
         '</body></html>'
     )

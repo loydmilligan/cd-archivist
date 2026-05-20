@@ -23,7 +23,7 @@ from archivist.service.app import LoopState, create_app
 _SERVICE_DIR = Path(__file__).resolve().parents[2] / "archivist" / "service"
 
 # Project's reserved Unicode glyphs (operator UI).
-_ALLOWED_GLYPHS = {"▸", "▾", "↵", "↑", "↓", "↗", "↻", "·"}
+_ALLOWED_GLYPHS = {"▸", "▾", "↵", "↑", "↓", "↗", "↻", "·", "✓"}
 
 # Emoji ranges that must not appear in shipped templates.
 _EMOJI_RE = re.compile(

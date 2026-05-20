@@ -713,7 +713,10 @@ def test_kanban_page_class_names_resolve_against_static_css(
     html = client.get("/rip").text
     tokens = client.get("/static/css/tokens.css").text
     cda = client.get("/static/css/cda.css").text
-    haystack = tokens + "\n" + cda
+    # Sprint-9: library.css carries the shared `.cda-switcher-*` rules
+    # used by the breadcrumb switcher that now renders on /rip too.
+    library = client.get("/static/css/library.css").text
+    haystack = tokens + "\n" + cda + "\n" + library
 
     classes: set[str] = set()
     for attr in re.finditer(r'class="([^"]+)"', html):
