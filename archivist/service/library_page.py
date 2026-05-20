@@ -142,6 +142,7 @@ def render_library_page(
         '?family=JetBrains+Mono:wght@400;500&display=swap">'
         '<link rel="stylesheet" href="/static/css/tokens.css">'
         '<link rel="stylesheet" href="/static/css/cda.css">'
+        '<link rel="stylesheet" href="/static/css/library.css">'
         '</head>'
         '<body data-surface="library">'
         f'{_render_header_bar(stats, links, active_rip=active_rip, active_disc=active_disc)}'

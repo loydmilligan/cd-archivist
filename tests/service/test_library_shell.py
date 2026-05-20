@@ -107,6 +107,23 @@ def test_shared_bottom_log_element_id(client: TestClient) -> None:
     assert 'id="bottom-drawer-log"' in library
 
 
+def test_library_css_loads_after_cda_css(client: TestClient) -> None:
+    # Build-prompt §1: library.css must load AFTER cda.css (which in
+    # turn loads after tokens.css). Token cascade integrity depends on
+    # this order. Assert by stringpos so a future refactor that moves
+    # the link earlier breaks loudly.
+    html = client.get("/library").text
+    pos_tokens = html.find('href="/static/css/tokens.css"')
+    pos_cda = html.find('href="/static/css/cda.css"')
+    pos_lib = html.find('href="/static/css/library.css"')
+    assert pos_tokens != -1
+    assert pos_cda != -1
+    assert pos_lib != -1
+    assert pos_tokens < pos_cda < pos_lib, (
+        f"link order wrong: tokens={pos_tokens} cda={pos_cda} library={pos_lib}"
+    )
+
+
 def test_rig_stats_identical_across_surfaces(client: TestClient) -> None:
     # Build-prompt §2: "The five rig-stats cells stay identical on both
     # surfaces. Don't swap cells out when Library is active." We assert
