@@ -41,7 +41,7 @@ Disk · Inbox · Downloads · Library — replace the "in design" placeholders w
 <!-- Inline plan parsed by orc-tower's InlineArtifactSource. Per-panel
      module split keeps lane-1 and lane-2 off each other's files. -->
 
-- [ ] {agent: lane-1, id: setup-clients-package} Establish the service-clients pattern that all four panels will share. Create `archivist/service/clients/__init__.py` and `archivist/service/clients/README.md` documenting the contract: each client module exposes a thin typed wrapper around one external surface (filesystem walk, REST API, Subsonic API). Functions raise typed exceptions on failure; URLs and tokens come from environment variables (`SPOOTY_API_URL`, `SPOOTY_API_TOKEN`, `NAVIDROME_URL`, `NAVIDROME_USER`, `NAVIDROME_PASS`, `MUSIC_INBOX_DIR`, `MUSIC_REVIEW_DIR`, `MUSIC_ARCHIVE_DIR`). Add `archivist/service/library_panels.py` dispatcher that delegates `render_panel(panel_id)` to per-panel helper modules (`library_disk_panel.py` etc.) — keep the placeholder fallback in place for any panel whose helper module hasn't been written yet. Lane-2's T1b runs in parallel.
+- [x] {agent: lane-1, id: setup-clients-package} Establish the service-clients pattern that all four panels will share. Create `archivist/service/clients/__init__.py` and `archivist/service/clients/README.md` documenting the contract: each client module exposes a thin typed wrapper around one external surface (filesystem walk, REST API, Subsonic API). Functions raise typed exceptions on failure; URLs and tokens come from environment variables (`SPOOTY_API_URL`, `SPOOTY_API_TOKEN`, `NAVIDROME_URL`, `NAVIDROME_USER`, `NAVIDROME_PASS`, `MUSIC_INBOX_DIR`, `MUSIC_REVIEW_DIR`, `MUSIC_ARCHIVE_DIR`). Add `archivist/service/library_panels.py` dispatcher that delegates `render_panel(panel_id)` to per-panel helper modules (`library_disk_panel.py` etc.) — keep the placeholder fallback in place for any panel whose helper module hasn't been written yet. Lane-2's T1b runs in parallel.
   - **Acceptance:** `archivist/service/clients/` exists with `__init__.py` + `README.md`; `library_panels.py` dispatches to per-panel modules with the placeholder fallback (verified by an existing-suite run: 677/677 still green). `pip install -e .` succeeds. No client implementations yet — that's the panel-impl tasks.
 
 - [ ] {agent: lane-2, id: chassis-poll-dispatcher} Wire per-panel polling cadence into `archivist/service/chassis_js.py`. Each panel viewport declares its desired poll interval via `<meta name="library-poll-ms" content="N">` (or absent → no polling). Add a small dispatcher that reads the meta on `/library/{panel_id}` load and `setInterval`s a fetch against a per-panel endpoint (the endpoint URL also comes from a meta tag). Cadences: Disk 30000, Inbox 5000, Downloads 1000 during active / 5000 idle, Library none. Drive-status polling (already in place) is unchanged. The dispatcher must be a no-op on `/rip` (it stays kanban-only there).
@@ -97,6 +97,24 @@ _No contract changes yet._
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-19 — lane-1 — setup-clients-package closed
+
+- Scaffolded `archivist/service/clients/` with `__init__.py` + `README.md`
+  documenting the contract: one module per external surface, typed
+  return values, typed `*Unavailable` exceptions on transport failure,
+  env-var configuration (read at call time, not import time), 5s HTTP
+  timeouts. README enumerates the env-var ownership table that the
+  four panel-impl tasks will reuse.
+- Refactored `archivist/service/library_panels.py` into a dispatcher:
+  `render_panel(panel_id)` looks up the spec, resolves the per-panel
+  module via a `_PANEL_MODULES` map (`disk → library_disk_panel`,
+  `library → library_browse_panel`, etc.), and calls its `render(spec)`.
+  Falls back to the sprint-9 placeholder when the per-panel module is
+  absent or lacks a `render` callable — this is the seam Wave 1 lands
+  into without further edits to `library_panels.py`.
+- No client implementations yet (per task scope). `pip install -e .`
+  succeeds; full suite stays at 677/677 green.
 
 ### 2026-05-19 — orc — sprint-10 plan drafted (Library Manager v1 panels)
 
