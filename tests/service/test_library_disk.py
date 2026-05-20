@@ -22,11 +22,40 @@ from archivist.service.clients import disk_client
 from archivist.service.clients.disk_client import (
     DiskUsageSnapshot,
     MountUsage,
+    _resolve_surface_paths,
     format_bytes,
     get_disk_usage,
     threshold_class,
 )
+from archivist.service.config import reload_config, save_config
 from archivist.service.library_panels import render_panel
+
+
+# Env vars the config store consults. We scrub them in every test so a
+# host-level export doesn't leak in and override the expected default.
+_CONFIG_ENV_VARS = (
+    "SPOOTY_API_URL", "SPOOTY_API_TOKEN",
+    "NAVIDROME_URL", "NAVIDROME_USER", "NAVIDROME_PASS",
+    "MUSIC_INBOX_DIR", "MUSIC_LIBRARY_DIR", "MUSIC_ARCHIVE_DIR",
+    "MUSIC_SPOOTY_DIR", "MUSIC_REVIEW_DIR",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """Sprint-11 / config-runtime-wiring: disk_client reads
+    music_*_dir via `get_config()`. Tests that don't pass an explicit
+    `surfaces=` kwarg get a clean config store per test."""
+    monkeypatch.setenv(
+        "ARCHIVIST_CONFIG_PATH", str(tmp_path / "_test_config.json"),
+    )
+    for var in _CONFIG_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    reload_config()
+    yield
+    reload_config()
 
 
 # ---------- threshold_class --------------------------------------------------
@@ -184,6 +213,31 @@ def test_get_disk_usage_handles_missing_mount(
     assert by_path[str(missing)].mounted is False
     assert by_path[str(missing)].total_bytes == 0
     assert by_path[str(missing)].pct_used == 0.0
+
+
+# ---------- config-store wiring ---------------------------------------------
+
+def test_resolve_surface_paths_reads_from_config_store(tmp_path: Path) -> None:
+    """Sprint-11 / config-runtime-wiring: when no explicit surfaces
+    are passed, disk_client resolves them via `get_config()` instead
+    of `os.environ`."""
+    inbox = tmp_path / "inbox"
+    library = tmp_path / "library"
+    archive = tmp_path / "archive"
+    spooty = tmp_path / "spooty"
+    for p in (inbox, library, archive, spooty):
+        p.mkdir()
+    save_config({
+        "music_inbox_dir":   str(inbox),
+        "music_library_dir": str(library),
+        "music_archive_dir": str(archive),
+        "music_spooty_dir":  str(spooty),
+    })
+    resolved = _resolve_surface_paths()
+    assert resolved["inbox"]   == inbox
+    assert resolved["library"] == library
+    assert resolved["archive"] == archive
+    assert resolved["spooty"]  == spooty
 
 
 # ---------- /api/library/disk endpoint --------------------------------------

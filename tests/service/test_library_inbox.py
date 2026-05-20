@@ -27,6 +27,7 @@ from archivist.service.clients.inbox_client import (
     import_now,
     list_inbox_folders,
 )
+from archivist.service.config import reload_config, save_config
 from archivist.service.library_inbox_panel import POLL_ENDPOINT, POLL_MS, render
 from archivist.service.library_panel_inventory import BY_ID
 
@@ -34,8 +35,38 @@ from archivist.service.library_panel_inventory import BY_ID
 # ---- fixtures ----------------------------------------------------------------
 
 
+# Env vars the config store consults as the FILE > ENV > DEFAULT
+# fallback. We clear all of them so a host-level export doesn't bleed
+# into a test that expects the default.
+_CONFIG_ENV_VARS = (
+    "SPOOTY_API_URL", "SPOOTY_API_TOKEN",
+    "NAVIDROME_URL", "NAVIDROME_USER", "NAVIDROME_PASS",
+    "MUSIC_INBOX_DIR", "MUSIC_LIBRARY_DIR", "MUSIC_ARCHIVE_DIR",
+    "MUSIC_SPOOTY_DIR", "MUSIC_REVIEW_DIR",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """Point the config store at a per-test JSON file + clear the
+    cache + scrub config env vars. Sprint-11 / config-runtime-wiring:
+    the clients consult `get_config()` instead of `os.environ`, so
+    tests set up via `save_config({...})` rather than
+    `monkeypatch.setenv(...)`."""
+    monkeypatch.setenv(
+        "ARCHIVIST_CONFIG_PATH", str(tmp_path / "_test_config.json"),
+    )
+    for var in _CONFIG_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    reload_config()
+    yield
+    reload_config()
+
+
 @pytest.fixture
-def inbox_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def inbox_root(tmp_path: Path) -> Path:
     """Build a representative inbox tree:
 
         inbox/
@@ -72,7 +103,7 @@ def inbox_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (px / "song2.mp3").write_bytes(b"b" * 200)
     (px / "song3.mp3").write_bytes(b"c" * 300)
 
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(root))
+    save_config({"music_inbox_dir": str(root), "music_spooty_dir": str(spooty)})
     return root
 
 
@@ -154,24 +185,24 @@ def test_list_inbox_folders_sorts_newest_first(inbox_root: Path) -> None:
 
 
 def test_list_inbox_folders_raises_when_root_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(tmp_path / "nope"))
+    save_config({"music_inbox_dir": str(tmp_path / "nope")})
     with pytest.raises(InboxUnavailable):
         list_inbox_folders()
 
 
 def test_list_inbox_folders_handles_empty_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     root = tmp_path / "empty_inbox"
     root.mkdir()
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(root))
+    save_config({"music_inbox_dir": str(root)})
     assert list_inbox_folders() == []
 
 
 def test_list_inbox_folders_handles_missing_spooty_subdir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Spooty subdir is optional — its absence shouldn't break enumeration."""
     root = tmp_path / "no_spooty_inbox"
@@ -179,7 +210,10 @@ def test_list_inbox_folders_handles_missing_spooty_subdir(
     a = root / "album"
     a.mkdir()
     (a / "t.flac").write_bytes(b"x")
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(root))
+    save_config({
+        "music_inbox_dir": str(root),
+        "music_spooty_dir": str(root / "spooty"),
+    })
     folders = list_inbox_folders()
     assert len(folders) == 1
     assert folders[0].source == "cd_rip"
@@ -201,9 +235,9 @@ def test_import_now_returns_failed_when_folder_unknown(inbox_root: Path) -> None
 
 
 def test_import_now_returns_failed_when_inbox_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(tmp_path / "nope"))
+    save_config({"music_inbox_dir": str(tmp_path / "nope")})
     result = import_now("anything")
     assert result["status"] == "failed"
     assert "inbox unavailable" in result["message"]
@@ -292,9 +326,9 @@ def test_api_library_inbox_folder_shape(
 
 
 def test_api_library_inbox_503_when_root_missing(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    client: TestClient, tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(tmp_path / "nope"))
+    save_config({"music_inbox_dir": str(tmp_path / "nope")})
     resp = client.get("/api/library/inbox")
     assert resp.status_code == 503
     body = resp.json()
@@ -398,9 +432,9 @@ def test_render_panel_title_and_eyebrow_from_spec(inbox_root: Path) -> None:
 
 
 def test_render_degrades_when_inbox_unavailable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(tmp_path / "nope"))
+    save_config({"music_inbox_dir": str(tmp_path / "nope")})
     html_out = render(BY_ID["inbox"])
     # Still emits the panel shell + poll meta tags.
     assert "library-poll-ms" in html_out
@@ -408,11 +442,11 @@ def test_render_degrades_when_inbox_unavailable(
 
 
 def test_render_empty_state_when_no_folders(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     empty = tmp_path / "empty_inbox"
     empty.mkdir()
-    monkeypatch.setenv("MUSIC_INBOX_DIR", str(empty))
+    save_config({"music_inbox_dir": str(empty)})
     html_out = render(BY_ID["inbox"])
     assert "no pending folders" in html_out
 

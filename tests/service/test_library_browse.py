@@ -26,7 +26,33 @@ from archivist.service.clients.subsonic_client import (
     get_newest_albums,
     search,
 )
+from archivist.service.config import reload_config, save_config
 from archivist.service.library_panels import render_panel
+
+
+_CONFIG_ENV_VARS = (
+    "SPOOTY_API_URL", "SPOOTY_API_TOKEN",
+    "NAVIDROME_URL", "NAVIDROME_USER", "NAVIDROME_PASS",
+    "MUSIC_INBOX_DIR", "MUSIC_LIBRARY_DIR", "MUSIC_ARCHIVE_DIR",
+    "MUSIC_SPOOTY_DIR", "MUSIC_REVIEW_DIR",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """Per sprint-11 / config-runtime-wiring: subsonic_client reads
+    creds via `get_config()`. Tests configure via `save_config(...)`
+    rather than `monkeypatch.setenv(...)`."""
+    monkeypatch.setenv(
+        "ARCHIVIST_CONFIG_PATH", str(tmp_path / "_test_config.json"),
+    )
+    for var in _CONFIG_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    reload_config()
+    yield
+    reload_config()
 
 
 # ---------- subsonic_client.search ------------------------------------------
@@ -45,10 +71,14 @@ class _FakeResponse:
 
 
 @pytest.fixture
-def navidrome_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NAVIDROME_URL", "https://nav.example/")
-    monkeypatch.setenv("NAVIDROME_USER", "operator")
-    monkeypatch.setenv("NAVIDROME_PASS", "hunter2")
+def navidrome_env() -> None:
+    """Seed the config store with Navidrome creds (replaces the old
+    monkeypatch.setenv pattern; sprint-11 / config-runtime-wiring)."""
+    save_config({
+        "navidrome_url": "https://nav.example/",
+        "navidrome_user": "operator",
+        "navidrome_pass": "hunter2",
+    })
 
 
 def _ok(payload_inner: dict) -> dict:

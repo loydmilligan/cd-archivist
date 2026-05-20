@@ -49,7 +49,7 @@ Settings page with read-write JSON config + reload endpoint — no more ssh to u
     - `POST /api/config` — accepts `{key: value, …}` partial updates. Pydantic validation: URLs must be `http(s)://`, non-empty strings, paths must be absolute. **Empty-string in a password field = "no change"** (don't overwrite stored password with empty). Returns the updated masked config.
   - **Acceptance:** `tests/service/test_settings_api.py` covers GET masking (set vs unset secret), POST happy path, POST validation rejection on bad URL, POST empty-pass = no-change behavior, POST rejects unknown keys via the config_store error path. Full suite stays green.
 
-- [ ] {agent: lane-2, depends: setup-config-store, id: config-runtime-wiring} Refactor the four service-clients to consume `config.get_config()` instead of `os.environ.get(...)`. Touch all four:
+- [x] {agent: lane-2, depends: setup-config-store, id: config-runtime-wiring} Refactor the four service-clients to consume `config.get_config()` instead of `os.environ.get(...)`. Touch all four:
     - `archivist/service/clients/spooty_client.py` — replace `os.environ.get("SPOOTY_API_URL", DEFAULT_API_URL)` and the token lookup with `get_config().spooty_api_url` etc.
     - `archivist/service/clients/subsonic_client.py` — replace the Navidrome env reads.
     - `archivist/service/clients/inbox_client.py` — replace the `MUSIC_INBOX_DIR` env read.
@@ -115,6 +115,46 @@ _No ratifications yet._
      - what changed
      - why
      - links: PRs, audit entries -->
+
+### 2026-05-20 — lane-2 — config-runtime-wiring closed
+
+- Refactored all four service-clients from `os.environ.get(...)` to
+  `archivist.service.config.get_config()`:
+    - `spooty_client._api_url` / `_headers` → `get_config().spooty_api_url`
+      and `.spooty_api_token` (with `DEFAULT_API_URL` fallback when unset)
+    - `subsonic_client._read_credentials_or_raise` → reads
+      `navidrome_url` / `navidrome_user` / `navidrome_pass` from the
+      config store; error message updated to reference field names
+    - `inbox_client._inbox_root` + new `_spooty_root` → reads
+      `music_inbox_dir` and `music_spooty_dir`. Enumeration now skips
+      the spooty subdir only when it lives directly under the inbox
+      (the historical layout); if the operator points
+      `music_spooty_dir` elsewhere, the cd_rip walk no longer prunes
+      it. The two importer-binary env vars (`CDA_PROCESS_READY_BIN`,
+      `CDA_SPOOTY_IMPORT_BIN`) stay as `os.environ` reads — they're
+      not config-store managed.
+    - `disk_client._SURFACE_ENV` (env-var lookup table) replaced with
+      `_SURFACE_FIELDS` (config field name lookup); `_resolve_surface_paths`
+      now consults `get_config()` for inbox/library/archive/spooty.
+- Each `get_config()` call lives inside a function body (not at
+  module import), so a saved config edit takes effect on the next
+  request — matches the plan acceptance criterion and the spirit of
+  the Settings page UX (edit-without-restart).
+- All four client modules retain their `DEFAULT_*` constants as
+  guardrails when both file + env tiers come back unset. Backward
+  compat is preserved end-to-end: existing systemd `Environment=`
+  lines still flow through because `get_config` consults env when
+  the file key is unset (per D-config-precedence).
+- Tests: matching test files updated to set up via `save_config(...)`
+  instead of `monkeypatch.setenv(...)`. Each test file gained an
+  autouse `_isolated_config` fixture that points
+  `ARCHIVIST_CONFIG_PATH` at a per-test tmp file, scrubs all 10
+  config env vars (so host-level exports don't bleed in), and
+  reloads the cache on entry+exit. One new test added in
+  `test_library_disk.py` (`test_resolve_surface_paths_reads_from_config_store`)
+  to lock in the disk client's config-store wiring even when callers
+  inject `surfaces=` explicitly.
+- Full suite green: 849/849.
 
 ### 2026-05-20 — lane-1 — settings-page-render closed
 

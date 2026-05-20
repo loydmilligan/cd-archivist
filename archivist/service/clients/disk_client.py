@@ -30,20 +30,22 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from archivist.service.config import get_config
+
 
 # Default mount paths per build-prompt §3 (Disk panel).
 _DEFAULT_MOUNTS: tuple[str, ...] = ("/", "/mnt/seagate", "/mnt/archive")
 
-# Surface name → default host path. Env vars override at call time so
-# tests can monkeypatch without re-importing.
-_SURFACE_ENV: dict[str, tuple[str, str]] = {
-    # name        env var              default
-    "inbox":    ("MUSIC_INBOX_DIR",   "/srv/music/inbox"),
-    "library":  ("MUSIC_LIBRARY_DIR", "/srv/music/library"),
-    "archive":  ("MUSIC_ARCHIVE_DIR", "/mnt/archive"),
+# Surface name → config field on `Config`. Resolved at call time via
+# `get_config()` so the settings page can re-point a surface (e.g., a
+# new music_library_dir) without a process restart.
+_SURFACE_FIELDS: dict[str, str] = {
+    "inbox":    "music_inbox_dir",
+    "library":  "music_library_dir",
+    "archive":  "music_archive_dir",
     # spooty is conventionally a subdir of the inbox; track it
     # separately so the breakdown surfaces it as its own line.
-    "spooty":   ("MUSIC_SPOOTY_DIR",  ""),  # computed below
+    "spooty":   "music_spooty_dir",
 }
 
 _SURFACE_NAMES: tuple[str, ...] = ("inbox", "library", "archive", "spooty")
@@ -72,15 +74,19 @@ class DiskUsageSnapshot:
 
 
 def _resolve_surface_paths() -> dict[str, Path]:
-    """Resolve surface name → host Path using env vars (read at call time)."""
+    """Resolve surface name → host Path via the config store (call time)."""
+    cfg = get_config()
     paths: dict[str, Path] = {}
     for name in _SURFACE_NAMES:
-        env_var, default = _SURFACE_ENV[name]
-        raw = os.environ.get(env_var) or default
-        if name == "spooty" and not raw:
-            # Default: $MUSIC_INBOX_DIR/spooty or /srv/music/inbox/spooty.
-            inbox_root = os.environ.get(_SURFACE_ENV["inbox"][0]) or _SURFACE_ENV["inbox"][1]
-            raw = str(Path(inbox_root) / "spooty")
+        field_name = _SURFACE_FIELDS[name]
+        raw = getattr(cfg, field_name, None)
+        if not raw and name == "spooty":
+            # Defensive: should never trip because Config carries a
+            # non-None default for spooty, but keep the historical
+            # `<inbox>/spooty` fallback if a future schema change makes
+            # the field nullable.
+            inbox_raw = cfg.music_inbox_dir
+            raw = str(Path(inbox_raw) / "spooty")
         paths[name] = Path(raw)
     return paths
 

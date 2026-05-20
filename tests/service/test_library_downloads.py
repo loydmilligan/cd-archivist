@@ -43,16 +43,37 @@ from archivist.service.library_downloads_panel import (
     POLL_MS_IDLE,
     render,
 )
+from archivist.service.config import reload_config, save_config
 from archivist.service.library_panel_inventory import BY_ID
 
 
 # ---- fixtures ---------------------------------------------------------------
 
 
+_CONFIG_ENV_VARS = (
+    "SPOOTY_API_URL", "SPOOTY_API_TOKEN",
+    "NAVIDROME_URL", "NAVIDROME_USER", "NAVIDROME_PASS",
+    "MUSIC_INBOX_DIR", "MUSIC_LIBRARY_DIR", "MUSIC_ARCHIVE_DIR",
+    "MUSIC_SPOOTY_DIR", "MUSIC_REVIEW_DIR",
+)
+
+
 @pytest.fixture(autouse=True)
-def _spooty_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SPOOTY_API_URL", "http://test-spooty:3003/api")
-    monkeypatch.delenv("SPOOTY_API_TOKEN", raising=False)
+def _isolated_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """Point the config store at a per-test JSON file + clear the
+    cache + scrub config env vars. Sprint-11 / config-runtime-wiring:
+    the spooty client consults `get_config()` instead of `os.environ`."""
+    monkeypatch.setenv(
+        "ARCHIVIST_CONFIG_PATH", str(tmp_path / "_test_config.json"),
+    )
+    for var in _CONFIG_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    reload_config()
+    save_config({"spooty_api_url": "http://test-spooty:3003/api"})
+    yield
+    reload_config()
 
 
 def _resp(status_code: int = 200, json_body=None, raise_text: str | None = None):
@@ -213,10 +234,12 @@ def test_delete_track_uses_delete_method() -> None:
     assert args[1].endswith("/api/track/t1")
 
 
-def test_token_header_included_when_env_set(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("SPOOTY_API_TOKEN", "secret")
+def test_token_header_included_when_config_set() -> None:
+    """Token comes from the config store now (not the env var) per
+    sprint-11 / config-runtime-wiring. Env still flows through as a
+    bootstrap fallback because the config store consults env when the
+    file key is unset."""
+    save_config({"spooty_api_token": "secret"})
     with patch.object(requests, "request", return_value=_resp(200, [])) as mock_req:
         list_playlists()
     _, kwargs = mock_req.call_args

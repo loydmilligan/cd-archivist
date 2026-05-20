@@ -35,6 +35,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from archivist.service.config import get_config
+
 
 DEFAULT_INBOX_DIR = "/srv/music/inbox"
 
@@ -58,8 +60,21 @@ class InboxFolder:
 
 
 def _inbox_root() -> Path:
-    """Resolve the inbox root from ``$MUSIC_INBOX_DIR`` (call time)."""
-    return Path(os.environ.get("MUSIC_INBOX_DIR", DEFAULT_INBOX_DIR))
+    """Resolve the inbox root via the config store (call time)."""
+    return Path(get_config().music_inbox_dir or DEFAULT_INBOX_DIR)
+
+
+def _spooty_root() -> Path:
+    """Resolve the spooty sub-root via the config store (call time).
+
+    The historical layout is `<inbox>/spooty/`; ``music_spooty_dir``
+    defaults to that, but the config store lets the operator point
+    it elsewhere on disk.
+    """
+    cfg = get_config()
+    if cfg.music_spooty_dir:
+        return Path(cfg.music_spooty_dir)
+    return _inbox_root() / "spooty"
 
 
 def _walk_folder(folder: Path, source: Literal["cd_rip", "spooty"]) -> InboxFolder:
@@ -115,14 +130,22 @@ def list_inbox_folders() -> list[InboxFolder]:
     except PermissionError as exc:
         raise InboxUnavailable(f"inbox root unreadable: {root}") from exc
 
+    spooty_root = _spooty_root()
+    # When spooty_root sits directly under the inbox (the default
+    # layout), skip it from the cd_rip enumeration so we don't double-
+    # count or mislabel its contents.
+    try:
+        spooty_in_inbox = spooty_root.resolve().parent == root.resolve()
+    except OSError:
+        spooty_in_inbox = spooty_root.parent == root
+
     for entry in entries:
         if not entry.is_dir():
             continue
-        if entry.name == "spooty":
+        if spooty_in_inbox and entry.name == spooty_root.name:
             continue
         folders.append(_walk_folder(entry, source="cd_rip"))
 
-    spooty_root = root / "spooty"
     if spooty_root.is_dir():
         try:
             spooty_entries = sorted(spooty_root.iterdir())

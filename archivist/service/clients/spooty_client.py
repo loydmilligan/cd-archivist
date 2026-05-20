@@ -20,10 +20,11 @@ LAN-safe until Access is configured.
 
 from __future__ import annotations
 
-import os
 from dataclasses import asdict, dataclass, field
 
 import requests
+
+from archivist.service.config import get_config
 
 
 DEFAULT_API_URL = "http://192.168.6.38:3003/api"
@@ -40,13 +41,13 @@ class SpootyUnavailable(Exception):
 
 
 def _api_url() -> str:
-    """Resolve the spooty base URL from ``$SPOOTY_API_URL`` (call time)."""
-    return os.environ.get("SPOOTY_API_URL", DEFAULT_API_URL).rstrip("/")
+    """Resolve the spooty base URL via the config store (call time)."""
+    return (get_config().spooty_api_url or DEFAULT_API_URL).rstrip("/")
 
 
 def _headers() -> dict[str, str]:
     """Optional token header — sprint-10 ships without auth on LAN."""
-    token = os.environ.get("SPOOTY_API_TOKEN", "").strip()
+    token = (get_config().spooty_api_token or "").strip()
     if token:
         return {"Authorization": f"Bearer {token}"}
     return {}

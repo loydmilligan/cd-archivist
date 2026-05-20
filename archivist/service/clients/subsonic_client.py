@@ -23,12 +23,13 @@ Failure modes:
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
 from dataclasses import dataclass
 from typing import Any
 
 import requests
+
+from archivist.service.config import get_config
 
 
 # Per-request timeout (build-prompt and clients/README contract).
@@ -73,14 +74,15 @@ class AlbumSummary:
 
 def _read_credentials_or_raise() -> tuple[str, str, str]:
     """Return `(url, user, password)`. Raises NavidromeUnavailable if
-    any are missing. Reads env vars at call time so tests can
-    monkeypatch."""
-    url = os.environ.get("NAVIDROME_URL", "").strip()
-    user = os.environ.get("NAVIDROME_USER", "").strip()
-    password = os.environ.get("NAVIDROME_PASS", "").strip()
+    any are missing. Reads via the config store at call time so the
+    settings page can update creds without a process restart."""
+    cfg = get_config()
+    url = (cfg.navidrome_url or "").strip()
+    user = (cfg.navidrome_user or "").strip()
+    password = (cfg.navidrome_pass or "").strip()
     if not (url and user and password):
         raise NavidromeUnavailable(
-            "NAVIDROME_URL / NAVIDROME_USER / NAVIDROME_PASS not all set"
+            "navidrome_url / navidrome_user / navidrome_pass not all set"
         )
     return url, user, password
 
