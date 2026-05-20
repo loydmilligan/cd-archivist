@@ -22,19 +22,22 @@ def test_v1_panel_header_copy(panel_id: str, eyebrow: str, title: str) -> None:
 
 
 def test_placeholder_carries_three_ghost_rows() -> None:
-    html = render_panel("downloads")
+    # `review` is a v2 ghost — no per-panel module, so the dispatcher
+    # falls back to the placeholder. Pins the placeholder shape without
+    # coupling to which v1 panels happen to still be unrendered.
+    html = render_panel("review")
     assert html.count("ghost row · ghost row · ghost row") == 3
 
 
 def test_placeholder_carries_in_design_tag_and_foot_copy() -> None:
-    html = render_panel("inbox")
+    html = render_panel("review")
     assert '<span class="tag">in design</span>' in html
     assert "UX is intentionally undecided in this pass." in html
 
 
 def test_panel_dashed_container_class_present() -> None:
     # The dashed-border placeholder class is the CSS hook.
-    html = render_panel("disk")
+    html = render_panel("review")
     assert 'class="cda-lib-panel-empty"' in html
 
 

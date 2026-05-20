@@ -524,6 +524,30 @@ def create_app(
                 render_library_page(music_root, loop_state, panel_id=panel_id)
             )
 
+        # ---------- /api/library/* — per-panel data endpoints (sprint-10) ----------
+
+        @app.get("/api/library/disk")
+        def api_library_disk() -> JSONResponse:
+            """Sprint-10 / disk-impl. Per-mount disk usage + per-surface
+            byte breakdown for the Disk panel. Polled at 30s cadence by
+            the panel's `<meta name="library-poll-ms">` tag."""
+            from archivist.service.clients.disk_client import get_disk_usage
+            snap = get_disk_usage()
+            return JSONResponse({
+                "mounts": [
+                    {
+                        "mount_path": m.mount_path,
+                        "mounted": m.mounted,
+                        "total_bytes": m.total_bytes,
+                        "used_bytes": m.used_bytes,
+                        "available_bytes": m.available_bytes,
+                        "pct_used": m.pct_used,
+                        "surfaces": dict(m.surfaces),
+                    }
+                    for m in snap.mounts
+                ],
+            })
+
     # ---------------- library browser (sprint-3 / impl-library) ----------
 
     if discs_root is not None:

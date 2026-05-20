@@ -47,7 +47,7 @@ Disk · Inbox · Downloads · Library — replace the "in design" placeholders w
 - [x] {agent: lane-2, id: chassis-poll-dispatcher} Wire per-panel polling cadence into `archivist/service/chassis_js.py`. Each panel viewport declares its desired poll interval via `<meta name="library-poll-ms" content="N">` (or absent → no polling). Add a small dispatcher that reads the meta on `/library/{panel_id}` load and `setInterval`s a fetch against a per-panel endpoint (the endpoint URL also comes from a meta tag). Cadences: Disk 30000, Inbox 5000, Downloads 1000 during active / 5000 idle, Library none. Drive-status polling (already in place) is unchanged. The dispatcher must be a no-op on `/rip` (it stays kanban-only there).
   - **Acceptance:** `chassis_js.py` exports the new polling dispatcher; `tests/service/test_chassis_poll.py` covers (a) no-op when no meta present, (b) fires fetch on interval when meta is present, (c) clears on page-hide. Existing tests still green.
 
-- [ ] {agent: lane-1, depends: setup-clients-package, id: disk-impl} Implement the Disk panel end-to-end. New `archivist/service/clients/disk_client.py` with `get_disk_usage() -> DiskUsageSnapshot` reading `shutil.disk_usage()` for the three mounts (`/`, `/mnt/seagate`, `/mnt/archive`) and filesystem walks under each for per-surface breakdown (inbox / library / archive / spooty). Snapshot is a dataclass with `mounts: list[MountUsage]` where each `MountUsage` carries `mount_path`, `total_bytes`, `used_bytes`, `available_bytes`, `pct_used`, `surfaces: dict[str, int]`. New `/api/library/disk` endpoint in `app.py` returning the snapshot JSON. New `archivist/service/library_disk_panel.py` rendering three usage-bar rows + per-surface drilldown table. Thresholds: `pct_used < 60` → `--mash-pulp`, `60-85` → `--amber`, `> 85` → `--ember` (build-prompt §3). Mounts that don't exist (e.g., dev machine without `/mnt/seagate`) render as "not mounted" — graceful.
+- [x] {agent: lane-1, depends: setup-clients-package, id: disk-impl} Implement the Disk panel end-to-end. New `archivist/service/clients/disk_client.py` with `get_disk_usage() -> DiskUsageSnapshot` reading `shutil.disk_usage()` for the three mounts (`/`, `/mnt/seagate`, `/mnt/archive`) and filesystem walks under each for per-surface breakdown (inbox / library / archive / spooty). Snapshot is a dataclass with `mounts: list[MountUsage]` where each `MountUsage` carries `mount_path`, `total_bytes`, `used_bytes`, `available_bytes`, `pct_used`, `surfaces: dict[str, int]`. New `/api/library/disk` endpoint in `app.py` returning the snapshot JSON. New `archivist/service/library_disk_panel.py` rendering three usage-bar rows + per-surface drilldown table. Thresholds: `pct_used < 60` → `--mash-pulp`, `60-85` → `--amber`, `> 85` → `--ember` (build-prompt §3). Mounts that don't exist (e.g., dev machine without `/mnt/seagate`) render as "not mounted" — graceful.
   - **Acceptance:** `tests/service/test_library_disk.py` covers the disk_client snapshot (mocked shutil + filesystem), the `/api/library/disk` endpoint shape, and the rendered HTML structure (three rows, threshold classes, drilldown table). `curl https://cda.mattmariani.com/library/disk` shows real per-mount usage live. Existing suite still green.
 
 - [ ] {agent: lane-2, depends: setup-clients-package,chassis-poll-dispatcher, id: inbox-impl} Implement the Inbox panel end-to-end. New `archivist/service/clients/inbox_client.py` with `list_inbox_folders() -> list[InboxFolder]` walking `$MUSIC_INBOX_DIR` and `$MUSIC_INBOX_DIR/spooty/`. Each `InboxFolder`: `name`, `path`, `source` (`"cd_rip"` or `"spooty"`), `file_count`, `size_bytes`, `last_modified` (ISO), `ready_marker_present` (bool). New `/api/library/inbox` endpoint (list). New `/api/library/inbox/import-now` POST endpoint taking `{folder: str}` and invoking the appropriate beets path (`bin/process-ready-auto <folder>` for CD rips, `spooty-import.sh <folder>` for spooty content) via subprocess — fire-and-forget with a 30s timeout; returns `{status: "started"|"failed", message: str}`. New `archivist/service/library_inbox_panel.py` rendering one row per folder with name, source tag, file count, size, last-modified, READY pip, and an "import now" button. Refresh cadence: 5s via the chassis-poll-dispatcher.
@@ -97,6 +97,47 @@ _No contract changes yet._
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-19 — lane-1 — disk-impl closed
+
+- New `archivist/service/clients/disk_client.py`. `get_disk_usage()`
+  returns a frozen `DiskUsageSnapshot` of `MountUsage` rows (one per
+  mount: `/`, `/mnt/seagate`, `/mnt/archive`) with `mounted`,
+  `total/used/available_bytes`, `pct_used`, and a `surfaces` dict
+  (inbox/library/archive/spooty bytes attributed by longest-prefix
+  mount). Missing mounts degrade to `mounted=False` with zeros — no
+  exceptions on dev hosts. Surface byte counts are disjoint: walks
+  prune sibling surface subtrees so spooty bytes don't double-count
+  inside inbox. Helpers `threshold_class(pct)` (single-source for the
+  `is-pulp` / `is-amber` / `is-ember` mapping from build-prompt §3)
+  and `format_bytes(n)`. Env-var overrides on the surface paths:
+  `MUSIC_INBOX_DIR`, `MUSIC_LIBRARY_DIR`, `MUSIC_ARCHIVE_DIR`,
+  `MUSIC_SPOOTY_DIR`.
+- New `/api/library/disk` endpoint in `app.py`, gated on `music_root`
+  (sits alongside the other Library Manager routes). Returns the
+  snapshot as JSON with the same shape as the dataclass.
+- New `archivist/service/library_disk_panel.py` exposing `render(spec)`.
+  Emits panel header (eyebrow / h1 / sub), the two polling meta tags
+  (`library-poll-ms=30000`, `library-poll-endpoint=/api/library/disk`)
+  consumed by lane-2's chassis poll dispatcher, three usage-bar rows
+  (one per mount; unmounted rows render as `not mounted` with a zero
+  bar), and a per-surface drilldown table with one row per mount and
+  one column per surface.
+- `tests/service/test_library_disk.py` (22 tests) covers threshold
+  boundaries, format_bytes, snapshot shape with mocked shutil + a
+  tmp_path mount layout (including the inbox/spooty disjointness),
+  missing-mount degradation, the `/api/library/disk` endpoint shape
+  via TestClient, panel render (three rows, three threshold classes,
+  drilldown table with all four surface columns, polling meta tags,
+  unmounted row, header copy), and a sanity check that the dispatcher
+  no longer falls back to the placeholder for `disk`.
+- Sprint-9 placeholder tests in `test_library_panels.py` re-pointed
+  from `disk` / `inbox` (both now have shipping panel modules) to the
+  v2 `review` id, which has no module and therefore exercises the
+  same placeholder fallback the tests were pinning all along.
+- Full suite green (748 with lane-2's chassis-poll + their uncommitted
+  inbox tests). Manual smoke against the deployed CM4 is part of
+  `deploy-and-smoke`; not run here.
 
 ### 2026-05-19 — lane-2 — chassis-poll-dispatcher closed
 
