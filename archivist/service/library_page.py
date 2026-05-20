@@ -34,11 +34,30 @@ def _switcher_js() -> str:
     return SWITCHER_JS
 
 
-def _render_library_right_drawer() -> str:
-    """Library shell's right drawer idle state.
+def _chassis_js() -> str:
+    """Shared chassis JS — wires the right-drawer + bottom-drawer
+    toggle buttons. kanban_page injects the full _INLINE_JS which
+    already contains this logic; library_page needs the minimum
+    viable wire-up to keep the header drawer buttons functional."""
+    from archivist.service.chassis_js import CHASSIS_JS
+    return CHASSIS_JS
 
-    Per build-prompt §5, every Library route in sprint-9 renders the
-    same idle copy. Per-panel drawer modes come in follow-up briefs.
+
+def _render_library_right_drawer() -> str:
+    """Library shell's right drawer.
+
+    Build-prompt §5 specs "Select an item to see details." as the idle
+    copy for every Library route this sprint. In live operator feedback,
+    drive status was identified as chassis-level info that should remain
+    visible on every surface (same rationale as rig-stats per
+    build-prompt §2). So this drawer renders BOTH: the chassis-level
+    drive-status block at the top (matching the kanban's drive-status
+    drawer mode, polled via /api/drive/status) and the per-item idle
+    copy below.
+
+    Per-panel drawer modes (replacing the idle copy with selection
+    details) come in follow-up briefs.
+
     Same DOM id as kanban's drawer (`right-drawer`) so the shared
     chassis JS targets the same element across surfaces.
     """
@@ -51,7 +70,22 @@ def _render_library_right_drawer() -> str:
         '×'
         '</button>'
         '</div>'
+        # Chassis-level drive-status block — matches kanban's drawer
+        # data-drawer-template="drive-status" so the existing
+        # /api/drive/status polling logic in chassis_js targets the
+        # same `data-target="drive-status-body"` element.
+        '<div class="drawer-body" data-drawer-template="drive-status">'
+        '<div class="thumb thumb--placeholder thumb--placeholder--lg" '
+        'aria-hidden="true"></div>'
+        '<h3>drive status</h3>'
+        '<div data-target="drive-status-body">'
+        '<p class="meta">idle</p>'
+        '</div>'
+        '</div>'
+        # Per-item slot — idle copy per build-prompt §5. Per-panel
+        # briefs will swap this section's body with selection details.
         '<div class="drawer-body" data-drawer-template="library-idle">'
+        '<h3>selection</h3>'
         '<p class="meta">Select an item to see details.</p>'
         '</div>'
         '</aside>'
@@ -167,5 +201,6 @@ def render_library_page(
         f'{_render_library_right_drawer()}'
         f'{_render_bottom_drawer()}'
         f'<script>{_switcher_js()}</script>'
+        f'<script>{_chassis_js()}</script>'
         '</body></html>'
     )
