@@ -190,6 +190,60 @@ Environment="NAVIDROME_PASS=<password>"
 
 then `systemctl --user daemon-reload && systemctl --user restart cd-archivist`.
 
+### Library Manager config (sprint-11)
+
+Sprint-11 added a JSON config store on top of the sprint-10 env-var
+surface. The four service-clients now read every URL / cred / dir
+through `archivist.service.config.get_config()` rather than hitting
+`os.environ.get(...)` directly. Three things to know:
+
+1. **`~/.config/cd-archivist/config.json` is the new source of truth.**
+   The Settings page (`/settings`) writes here through `save_config()`.
+   File is mode `0600`, atomic-written via `os.replace(tmp, real)`.
+   Override the path with `ARCHIVIST_CONFIG_PATH` if you want it
+   somewhere else.
+
+2. **Env vars + systemd `Environment=` still work as bootstrap fallbacks.**
+   Precedence is **FILE > ENV > DEFAULT** per `D-config-precedence`.
+   For any key the operator has not yet touched via the web, the
+   matching env var still flows through. So an existing systemd unit
+   with `Environment="NAVIDROME_URL=…"` keeps working without
+   change. Once the operator saves a value via the web, the file
+   becomes authoritative for that key only — other env-driven keys
+   continue to resolve from systemd.
+
+3. **The `/settings` page is the primary editing surface.** It loads
+   the current resolved config (with `navidrome_pass` /
+   `spooty_api_token` masked to `●●●●●●●●`), presents one form with
+   three sections (Spooty / Navidrome / Music paths), and POSTs back
+   to `/api/config`. Empty password fields mean "no change" — the
+   stored secret is preserved if the operator only edited a URL.
+   Backed by `GET /api/config` (returns the masked snapshot) and
+   `POST /api/config` (validates and saves).
+
+#### Security: `/settings` is unauthenticated (v1)
+
+Per `D-settings-unauth-v1`, sprint-11 ships `/settings` and
+`/api/config` without auth. cda.mattmariani.com is publicly reachable
+via the Cloudflare tunnel, so an unauthenticated `POST /api/config`
+is a real risk — anyone who can reach the surface can rewrite the
+config. Mitigations:
+
+- **LAN-restrict the tunnel** until a follow-up sprint adds auth.
+  Either drop the tunnel for `/settings` + `/api/config` and reach
+  them only via `192.168.6.38:8228` from the LAN, or
+- **Stand up Cloudflare Access** in front of cda.mattmariani.com
+  (Zero Trust → Application → Self-hosted, attach an identity
+  provider, scope to the operator's email). Access enforces auth
+  before the tunnel forwards to the origin, so cd-archivist itself
+  stays unchanged.
+
+A future sprint can add a token check or wire to Cloudflare Access
+service tokens; out of scope for sprint-11 to keep the sprint
+shippable. Do not share the public URL with anyone you don't trust
+to rewrite the config until one of the above mitigations is in
+place.
+
 
 ## Runtime apt dependencies
 

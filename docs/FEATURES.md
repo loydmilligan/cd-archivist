@@ -1,6 +1,6 @@
 # FEATURES.md
 
-> Current-state feature inventory as of sprint-10 (2026-05-20).
+> Current-state feature inventory as of sprint-11 (2026-05-20).
 > One entry per feature, grouped by subsystem.
 > States: **shipped** (in production, tests green) / **partial** (code exists, gaps noted) / **planned** (backlog).
 > File pointers are module-level; see `docs/ARCHITECTURE.md` for detail.
@@ -89,6 +89,11 @@
 | `GET /api/library/inbox` + `POST /api/library/inbox/import-now` | shipped | 10 | `archivist/service/app.py` |
 | `GET /api/library/downloads*` + per-playlist/per-track mutations | shipped | 10 | `archivist/service/app.py` |
 | `GET /api/library/browse?q=` + `GET /api/library/browse/recent` | shipped | 10 | `archivist/service/app.py` |
+| Settings page (`/settings`) — read-write JSON config form | shipped | 11 | `archivist/service/settings_page.py`, `archivist/service/app.py` |
+| `GET /api/config` (masked) + `POST /api/config` (sparse update + validation) | shipped | 11 | `archivist/service/app.py` |
+| Config store (`get_config` / `save_config` / `reload_config`, FILE > ENV > DEFAULT) | shipped | 11 | `archivist/service/config.py` |
+| Service-clients consume config_store at call time (sprint-10 clients refactored) | shipped | 11 | `archivist/service/clients/*.py` |
+| Breadcrumb switcher gains `settings` row with `<N> knobs · saved <T> ago` telemetry | shipped | 11 | `archivist/service/library_switcher.py`, `archivist/service/config.py` (`get_config_summary`) |
 | Review page v1 (`/review`, `/review/{folder}`) | shipped | 3 | `archivist/service/review_page_v1.py` |
 | Mobile single-column layout (bucket tabs) | partial | 7 | `archivist/service/static/css/cda.css` |
 | PWA manifest + favicon family + apple-touch icon | shipped | 7 | `archivist/service/static/` |

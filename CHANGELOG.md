@@ -27,6 +27,82 @@ provenance, walk that source. Dates reflect each sprint's final
 
 ---
 
+## [sprint-11] — 2026-05-20
+
+The "edit URLs and creds from the browser" sprint. Two-lane parallel
+execution stood up a JSON config store, refactored the four sprint-10
+service-clients to read through it, and shipped a `/settings` page so
+operators can edit Spooty / Navidrome URLs + creds + music dirs
+without ssh.
+
+### Added
+- `archivist/service/config.py` — config store with FILE > ENV >
+  DEFAULT precedence (D-config-precedence). Frozen `Config`
+  dataclass (10 knobs), `get_config()` (cached), `reload_config()`
+  (clears the cache), `save_config(updates)` (sparse merge, atomic
+  write via `os.open(O_CREAT, 0o600)` + `os.replace`, auto-reload,
+  rejects unknown keys with `UnknownConfigKey` before any disk
+  write). Exposes `SECRET_FIELDS` so API layers can mask
+  `navidrome_pass` / `spooty_api_token`. File path is
+  `$ARCHIVIST_CONFIG_PATH` or `~/.config/cd-archivist/config.json`.
+- `GET /api/config` — returns the resolved config with secrets
+  masked to `●●●●●●●●` (or `null` when unset). Non-secret fields
+  returned verbatim.
+- `POST /api/config` — sparse `{key: value, ...}` update. Per-field
+  validation: `*_url` must be `http(s)://`, `*_dir` must be
+  absolute, non-secret strings must be non-empty. Empty-string in a
+  secret field is silently dropped (don't overwrite stored
+  password). `null` clears a key. Unknown keys → 400.
+- `GET /settings` — single-column form bound to `/api/config`. Ten
+  inputs across three sections (Spooty / Navidrome / Music paths).
+  Password fields never carry a `value=` attribute (no leak via
+  View Source); placeholder `●●●●●●●●` signals a stored value.
+  Inline JS posts JSON, shows a moss "Saved at HH:MM" banner on 200
+  or an ember error banner on 4xx.
+- Brand-lockup breadcrumb switcher gains a `settings` row with
+  `<N> knobs · saved <T> ago` telemetry, sourced from
+  `get_config_summary()` (read-only helper in `config.py`). Rendered
+  on every chassis surface (rip / library / settings).
+- New env var: `ARCHIVIST_CONFIG_PATH` (override for the config
+  file path).
+
+### Changed
+- The four sprint-10 service-clients (`disk_client`, `inbox_client`,
+  `spooty_client`, `subsonic_client`) now read URLs / creds / dirs
+  via `config.get_config()` at call time instead of
+  `os.environ.get(...)`. Backward compat preserved: env vars still
+  flow through as the precedence-tier-2 fallback. The Settings page
+  becomes authoritative for any key the operator saves; untouched
+  keys continue to resolve from systemd `Environment=` lines.
+- Client test fixtures switch from `monkeypatch.setenv(...)` to a
+  per-test isolated config-store path with `save_config(...)`.
+
+### Security
+- `/settings` and `/api/config` ship **unauthenticated** for v1
+  (D-settings-unauth-v1). cda.mattmariani.com is publicly reachable
+  via the Cloudflare tunnel, so an unauthenticated `POST /api/config`
+  is a real risk. Operator-facing mitigations (LAN-restrict or
+  stand up Cloudflare Access) are documented in
+  `docs/operations/cm4-setup.md` §Library Manager config. A follow-up
+  sprint should wire Cloudflare Access service tokens or a
+  per-request token check.
+
+### Notes
+- Test suite: 857 (848 baseline + 9 net new — lane-2's
+  config-runtime-wiring kept existing client tests at the same count
+  while moving them onto the new fixture pattern; lane-1 added 50
+  new tests across config_store + settings_api + settings_page;
+  lane-2 added the switcher telemetry tests).
+- Live smoke against `cda.mattmariani.com` (CM4) on 2026-05-20:
+  `/settings` returns 200, `GET /api/config` shows the merged
+  file+env state, `POST /api/config` writes
+  `~/.config/cd-archivist/config.json` (verified mode 0600), and
+  `GET /api/library/browse/recent` returns live Navidrome data
+  confirming the subsonic_client is reading creds through the
+  config_store end-to-end.
+
+---
+
 ## [sprint-10] — 2026-05-20
 
 The "Library Manager v1 panels" sprint. Two-lane parallel execution

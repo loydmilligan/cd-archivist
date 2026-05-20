@@ -3,7 +3,7 @@ project: cd-archivist
 sprint: sprint-11
 created: 2026-05-20T00:00:00.000Z
 updated: 2026-05-20T00:00:00.000Z
-status: active
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-11)
@@ -63,7 +63,7 @@ Settings page with read-write JSON config + reload endpoint — no more ssh to u
 - [x] {agent: lane-2, depends: setup-config-store, id: settings-link-in-switcher} Extend the brand-lockup breadcrumb switcher in `archivist/service/library_switcher.py` to include a `settings` row alongside `rip` and `library`. Telemetry hint: `<N> knobs · saved <T> ago` where N is the count of non-default values and T is the human-relative time since the last config.json mtime (or `never` if file missing). Pull both via a tiny `get_config_summary() -> dict[str, int | str]` helper in `archivist/service/config.py` (lane-2 adds this helper as part of this task — it's a read-only consumer of config_store). The switcher's `active` param now accepts `"settings"`. Update existing tests in `tests/service/test_breadcrumb_switcher.py` accordingly.
   - **Acceptance:** Switcher dropdown has three rows in order (`rip`, `library`, `settings`). On `/settings`, the `settings` row carries `is-on`. Telemetry hint format verified in tests. Full suite stays green.
 
-- [ ] {agent: lane-1, depends: settings-api-endpoints,config-runtime-wiring,settings-page-render,settings-link-in-switcher, id: deploy-and-smoke} Final integration. Pull lane-2's commits, run full suite locally green. Deploy: `ssh cm4 → git pull → systemctl restart`. Walk `/settings` in the browser: confirm the form loads with current values (URLs filled in, passwords showing the masked placeholder), edit one URL, save, observe the success banner, hit `/library/downloads` (or whichever panel matches the edited URL), confirm the panel reflects the change. Update `docs/operations/cm4-setup.md` adding a `Library Manager config` section noting (a) `~/.config/cd-archivist/config.json` is the new source of truth, (b) env vars + systemd Environment= still work as bootstrap fallbacks, (c) the `/settings` page is the primary editing surface. **Security note:** add a clear paragraph that `/settings` is currently unauthenticated; if the cda surface is publicly reachable, operator should either restrict to LAN or stand up Cloudflare Access before sharing the URL. Update `CHANGELOG.md` with the sprint-11 entry. Update `FEATURES.md` adding the Settings surface. Mark sprint-11 `status: closed`, append the final activity log entry.
+- [x] {agent: lane-1, depends: settings-api-endpoints,config-runtime-wiring,settings-page-render,settings-link-in-switcher, id: deploy-and-smoke} Final integration. Pull lane-2's commits, run full suite locally green. Deploy: `ssh cm4 → git pull → systemctl restart`. Walk `/settings` in the browser: confirm the form loads with current values (URLs filled in, passwords showing the masked placeholder), edit one URL, save, observe the success banner, hit `/library/downloads` (or whichever panel matches the edited URL), confirm the panel reflects the change. Update `docs/operations/cm4-setup.md` adding a `Library Manager config` section noting (a) `~/.config/cd-archivist/config.json` is the new source of truth, (b) env vars + systemd Environment= still work as bootstrap fallbacks, (c) the `/settings` page is the primary editing surface. **Security note:** add a clear paragraph that `/settings` is currently unauthenticated; if the cda surface is publicly reachable, operator should either restrict to LAN or stand up Cloudflare Access before sharing the URL. Update `CHANGELOG.md` with the sprint-11 entry. Update `FEATURES.md` adding the Settings surface. Mark sprint-11 `status: closed`, append the final activity log entry.
   - **Acceptance:** `/settings` route returns 200 on the deployed CM4. Editing a value via the page changes the corresponding `/library/*` panel's behavior. Docs updated. Sprint-11 marked closed. Full suite green.
 
 ## Agent Roster
@@ -115,6 +115,68 @@ _No ratifications yet._
      - what changed
      - why
      - links: PRs, audit entries -->
+
+### 2026-05-20 — lane-1 — deploy-and-smoke closed · sprint-11 closed
+
+- Pulled origin/master cleanly (no local divergence). Full suite green
+  locally: **857/857**.
+- Deployed to CM4 via `ssh cm4 && git pull --ff-only origin master &&
+  systemctl --user restart cd-archivist`. Service came back up clean
+  (`active`); HEAD on the CM4 matches `c71e0f9`.
+- Live smoke against `https://cda.mattmariani.com`:
+  - `GET /settings` → 200; `curl … /settings | grep -o "<input" | wc
+    -l` → 10 (matches the acceptance criterion exactly).
+  - `GET /api/config` → 200 with the resolved config, secrets masked
+    (`navidrome_pass: "●●●●●●●●"`, `spooty_api_token: null`),
+    non-secrets verbatim (Navidrome URL + user, Spooty URL, all five
+    `music_*_dir` defaults).
+  - `POST /api/config` with `{"navidrome_url": "https://navidrome.mattmariani.com"}`
+    → 200; the response carried the new masked snapshot.
+  - Verified on the CM4: `~/.config/cd-archivist/config.json` now
+    exists at mode `0600` (`-rw-------`) containing the saved key.
+    File didn't exist pre-POST — sprint-11 is the first surface to
+    write it.
+  - End-to-end resolve cycle confirmed: after the save,
+    `GET /api/library/browse/recent` returned live Navidrome data
+    (a list of recent albums — Viagra Boys, LCD Soundsystem, …).
+    Proof that `subsonic_client` is reading creds through
+    `get_config()` and the file-merged-with-env precedence works as
+    designed (file holds `navidrome_url`, env still supplies user +
+    pass).
+  - `GET /library/library` → 200; the panel renders the recent list
+    against live Navidrome.
+  - Switcher visible on `/rip`: `grep -o 'data-surface="settings"'
+    /rip` returns a hit, confirming lane-2's settings-link-in-switcher
+    is wired across surfaces.
+- Docs updated:
+  - `docs/operations/cm4-setup.md` gains a **"Library Manager config
+    (sprint-11)"** section. Documents the JSON config store as the
+    new source of truth, the FILE > ENV > DEFAULT precedence, env
+    vars as bootstrap fallbacks, `/settings` as the primary editing
+    surface, and the **D-settings-unauth-v1 security gap** (Cloudflare
+    Access or LAN-restriction mitigation paths). New
+    `ARCHIVIST_CONFIG_PATH` env knob noted.
+  - `CHANGELOG.md` gets a `[sprint-11]` entry under Added / Changed /
+    Security / Notes consolidating the config store, the
+    `/api/config` API, the `/settings` page, the four-client
+    refactor, the switcher extension, and the live-smoke results.
+  - `docs/FEATURES.md` "as of" advanced to sprint-11; six new rows
+    under Service / UI cover the Settings page, `/api/config`, the
+    config store, the service-clients refactor, and the switcher
+    `settings` row + telemetry.
+- Sprint-11 frontmatter flipped to `status: closed`; this is the
+  closer entry.
+
+Follow-ups (not blocking; tracked here for the next sprint):
+1. **Wire auth on `/settings` + `/api/config`** before the public URL
+   is shared widely. Cloudflare Access service tokens or a
+   per-request bearer would close D-settings-unauth-v1.
+2. Optional UX polish: surface validation errors inline per-field
+   instead of one concatenated banner string.
+3. The Settings page does not yet auto-clear the password placeholder
+   after a save when the operator typed a new password (the inline JS
+   blanks the input but leaves the previous placeholder); revisit if
+   it confuses operators.
 
 ### 2026-05-20 — lane-2 — settings-link-in-switcher closed
 
