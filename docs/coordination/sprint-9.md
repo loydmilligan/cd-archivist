@@ -3,7 +3,7 @@ project: cd-archivist
 sprint: sprint-9
 created: 2026-05-19T00:00:00.000Z
 updated: 2026-05-19T00:00:00.000Z
-status: active
+status: closed
 ---
 
 # cd-archivist — coordination doc (sprint-9)
@@ -61,7 +61,7 @@ Shell, sidebar, landing grid, panel placeholders — per-panel UX deferred to fo
 - [x] {agent: lane-2, depends: shell-route, id: panel-placeholder} Implement the `/library/{panelId}` route body for the four v1 panels inside `archivist/service/library_panels.py` (new module). Each panel renders the build-prompt §4 pattern: panel header (eyebrow + h1 + sub + optional right-aligned stat cells matching the rig-stats group style) + an honest dashed-border placeholder card with 3 ghost rows and a `tag: in design` + "UX is intentionally undecided in this pass…" foot. Per-panel header copy comes from the build-prompt §3 panel inventory table. v2 panel ids (`review`, `recent`, `cron`) return 404 — they are not addressable yet.
   - **Acceptance:** `curl -s -o /dev/null -w '%{http_code}' http://localhost:8228/library/downloads` (and `/inbox`, `/disk`, `/library`) all return `200`. `curl ... /library/review` returns `404`. `tests/service/test_library_panels.py` covers per-panel header copy (eyebrow/h1/sub) + the placeholder card structure + the v2-id 404 behavior.
 
-- [ ] {agent: lane-1, depends: breadcrumb-switcher,sidebar-panels,landing-grid,panel-placeholder,load-library-css, id: history-and-shared} Final wire-up. (a) Sidebar clicks update the URL to `/library/{panelId}` and browser back/forward swap the active panel — either via `history.pushState` + a panel-only fetch/swap, OR by ensuring full server reloads are fast enough that the operator can't tell (document the choice in the commit message). (b) Confirm the bottom daemon log is the same DOM element id across `/rip` and `/library`, mounted at app-level beneath both main regions — not duplicated per surface. Final visual diff against the reference HTML's three artboards (landing, panel-selected, dropdown-open).
+- [x] {agent: lane-1, depends: breadcrumb-switcher,sidebar-panels,landing-grid,panel-placeholder,load-library-css, id: history-and-shared} Final wire-up. (a) Sidebar clicks update the URL to `/library/{panelId}` and browser back/forward swap the active panel — either via `history.pushState` + a panel-only fetch/swap, OR by ensuring full server reloads are fast enough that the operator can't tell (document the choice in the commit message). (b) Confirm the bottom daemon log is the same DOM element id across `/rip` and `/library`, mounted at app-level beneath both main regions — not duplicated per surface. Final visual diff against the reference HTML's three artboards (landing, panel-selected, dropdown-open).
   - **Acceptance:** `tests/service/test_shared_bottom_log.py` asserts the bottom-log element id is identical when rendered from `/rip` vs `/library`. Browser back/forward between sidebar selections: no console errors, no full re-render of the shell chrome (or full reload <100ms — the chosen approach is documented in the commit body). All three reference-HTML artboards have a matching live route. `tests/service/test_library_*` and `tests/service/test_breadcrumb_switcher.py` all green; full pipeline test suite passes.
 
 ## Agent Roster
@@ -106,6 +106,15 @@ _No contract changes yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc — sprint-9 closed (8/8 tasks, 677/677 tests green)
+
+- history-and-shared landed: sidebar v1 entries + landing v1 cards + switcher rows are all real `<a href>` anchors → browser back/forward swaps the active panel via natural navigation. No JS history shim needed for shell-only scope; per-panel briefs can revisit if they need partial-view fetches.
+- Bottom drawer markup is byte-identical across `/rip` and `/library` (asserted by regex-extract + string compare); both poll `/api/logs/tail?limit=200`. The chassis is shared, not duplicated.
+- New `tests/service/test_history_and_shared.py` (7 cases): sidebar anchors hit real URLs, landing cards hit real URLs, v2 ghosts have NO hrefs, switcher rows link to both surface roots, bottom-drawer markup identical, bottom-log endpoint identical, no dangling template placeholders in HTML body.
+- Frontmatter flipped `status: active → closed`. All 8 Active Sprint Plan tasks ticked.
+- Final tally: 8 commits sprint-9 (fadc2b7 vendor-assets, 164f411 status-fix, abe3884 shell-route, 07aad55 load-library-css, 00523d8 lane-2 trio, 34dec41 breadcrumb-switcher, this commit). Net change: 6 new service modules + 5 new test files + 18 existing tests retargeted from `/` to `/rip` + 1 status-field fix. 677 tests green.
+- Deferred (intentional, per build-prompt §8): per-panel UX for downloads/inbox/disk/library (4 follow-up briefs); right-drawer per-panel modes; multi-select + batch actions; refresh-cadence per panel; v2 panel ordering decisions.
 
 ### 2026-05-19 — orc (lane-1) — breadcrumb-switcher landed (11 new tests, 670/670 green)
 
