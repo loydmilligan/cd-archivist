@@ -761,6 +761,92 @@ def create_app(
                 )
             return JSONResponse(result)
 
+    # ---------------- /api/config (sprint-11 / settings-api-endpoints) -----
+    # GET returns the current Config with secret fields masked.
+    # POST applies a sparse update via config_store.save_config(); empty-
+    # string in a password field is treated as "no change" (don't
+    # overwrite the stored secret with empty).
+
+    _MASKED_VALUE = "●" * 8  # eight bullet glyphs
+
+    def _mask_config(cfg) -> dict[str, Any]:
+        from archivist.service.config import SECRET_FIELDS, as_dict
+        out = as_dict(cfg)
+        for k in SECRET_FIELDS:
+            out[k] = _MASKED_VALUE if out.get(k) else None
+        return out
+
+    def _validate_update(key: str, value: Any) -> tuple[bool, str | None]:
+        """Per-field validation. Returns (skip, error).
+        skip=True means "drop silently from updates" (empty password
+        = no-change). error non-None means "reject the whole request
+        with 400"."""
+        from archivist.service.config import SECRET_FIELDS
+        if value is None:
+            return False, None  # allow clearing a key
+        if not isinstance(value, str):
+            return False, f"{key}: must be string or null"
+        if key in SECRET_FIELDS and value == "":
+            return True, None
+        if value == "":
+            return False, f"{key}: must be non-empty"
+        if key.endswith("_url"):
+            if not (value.startswith("http://") or value.startswith("https://")):
+                return False, f"{key}: must start with http:// or https://"
+        if key.endswith("_dir"):
+            if not value.startswith("/"):
+                return False, f"{key}: must be an absolute path"
+        return False, None
+
+    @app.get("/api/config")
+    def api_config_get() -> JSONResponse:
+        from archivist.service.config import get_config
+        return JSONResponse(_mask_config(get_config()))
+
+    @app.post("/api/config")
+    async def api_config_post(request: Request) -> JSONResponse:
+        import json as _json
+        from archivist.service.config import (
+            UnknownConfigKey,
+            get_config,
+            save_config,
+        )
+        try:
+            raw = await request.body()
+            body = _json.loads(raw or b"{}")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid json body")
+        if not isinstance(body, dict):
+            raise HTTPException(
+                status_code=400, detail="body must be a JSON object",
+            )
+
+        errors: list[str] = []
+        updates: dict[str, Any] = {}
+        for key, value in body.items():
+            skip, err = _validate_update(key, value)
+            if err is not None:
+                errors.append(err)
+                continue
+            if skip:
+                continue
+            updates[key] = value
+        if errors:
+            return JSONResponse(
+                {"error": "validation failed", "details": errors},
+                status_code=400,
+            )
+
+        if not updates:
+            # All values were no-change-empties or the body was empty.
+            return JSONResponse(_mask_config(get_config()))
+
+        try:
+            saved = save_config(updates)
+        except UnknownConfigKey as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return JSONResponse(_mask_config(saved))
+
     # ---------------- library browser (sprint-3 / impl-library) ----------
 
     if discs_root is not None:

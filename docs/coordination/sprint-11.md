@@ -44,7 +44,7 @@ Settings page with read-write JSON config + reload endpoint — no more ssh to u
   Document the precedence + write semantics in `archivist/service/config.py`'s docstring.
   - **Acceptance:** `tests/service/test_config_store.py` covers (a) FILE > ENV > DEFAULT precedence; (b) atomic write — concurrent reader never sees `.tmp`; (c) file-mode 0600 on the written file; (d) `save_config` rejects unknown keys; (e) `reload_config` clears the cache. Full suite stays green.
 
-- [ ] {agent: lane-1, depends: setup-config-store, id: settings-api-endpoints} New API endpoints for the settings page. In `archivist/service/app.py`:
+- [x] {agent: lane-1, depends: setup-config-store, id: settings-api-endpoints} New API endpoints for the settings page. In `archivist/service/app.py`:
     - `GET /api/config` — returns the current `Config` as JSON, with **secret fields masked** (`navidrome_pass`, `spooty_api_token` → `"●●●●●●●●"` when set, `null` when unset).
     - `POST /api/config` — accepts `{key: value, …}` partial updates. Pydantic validation: URLs must be `http(s)://`, non-empty strings, paths must be absolute. **Empty-string in a password field = "no change"** (don't overwrite stored password with empty). Returns the updated masked config.
   - **Acceptance:** `tests/service/test_settings_api.py` covers GET masking (set vs unset secret), POST happy path, POST validation rejection on bad URL, POST empty-pass = no-change behavior, POST rejects unknown keys via the config_store error path. Full suite stays green.
@@ -115,6 +115,44 @@ _No ratifications yet._
      - what changed
      - why
      - links: PRs, audit entries -->
+
+### 2026-05-20 — lane-1 — settings-api-endpoints closed
+
+- New `GET /api/config` + `POST /api/config` routes in `app.py`.
+  Routes live above the existing `_mount_library_routes` block and
+  do not require `music_root` — `/api/config` is always available
+  (the Settings page needs to bootstrap even when no music tree is
+  configured yet).
+- GET returns `Config` as JSON with `SECRET_FIELDS` (`navidrome_pass`,
+  `spooty_api_token`) masked to the eight-bullet glyph `●●●●●●●●`
+  when set, `null` when unset. Non-secret fields are returned
+  verbatim.
+- POST accepts a sparse `{key: value, ...}` body. Per-field validation:
+  - `*_url` fields must start with `http://` or `https://`
+  - `*_dir` fields must be absolute paths
+  - non-secret string fields must be non-empty
+  - secret fields with an empty-string value are **silently dropped**
+    from the update (the "don't overwrite stored password with empty"
+    behavior — the typical edit case where the operator changes a URL
+    but doesn't retype their password)
+  - `null` values are allowed and clear the corresponding key
+  - non-string non-null values rejected
+- POST returns 400 with `{error, details}` on validation failure. The
+  `UnknownConfigKey` error path from `save_config` becomes a 400 with
+  the offending key in the detail. After a successful save the
+  response is the freshly-masked config (so the caller sees what
+  actually landed, including the mask glyph for newly-set secrets).
+- `tests/service/test_settings_api.py` (15 tests). Covers GET
+  masking (set vs unset secret), POST happy path + dir-field happy
+  path, validation rejections (non-http URL, relative dir, empty
+  non-secret, non-string, non-object body, invalid JSON), empty-pass
+  no-change behavior (with + without other fields in the same
+  payload), null-clears-a-field, and unknown-key rejection (whole
+  payload rejected — no partial write).
+- Full suite at this commit: 828/828 green (my 15 new + 813 prior).
+  (Lane-2's in-progress client refactor is uncommitted and not
+  included in this commit; their broken-mid-refactor state in the
+  shared working tree doesn't affect what's in this commit's tree.)
 
 ### 2026-05-20 — lane-1 — setup-config-store closed
 
