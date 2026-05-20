@@ -116,7 +116,7 @@ def test_list_playlists_happy_path() -> None:
     assert playlists[0].tracks[0].state == "ok"
     args, kwargs = mock_req.call_args
     assert args[0] == "GET"
-    assert args[1].endswith("/api/playlists")
+    assert args[1].endswith("/api/playlist")
     assert kwargs["timeout"] == 5.0
 
 
@@ -171,7 +171,7 @@ def test_list_tracks_happy_path() -> None:
     assert tracks[1].error == "yt 410"
     args, _ = mock_req.call_args
     assert args[0] == "GET"
-    assert args[1].endswith("/api/playlists/p1/tracks")
+    assert args[1].endswith("/api/track/playlist/p1")
 
 
 # ---- spooty_client mutating methods -----------------------------------------
@@ -183,24 +183,26 @@ def test_submit_playlist_posts_url() -> None:
     assert result == {"id": "new"}
     args, kwargs = mock_req.call_args
     assert args[0] == "POST"
-    assert args[1].endswith("/api/playlists")
+    assert args[1].endswith("/api/playlist")
     assert kwargs["json"] == {"url": "https://open.spotify.com/playlist/x"}
 
 
-def test_retry_playlist_posts_to_correct_path() -> None:
+def test_retry_playlist_gets_correct_path() -> None:
+    # Spooty's retry-playlist is a GET at /playlist/retry/<id>.
     with patch.object(requests, "request", return_value=_resp(200, {"ok": True})) as mock_req:
         retry_playlist("p1")
     args, _ = mock_req.call_args
-    assert args[0] == "POST"
-    assert args[1].endswith("/api/playlists/p1/retry")
+    assert args[0] == "GET"
+    assert args[1].endswith("/api/playlist/retry/p1")
 
 
-def test_retry_track_posts_to_correct_path() -> None:
+def test_retry_track_gets_correct_path() -> None:
+    # Spooty's retry-track is a GET at /track/retry/<id>.
     with patch.object(requests, "request", return_value=_resp(200, {"ok": True})) as mock_req:
         retry_track("t1")
     args, _ = mock_req.call_args
-    assert args[0] == "POST"
-    assert args[1].endswith("/api/tracks/t1/retry")
+    assert args[0] == "GET"
+    assert args[1].endswith("/api/track/retry/t1")
 
 
 def test_delete_track_uses_delete_method() -> None:
@@ -208,7 +210,7 @@ def test_delete_track_uses_delete_method() -> None:
         delete_track("t1")
     args, _ = mock_req.call_args
     assert args[0] == "DELETE"
-    assert args[1].endswith("/api/tracks/t1")
+    assert args[1].endswith("/api/track/t1")
 
 
 def test_token_header_included_when_env_set(
@@ -284,7 +286,7 @@ def test_api_downloads_retry_playlist(client: TestClient) -> None:
         resp = client.post("/api/library/downloads/playlists/p1/retry")
     assert resp.status_code == 200
     args, _ = mock_req.call_args
-    assert args[1].endswith("/api/playlists/p1/retry")
+    assert args[1].endswith("/api/playlist/retry/p1")
 
 
 def test_api_downloads_retry_track(client: TestClient) -> None:
@@ -292,7 +294,7 @@ def test_api_downloads_retry_track(client: TestClient) -> None:
         resp = client.post("/api/library/downloads/tracks/t1/retry")
     assert resp.status_code == 200
     args, _ = mock_req.call_args
-    assert args[1].endswith("/api/tracks/t1/retry")
+    assert args[1].endswith("/api/track/retry/t1")
 
 
 def test_api_downloads_delete_track(client: TestClient) -> None:
@@ -301,7 +303,7 @@ def test_api_downloads_delete_track(client: TestClient) -> None:
     assert resp.status_code == 200
     args, _ = mock_req.call_args
     assert args[0] == "DELETE"
-    assert args[1].endswith("/api/tracks/t1")
+    assert args[1].endswith("/api/track/t1")
 
 
 # ---- library_downloads_panel.render -----------------------------------------

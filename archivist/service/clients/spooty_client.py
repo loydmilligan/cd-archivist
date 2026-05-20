@@ -142,7 +142,7 @@ def _coerce_playlist(raw: dict) -> SpootyPlaylist:
 
 def list_playlists() -> list[SpootyPlaylist]:
     """Return all known playlists. Raises ``SpootyUnavailable`` on failure."""
-    data = _request("GET", "/playlists")
+    data = _request("GET", "/playlist")
     if isinstance(data, dict):
         data = data.get("playlists") or []
     return [_coerce_playlist(p) for p in (data or [])]
@@ -150,13 +150,18 @@ def list_playlists() -> list[SpootyPlaylist]:
 
 def list_tracks(playlist_id: str) -> list[SpootyTrack]:
     """Return tracks for one playlist. Raises ``SpootyUnavailable`` on failure."""
-    data = _request("GET", f"/playlists/{playlist_id}/tracks")
+    data = _request("GET", f"/track/playlist/{playlist_id}")
     if isinstance(data, dict):
         data = data.get("tracks") or []
     return [_coerce_track(t) for t in (data or [])]
 
 
 # ---- mutating methods -------------------------------------------------------
+#
+# Path shapes follow the spooty upstream REST contract (docs/
+# LIBRARY-MANAGER-PROPOSAL.md "Spooty REST API"): singular nouns
+# (`/playlist`, `/track`), retry endpoints are GETs at
+# `/<resource>/retry/<id>`, and track-deletion is at `/track/<id>`.
 
 
 def submit_playlist(url: str) -> dict:
@@ -165,16 +170,16 @@ def submit_playlist(url: str) -> dict:
     Returns the spooty response verbatim (dict). Raises
     ``SpootyUnavailable`` on transport failure.
     """
-    return dict(_request("POST", "/playlists", json={"url": url}))  # type: ignore[arg-type]
+    return dict(_request("POST", "/playlist", json={"url": url}))  # type: ignore[arg-type]
 
 
 def retry_playlist(playlist_id: str) -> dict:
-    return dict(_request("POST", f"/playlists/{playlist_id}/retry"))  # type: ignore[arg-type]
+    return dict(_request("GET", f"/playlist/retry/{playlist_id}"))  # type: ignore[arg-type]
 
 
 def retry_track(track_id: str) -> dict:
-    return dict(_request("POST", f"/tracks/{track_id}/retry"))  # type: ignore[arg-type]
+    return dict(_request("GET", f"/track/retry/{track_id}"))  # type: ignore[arg-type]
 
 
 def delete_track(track_id: str) -> dict:
-    return dict(_request("DELETE", f"/tracks/{track_id}"))  # type: ignore[arg-type]
+    return dict(_request("DELETE", f"/track/{track_id}"))  # type: ignore[arg-type]
