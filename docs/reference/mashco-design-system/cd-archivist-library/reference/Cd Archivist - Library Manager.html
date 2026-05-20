@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>cd-archivist — Library Manager — shell options · Mash Co.</title>
+
+  <link rel="stylesheet" href="cd-archivist/colors_and_type.css">
+  <link rel="stylesheet" href="cd-archivist/cda-styles.css">
+  <link rel="stylesheet" href="cd-archivist/cda-library-styles.css">
+
+  <link rel="icon" type="image/png" sizes="32x32"   href="cd-archivist/brand/cd-a-favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="256x256" href="cd-archivist/brand/cd-a-favicon-256x256.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="cd-archivist/brand/cd-a-apple-touch-180.png">
+  <meta name="theme-color" content="#07090c">
+
+  <style>
+    html, body { background: #f0eee9; margin: 0; padding: 0; }
+    [data-dc-artboard-id] .cda-app { width: 100%; height: 100%; }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="cd-archivist/design-canvas.jsx" data-presence-optional></script>
+  <script type="text/babel" src="cd-archivist/cda-data.jsx"></script>
+  <script type="text/babel" src="cd-archivist/cda-chrome.jsx"></script>
+  <script type="text/babel" src="cd-archivist/cda-components.jsx"></script>
+  <script type="text/babel" src="cd-archivist/cda-library.jsx"></script>
+
+  <script type="text/babel">
+    function App() {
+      return (
+        <DesignCanvas
+          title="cd-archivist · Library Manager — shell"
+          subtitle="Brand-lockup breadcrumb switcher in the header. Landing card grid on first entry. 7-panel left sidebar (4 primary live + 3 v2 ghosted). Right drawer reserved with an idle state. Bottom daemon log shared with the kanban. Per-panel UX deliberately ghosted — per-panel briefs to follow."
+        >
+          <DCSection
+            id="shell"
+            title="Library Manager shell · landing state"
+            subtitle="What the operator sees on first entry. Sidebar lists every planned panel (grouped Queues / Health / Browse / Coming · v2). Viewport renders the landing card grid so the surface advertises its own scope."
+          >
+            <DCArtboard id="lib-landing" label="Landing · no panel selected" width={1480} height={1240}>
+              <LibraryShell rigStats={RIG} activeId={null} />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="panel"
+            title="Library Manager shell · panel selected"
+            subtitle="What the operator sees after picking a panel from the sidebar (or a landing card). Panel header + 'in design' placeholder mark the slot; per-panel UX is deferred."
+          >
+            <DCArtboard id="lib-panel" label="Downloads selected · 'in design' placeholder" width={1480} height={920}>
+              <LibraryShell rigStats={RIG} activeId="downloads" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="switcher"
+            title="Surface switcher · brand-lockup breadcrumb"
+            subtitle="The cd/a brand becomes the navigation primitive. Click opens a small dropdown listing every surface with a one-line telemetry hint. Costs zero horizontal real estate and scales to N surfaces."
+          >
+            <DCArtboard id="hdr-breadcrumb" label="Breadcrumb switcher · dropdown open" width={1280} height={520}>
+              <HeaderCompareBreadcrumb rigStats={RIG} />
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

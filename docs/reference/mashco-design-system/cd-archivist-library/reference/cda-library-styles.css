@@ -1,0 +1,587 @@
+/* cd-archivist — Library Manager surface — new chrome
+   Extends cda-styles.css. All classes prefixed .cda-lib- or .cda-switcher- /
+   .cda-tabs- for the surface-switcher comparison. */
+
+/* ====================================================================
+   Surface switcher — comparison views for the header
+   ==================================================================== */
+
+/* OPTION A — header tabs (between brand and live chip) */
+.cda-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.cda-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--r-1);
+  font: 700 11px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.cda-tab:hover { color: var(--fg); background: var(--surface-hover); }
+.cda-tab.is-on {
+  background: var(--mash-pulp);
+  color: var(--bone);
+}
+.cda-tab .count {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+  font: 700 9px/1 var(--font-mono);
+}
+.cda-tab.is-on .count { background: rgba(255,255,255,0.2); }
+.cda-tab:not(.is-on) .count {
+  background: var(--ink-3);
+  color: var(--fg-muted);
+}
+
+/* OPTION C — breadcrumb switcher in the brand lockup */
+.cda-switcher {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  position: relative;
+}
+.cda-switcher-sep {
+  font: 500 14px/1 var(--font-mono);
+  color: var(--ink-5);
+  user-select: none;
+}
+.cda-switcher-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--r-2);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--mash-pulp);
+  font: 700 12px/1 var(--font-mono);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.cda-switcher-btn:hover {
+  background: var(--mash-pulp-soft);
+  border-color: var(--mash-pulp-edge);
+}
+.cda-switcher-caret {
+  font: 700 12px/1 var(--font-mono);
+  color: var(--fg-muted);
+}
+.cda-switcher-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -8px;
+  min-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-3);
+  padding: 5px;
+  z-index: 20;
+}
+.cda-switcher-pop-h {
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-quiet);
+  padding: 8px 10px 6px;
+  border-bottom: 1px dashed var(--line);
+  margin-bottom: 4px;
+}
+.cda-switcher-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  cursor: pointer;
+  align-items: center;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.cda-switcher-row:hover { background: var(--surface-hover); }
+.cda-switcher-row.is-on {
+  background: var(--mash-pulp-soft);
+}
+.cda-switcher-row .check {
+  color: var(--moss);
+  font: 700 11px/1 var(--font-mono);
+  text-align: center;
+}
+.cda-switcher-row:not(.is-on) .check { color: transparent; }
+.cda-switcher-row .name {
+  font: 700 13px/1 var(--font-mono);
+  color: var(--fg);
+}
+.cda-switcher-row.is-on .name { color: var(--mash-pulp); }
+.cda-switcher-row .meta {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--fg-quiet);
+  white-space: nowrap;
+}
+
+/* ====================================================================
+   Library Manager shell — sidebar + viewport
+   ==================================================================== */
+
+.cda-lib-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100%;
+  overflow: hidden;
+}
+.cda-lib-sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 16px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cda-lib-side-group {
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-quiet);
+  padding: 12px 10px 6px;
+}
+.cda-lib-side-group:first-child { padding-top: 4px; }
+
+.cda-lib-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  cursor: pointer;
+  color: var(--fg-2);
+  font: 500 13px/1.2 var(--font-body);
+  transition: all var(--dur-fast) var(--ease-out);
+  border: 1px solid transparent;
+}
+.cda-lib-row:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+.cda-lib-row.is-active {
+  background: var(--mash-pulp-soft);
+  border-color: var(--mash-pulp-edge);
+  color: var(--mash-pulp);
+}
+.cda-lib-row.is-active .label { color: var(--mash-pulp); }
+.cda-lib-row.is-ghost {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.cda-lib-row.is-ghost:hover {
+  background: transparent;
+  color: var(--fg-2);
+}
+
+.cda-lib-row .glyph {
+  text-align: center;
+  font: 700 13px/1 var(--font-mono);
+  color: var(--fg-quiet);
+}
+.cda-lib-row.is-active .glyph { color: var(--mash-pulp); }
+.cda-lib-row .label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cda-lib-row .label .name {
+  font: 600 13px/1.2 var(--font-body);
+}
+.cda-lib-row .label .sub {
+  font: 500 10px/1 var(--font-mono);
+  color: var(--fg-quiet);
+}
+.cda-lib-row .count {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font: 700 10px/1 var(--font-mono);
+  color: var(--fg-muted);
+}
+.cda-lib-row.is-active .count {
+  background: var(--mash-pulp);
+  color: var(--bone);
+  border-color: var(--mash-pulp-deep);
+}
+.cda-lib-row .soon {
+  padding: 2px 5px;
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-quiet);
+}
+
+/* ====================================================================
+   Library viewport — landing card grid + panel header
+   ==================================================================== */
+
+.cda-lib-viewport {
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.cda-lib-landing-h {
+  margin-bottom: 18px;
+}
+.cda-lib-landing-h .eyebrow {
+  font: 700 10px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-quiet);
+}
+.cda-lib-landing-h h1 {
+  margin: 4px 0 4px;
+  font: 700 26px/1.15 var(--font-display);
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+.cda-lib-landing-h p {
+  margin: 0;
+  font: 400 13px/1.5 var(--font-body);
+  color: var(--fg-muted);
+  max-width: 60ch;
+}
+
+.cda-lib-landing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.cda-lib-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  position: relative;
+  min-height: 180px;
+}
+.cda-lib-card:hover {
+  border-color: var(--mash-pulp);
+  box-shadow: var(--shadow-2);
+}
+.cda-lib-card.is-ghost {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.cda-lib-card.is-ghost:hover {
+  border-color: var(--line);
+  box-shadow: var(--shadow-1);
+}
+.cda-lib-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cda-lib-card-eyebrow {
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-quiet);
+}
+.cda-lib-card-soon {
+  padding: 3px 7px;
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.cda-lib-card-title {
+  margin: 0;
+  font: 700 17px/1.2 var(--font-body);
+  color: var(--fg);
+  letter-spacing: -0.005em;
+}
+.cda-lib-card-sub {
+  margin: 0;
+  font: 400 12px/1.5 var(--font-body);
+  color: var(--fg-muted);
+}
+
+/* Card preview shapes — one per panel kind */
+.cda-lib-card-preview {
+  margin-top: auto;
+  padding: 10px 12px;
+  background: var(--ink-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Downloads preview — playlist row + per-track pips */
+.cda-prev-pl-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font: 500 11px/1 var(--font-mono);
+  color: var(--fg-muted);
+}
+.cda-prev-pl-pips {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  height: 6px;
+  margin-top: 4px;
+}
+.cda-prev-pl-pip {
+  background: var(--ink-3);
+  border-radius: 1px;
+}
+.cda-prev-pl-pip.is-ok { background: var(--moss); }
+.cda-prev-pl-pip.is-err { background: var(--ember); }
+.cda-prev-pl-pip.is-active { background: var(--mash-pulp); }
+
+/* Inbox preview — album row with READY pip */
+.cda-prev-inbox-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  font: 500 11px/1 var(--font-mono);
+  color: var(--fg-muted);
+}
+.cda-prev-inbox-row .name { color: var(--fg-2); }
+.cda-prev-inbox-row .ready {
+  padding: 1px 5px;
+  border-radius: var(--r-1);
+  background: var(--moss-soft);
+  border: 1px solid #1e4d33;
+  color: var(--moss);
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+.cda-prev-inbox-row .size { color: var(--fg-quiet); }
+
+/* Disk preview — three stat bars */
+.cda-prev-disk {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+}
+.cda-prev-disk-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 56px;
+  gap: 8px;
+  align-items: center;
+}
+.cda-prev-disk-row .mount {
+  font: 600 10px/1 var(--font-mono);
+  color: var(--fg-2);
+}
+.cda-prev-disk-row .bar {
+  height: 6px;
+  background: var(--ink-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cda-prev-disk-row .bar > i {
+  display: block;
+  height: 100%;
+  background: var(--mash-pulp);
+  border-radius: 2px;
+}
+.cda-prev-disk-row .bar > i.is-amber { background: var(--amber); }
+.cda-prev-disk-row .bar > i.is-ember { background: var(--ember); }
+.cda-prev-disk-row .val {
+  text-align: right;
+  font: 600 10px/1 var(--font-mono);
+  color: var(--fg-muted);
+}
+
+/* Library preview — recent imports list */
+.cda-prev-lib-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font: 500 11px/1 var(--font-mono);
+}
+.cda-prev-lib-thumb {
+  width: 22px; height: 22px;
+  background: var(--ink-2);
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+.cda-prev-lib-row .name { color: var(--fg-2); }
+.cda-prev-lib-row .when { color: var(--fg-quiet); }
+
+/* Ghost previews (v2) — just three blurred lines */
+.cda-prev-ghost-line {
+  height: 8px;
+  background: var(--ink-3);
+  border-radius: 2px;
+}
+.cda-prev-ghost-line.is-short { width: 60%; }
+.cda-prev-ghost-line.is-mid { width: 80%; }
+
+/* ====================================================================
+   Library viewport — panel header (when a panel is selected)
+   ==================================================================== */
+
+.cda-lib-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 880px;
+}
+.cda-lib-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.cda-lib-panel-head-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cda-lib-panel-head .eyebrow {
+  font: 700 10px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mash-pulp);
+}
+.cda-lib-panel-head h1 {
+  margin: 0;
+  font: 700 24px/1.15 var(--font-display);
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+.cda-lib-panel-head .sub {
+  font: 400 13px/1.5 var(--font-body);
+  color: var(--fg-muted);
+  max-width: 64ch;
+}
+.cda-lib-panel-head .stats {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  overflow: hidden;
+}
+.cda-lib-panel-head .stats > div {
+  background: var(--surface);
+  padding: 7px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 70px;
+}
+.cda-lib-panel-head .stats .lbl {
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-quiet);
+}
+.cda-lib-panel-head .stats .val {
+  font: 700 16px/1 var(--font-mono);
+  color: var(--fg);
+}
+
+/* Honest "not built yet" placeholder for v1 panels in this pass */
+.cda-lib-panel-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-3);
+  background: var(--surface-2);
+}
+.cda-lib-panel-empty .row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+  font: 500 12px/1.4 var(--font-mono);
+  color: var(--fg-muted);
+}
+.cda-lib-panel-empty .row:last-child { border-bottom: 0; }
+.cda-lib-panel-empty .row .label { color: var(--fg-2); }
+.cda-lib-panel-empty-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--ink-0);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--mash-pulp);
+  border-radius: var(--r-2);
+  font: 500 12px/1.55 var(--font-mono);
+  color: var(--fg-2);
+}
+.cda-lib-panel-empty-foot .tag {
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mash-pulp);
+  padding: 4px 7px;
+  background: var(--mash-pulp-soft);
+  border: 1px solid var(--mash-pulp-edge);
+  border-radius: var(--r-1);
+  white-space: nowrap;
+}
+
+/* idle right drawer copy */
+.cda-drawer-idle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  text-align: center;
+  color: var(--fg-quiet);
+  font: 500 12px/1.5 var(--font-mono);
+  margin-top: 24px;
+}
+.cda-drawer-idle::before {
+  content: "·";
+  font: 700 32px/1 var(--font-mono);
+  color: var(--ink-5);
+}

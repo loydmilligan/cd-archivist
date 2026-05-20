@@ -40,7 +40,7 @@ Shell, sidebar, landing grid, panel placeholders — per-panel UX deferred to fo
 <!-- Inline plan parsed by orc-tower's InlineArtifactSource. Task syntax
      per the strict template comment. Replace the body, not accumulate. -->
 
-- [ ] {agent: lane-1, id: vendor-assets} Move the handoff into its canonical locations and track the untracked design briefs. Copy `docs/reference/mascho-design-handoff-cda-library/library-manager-handoff/handoff/reference/cda-library-styles.css` to `archivist/service/static/css/library.css` (the file must load AFTER `cda.css` once wired). Relocate the rest of the handoff tree to `docs/reference/mashco-design-system/cd-archivist-library/` (build-prompt §1; note the path correction from `mascho` → `mashco`). Add the untracked `docs/LIBRARY-MANAGER-PROPOSAL.md` and `docs/design/2026-05-18-library-manager-design-brief.md` to git. No template or route edits in this task.
+- [x] {agent: lane-1, id: vendor-assets} Move the handoff into its canonical locations and track the untracked design briefs. Copy `docs/reference/mascho-design-handoff-cda-library/library-manager-handoff/handoff/reference/cda-library-styles.css` to `archivist/service/static/css/library.css` (the file must load AFTER `cda.css` once wired). Relocate the rest of the handoff tree to `docs/reference/mashco-design-system/cd-archivist-library/` (build-prompt §1; note the path correction from `mascho` → `mashco`). Add the untracked `docs/LIBRARY-MANAGER-PROPOSAL.md` and `docs/design/2026-05-18-library-manager-design-brief.md` to git. No template or route edits in this task.
   - **Acceptance:** `archivist/service/static/css/library.css` exists and is byte-identical to the handoff's `cda-library-styles.css`. The handoff lives at `docs/reference/mashco-design-system/cd-archivist-library/` (the old `mascho-design-handoff-cda-library/` path is gone). `git ls-files docs/LIBRARY-MANAGER-PROPOSAL.md docs/design/2026-05-18-library-manager-design-brief.md` returns both paths.
 
 - [ ] {agent: lane-1, id: shell-route} Add the `/library` FastAPI route and a new `archivist/service/library_page.py` renderer that emits the shell — the existing chassis-level header (breadcrumb switcher slot, rig stats group, nav buttons; rig-stats stay byte-identical to `/rip` per build-prompt §2), a `<aside>` sidebar placeholder (220px), a viewport region, a right-drawer slot (340px sticky) rendering the idle state ("Select an item to see details."), and a bottom-log mount-point that reuses the same DOM id `/rip` uses. Also: `/` redirects to `/rip` (existing behavior preserved); `/library` returns 200; `/library/{panelId}` routing is wired but the panel body is owned by `panel-placeholder`.
@@ -106,6 +106,14 @@ _No contract changes yet._
      against git history; if commits land on owns paths without a
      matching entry, orc emits a coord-doc-stale card proposing an
      entry for the agent that committed. -->
+
+### 2026-05-19 — orc (lane-1) — vendor-assets landed
+
+- Copied `docs/reference/mascho-design-handoff-cda-library/library-manager-handoff/reference/cda-library-styles.css` → `archivist/service/static/css/library.css` (byte-identical vendor; wire-up deferred to `load-library-css`).
+- Relocated the handoff tree: `docs/reference/mascho-design-handoff-cda-library/library-manager-handoff/` → `docs/reference/mashco-design-system/cd-archivist-library/`. The old `mascho-` typo path is gone; the new path is sibling to the existing `docs/reference/mashco-design-system/cd-archivist/` (sprint-7 handoff).
+- Tracked the two previously-untracked design briefs: `docs/LIBRARY-MANAGER-PROPOSAL.md` + `docs/design/2026-05-18-library-manager-design-brief.md`.
+- No template or route edits in this commit — vendor-only.
+- Working as orc-from-pane per explicit user override (seed §3.9 framework discipline waived for this sprint).
 
 ### 2026-05-19 — orc — sprint-9 plan drafted (Library Manager shell)
 

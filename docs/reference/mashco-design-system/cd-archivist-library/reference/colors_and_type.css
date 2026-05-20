@@ -1,0 +1,300 @@
+/* =========================================================================
+   Mash Co. — Colors & Type
+   Dark-first. Brand-led. The single source of truth for both products.
+   ========================================================================= */
+
+/* --- Fonts (Google Fonts CDN) -------------------------------------------- */
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+:root {
+  /* === BRAND ANCHORS ====================================================
+     The "mash" — fleshy, chunky, dimensional. Pulled from the $RMPW
+     wordmark and used as the system-wide primary accent.
+     ==================================================================== */
+  --mash-pulp:        #ff5b2e;  /* primary accent — meat red, signals action */
+  --mash-pulp-deep:   #d94c23;  /* pressed / hover-darken */
+  --mash-pulp-edge:   #8a2d15;  /* the dark edge that gives the logo dimension */
+  --mash-pulp-soft:   #ff5b2e22;/* tinted fill (alpha) */
+
+  /* === NEUTRALS — DARK ==================================================
+     Cool slate-black, with a hint of blue. Built as a 9-step scale so
+     surfaces, lines, and text all pull from the same spine.
+     ==================================================================== */
+  --ink-0:  #07090c;   /* page background (deepest) */
+  --ink-1:  #0d1116;   /* panel rest */
+  --ink-2:  #141921;   /* panel raised / card */
+  --ink-3:  #1c232c;   /* hover / input fill */
+  --ink-4:  #283039;   /* line */
+  --ink-5:  #3a4451;   /* line-strong / divider-prominent */
+  --ink-6:  #5a6773;   /* fg-quiet (disabled, hints) */
+  --ink-7:  #8b97a4;   /* fg-muted (secondary text) */
+  --ink-8:  #c2cad3;   /* fg (body text) */
+  --ink-9:  #f1f4f7;   /* fg-bright (headings, primary text) */
+  --bone:   #faf7f2;   /* warm-white for brand surfaces / on-pulp text */
+
+  /* === SEMANTIC =========================================================
+     Status colors are pulled toward the warm/cool spread of the brand —
+     greens slightly muted, blues slightly desaturated, no neon.
+     ==================================================================== */
+  --moss:       #3ec27a;   /* success */
+  --moss-soft:  #1d3a2a;   /* success surface */
+  --amber:      #e8a83a;   /* warning */
+  --amber-soft: #3a2e15;   /* warning surface */
+  --ember:      #e6566c;   /* error / block */
+  --ember-soft: #3b1a22;   /* error surface */
+  --sky:        #5aa3ff;   /* info */
+  --sky-soft:   #16263f;   /* info surface */
+
+  /* === SEMANTIC ALIASES — use these in components ====================== */
+  --bg:           var(--ink-0);
+  --surface:      var(--ink-1);
+  --surface-2:    var(--ink-2);
+  --surface-hover:var(--ink-3);
+  --line:         var(--ink-4);
+  --line-strong:  var(--ink-5);
+  --fg:           var(--ink-9);
+  --fg-2:         var(--ink-8);
+  --fg-muted:     var(--ink-7);
+  --fg-quiet:     var(--ink-6);
+  --accent:       var(--mash-pulp);
+  --accent-hover: var(--mash-pulp-deep);
+  --on-accent:    var(--bone);
+
+  /* === TYPE FAMILIES ==================================================== */
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "Inter Tight", ui-sans-serif, system-ui, -apple-system,
+                  BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+                  Consolas, monospace;
+
+  /* === TYPE SCALE ======================================================= */
+  --fs-xs:   12px;
+  --fs-sm:   13px;
+  --fs-md:   15px;     /* base body */
+  --fs-lg:   17px;
+  --fs-xl:   20px;
+  --fs-2xl:  26px;
+  --fs-3xl:  34px;
+  --fs-4xl:  46px;
+  --fs-5xl:  62px;
+  --fs-6xl:  84px;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+  --fw-black:    800;
+
+  --lh-tight:    1.12;
+  --lh-snug:     1.28;
+  --lh-normal:   1.5;
+  --lh-relaxed:  1.65;
+
+  --tracking-tight:  -0.02em;
+  --tracking-snug:   -0.01em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.04em;
+  --tracking-caps:    0.08em;   /* for all-caps eyebrows */
+
+  /* === SPACING ========================================================== */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-7:  32px;
+  --s-8:  40px;
+  --s-9:  56px;
+  --s-10: 72px;
+  --s-11: 96px;
+
+  /* === RADII ============================================================ */
+  --r-1:    4px;
+  --r-2:    6px;       /* tight controls (chips, small buttons) */
+  --r-3:    8px;       /* default — buttons, inputs */
+  --r-4:    10px;      /* cards */
+  --r-5:    14px;      /* panels */
+  --r-6:    20px;      /* large surfaces, modals */
+  --r-full: 999px;
+
+  /* === ELEVATION ========================================================
+     Dark-mode shadows lean on darker drops + a 1px highlight on top.
+     Keep shadow soft; lean on borders for separation.
+     ==================================================================== */
+  --shadow-0: none;
+  --shadow-1: 0 1px 0 rgba(255,255,255,0.04) inset,
+              0 1px 2px rgba(0,0,0,0.5);
+  --shadow-2: 0 1px 0 rgba(255,255,255,0.05) inset,
+              0 4px 14px rgba(0,0,0,0.45);
+  --shadow-3: 0 1px 0 rgba(255,255,255,0.06) inset,
+              0 12px 32px rgba(0,0,0,0.55);
+
+  /* The brand "meat" treatment — chunky 3D extrusion used on display
+     wordmarks. Re-usable as a CSS filter recipe (not a real text-shadow,
+     but a stacked shadow set). */
+  --pulp-extrude:
+      0 1px 0 var(--mash-pulp-edge),
+      0 2px 0 var(--mash-pulp-edge),
+      0 3px 0 var(--mash-pulp-edge),
+      0 4px 0 var(--mash-pulp-edge),
+      0 5px 0 var(--mash-pulp-edge),
+      0 6px 12px rgba(0,0,0,0.5);
+
+  /* === MOTION =========================================================== */
+  --ease-out:   cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in:    cubic-bezier(0.7, 0, 0.8, 0.3);
+  --ease-spring:cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast:   120ms;
+  --dur-base:   200ms;
+  --dur-slow:   360ms;
+}
+
+/* === LIGHT MODE ========================================================
+   Available, but secondary. Used when a product surface (e.g. handouts,
+   printable spec sheets) needs it. Dark is the brand default.
+   ===================================================================== */
+:root[data-theme="light"] {
+  --bg:            #f4f1ea;       /* warm bone background */
+  --surface:       #ffffff;
+  --surface-2:     #f0ede5;
+  --surface-hover: #ebe7dc;
+  --line:          #d9d3c4;
+  --line-strong:   #b9b0a0;
+  --fg:            #1a1d22;
+  --fg-2:          #2c3036;
+  --fg-muted:      #5f6470;
+  --fg-quiet:      #8a8f9a;
+  --accent:        var(--mash-pulp-deep);
+  --on-accent:     #ffffff;
+}
+
+/* =========================================================================
+   Semantic type styles
+   Use these classes (or @extend their declarations) instead of redefining
+   font size + weight in every component.
+   ========================================================================= */
+html, body {
+  background: var(--bg);
+  color: var(--fg-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+  font-feature-settings: "ss01", "cv11"; /* Inter Tight stylistic alts */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.t-display-hero {
+  font-family: var(--font-display);
+  font-weight: var(--fw-black);
+  font-size: var(--fs-6xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg);
+}
+.t-display {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-5xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg);
+}
+.t-h1 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-4xl);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg);
+}
+.t-h2 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-3xl);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-snug);
+  color: var(--fg);
+}
+.t-h3 {
+  font-family: var(--font-body);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-snug);
+  color: var(--fg);
+}
+.t-h4 {
+  font-family: var(--font-body);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-snug);
+  color: var(--fg);
+}
+.t-lead {
+  font-family: var(--font-body);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-2);
+}
+.t-body {
+  font-family: var(--font-body);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+}
+.t-small {
+  font-family: var(--font-body);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-muted);
+}
+.t-micro {
+  font-family: var(--font-body);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--fg-muted);
+}
+.t-eyebrow {
+  font-family: var(--font-body);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.t-mono {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-regular);
+  font-size: 0.92em;
+  letter-spacing: -0.005em;
+}
+.t-code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  color: var(--fg);
+}
+
+/* The signature "pulp" wordmark — apply to short brand display strings.
+   Inherits color from --mash-pulp and the dimensional shadow from
+   --pulp-extrude. Pair with .t-display-hero size for max impact. */
+.t-pulp {
+  font-family: var(--font-display);
+  font-weight: var(--fw-black);
+  font-style: italic;
+  letter-spacing: -0.04em;
+  color: var(--mash-pulp);
+  text-shadow: var(--pulp-extrude);
+  -webkit-text-stroke: 2px var(--mash-pulp-edge);
+  paint-order: stroke fill;
+}
