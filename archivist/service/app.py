@@ -803,6 +803,15 @@ def create_app(
         from archivist.service.config import get_config
         return JSONResponse(_mask_config(get_config()))
 
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_index() -> HTMLResponse:
+        """Sprint-11 / settings-page-render. Read-write config UI bound
+        to `/api/config`. Available regardless of `music_root` so the
+        operator can configure music dirs from scratch."""
+        from archivist.service.config import get_config
+        from archivist.service.settings_page import render_settings_page
+        return HTMLResponse(render_settings_page(get_config()))
+
     @app.post("/api/config")
     async def api_config_post(request: Request) -> JSONResponse:
         import json as _json

@@ -57,7 +57,7 @@ Settings page with read-write JSON config + reload endpoint — no more ssh to u
   Each client must call `get_config()` **inside** the function body (not at module import time) so a saved config edit reflects on the next request. Update the matching test files: replace `monkeypatch.setenv(...)` setup with `save_config(...)` setup (or a small fixture that patches `get_config` to return a test `Config`).
   - **Acceptance:** All four clients pass their existing tests against the config-store source. `tests/service/test_library_disk.py`, `test_library_inbox.py`, `test_library_downloads.py`, `test_library_browse.py` updated. Full suite stays green. **Backward compat preserved**: env vars set via systemd/`.env` still flow through (because `get_config` consults env when the file key is unset).
 
-- [ ] {agent: lane-1, depends: settings-api-endpoints, id: settings-page-render} New `/settings` route + `archivist/service/settings_page.py` renderer. The page is a single form using the existing Mash Co. design system (tokens.css + cda.css + library.css). Layout: shared chassis header (the breadcrumb switcher must include `settings` as a third row — see `settings-link-in-switcher`), then a single-column form with sections (`Spooty`, `Navidrome`, `Music paths`) each holding the relevant fields. Field types: `url`, `text`, `password` (for secrets — masked, with placeholder `●●●●●●●●` when stored value is set). Save button posts to `/api/config`. After save: in-page banner shows `Saved at <HH:MM>` (moss accent) or the validation error (ember accent). No client-side framework — vanilla `<form>` POST with `fetch` + small inline JS.
+- [x] {agent: lane-1, depends: settings-api-endpoints, id: settings-page-render} New `/settings` route + `archivist/service/settings_page.py` renderer. The page is a single form using the existing Mash Co. design system (tokens.css + cda.css + library.css). Layout: shared chassis header (the breadcrumb switcher must include `settings` as a third row — see `settings-link-in-switcher`), then a single-column form with sections (`Spooty`, `Navidrome`, `Music paths`) each holding the relevant fields. Field types: `url`, `text`, `password` (for secrets — masked, with placeholder `●●●●●●●●` when stored value is set). Save button posts to `/api/config`. After save: in-page banner shows `Saved at <HH:MM>` (moss accent) or the validation error (ember accent). No client-side framework — vanilla `<form>` POST with `fetch` + small inline JS.
   - **Acceptance:** `tests/service/test_settings_page.py` covers route returns 200, form contains all 10 fields with correct `type` attributes, password fields have placeholder when set, save button posts to `/api/config`. Visual smoke via `bash -c 'curl -sk https://cda.mattmariani.com/settings | grep -c "<input"'` returns 10. Full suite stays green.
 
 - [ ] {agent: lane-2, depends: setup-config-store, id: settings-link-in-switcher} Extend the brand-lockup breadcrumb switcher in `archivist/service/library_switcher.py` to include a `settings` row alongside `rip` and `library`. Telemetry hint: `<N> knobs · saved <T> ago` where N is the count of non-default values and T is the human-relative time since the last config.json mtime (or `never` if file missing). Pull both via a tiny `get_config_summary() -> dict[str, int | str]` helper in `archivist/service/config.py` (lane-2 adds this helper as part of this task — it's a read-only consumer of config_store). The switcher's `active` param now accepts `"settings"`. Update existing tests in `tests/service/test_breadcrumb_switcher.py` accordingly.
@@ -115,6 +115,46 @@ _No ratifications yet._
      - what changed
      - why
      - links: PRs, audit entries -->
+
+### 2026-05-20 — lane-1 — settings-page-render closed
+
+- New `GET /settings` route in `app.py` (above the existing
+  `_mount_library_routes` block, no `music_root` dependency — the
+  page must load even when the operator is bootstrapping music
+  paths from scratch).
+- New `archivist/service/settings_page.py` exposes
+  `render_settings_page(config)`. Single-column form with three
+  sections (Spooty / Navidrome / Music paths) — 10 inputs total:
+  2 URL, 2 password (secret), 6 text. Inline `<style>` block with
+  Mash Co. tokens (no new CSS file needed; lifts colours from
+  `tokens.css` / `cda.css`). Inline JS hooks `[data-cda-settings-form]`,
+  POSTs JSON to `/api/config`, shows a moss "Saved at HH:MM" banner
+  on 200 or an ember error banner on 4xx, and resets password fields
+  after save so the placeholder visibly refreshes.
+- Password fields **never** carry a `value=` attribute (so the stored
+  secret can't leak via View Source). They show `●●●●●●●●` as
+  placeholder when set, `(unset)` when not. Client-side JS drops
+  empty non-secret fields from the payload (matches the API's
+  no-change-on-empty semantics for secrets and keeps the request
+  body tight).
+- Settings header uses the brand-lockup switcher with `active="settings"`
+  per the contract change (lane-2 owns the switcher refactor). For
+  this commit the header has a try/except fallback to `active="library"`
+  if the switcher does not yet accept `"settings"`, so the page
+  loads green even before lane-2's settings-link-in-switcher commit
+  lands. The fallback is a one-line defensive guard, not a long-term
+  shim — once lane-2's commit is in, behaviour collapses to the
+  primary path.
+- `tests/service/test_settings_page.py` (20 tests). Covers route
+  returns 200, ten-input acceptance criterion, per-field type via
+  parametrize, password placeholder when set + when unset, password
+  never carries `value=` + plaintext never appears in the page body,
+  URL fields show stored value, three sections in order, save button
+  is `type=submit` posting to `/api/config`, banner element present,
+  page loads with no `music_root` configured.
+- Full suite at this commit's tree state: 848/848 green (828 prior
+  + 20 new). Lane-2's in-progress refactor remains uncommitted in
+  the shared working tree and is not part of this commit.
 
 ### 2026-05-20 — lane-1 — settings-api-endpoints closed
 
