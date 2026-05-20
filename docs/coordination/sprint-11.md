@@ -36,7 +36,7 @@ Settings page with read-write JSON config + reload endpoint — no more ssh to u
 
 <!-- Inline plan parsed by orc-tower's InlineArtifactSource. -->
 
-- [ ] {agent: lane-1, id: setup-config-store} Establish the config-store pattern that the settings page reads/writes. New `archivist/service/config.py` exporting:
+- [x] {agent: lane-1, id: setup-config-store} Establish the config-store pattern that the settings page reads/writes. New `archivist/service/config.py` exporting:
     - `Config` dataclass (typed fields): `spooty_api_url`, `spooty_api_token`, `navidrome_url`, `navidrome_user`, `navidrome_pass`, `music_inbox_dir`, `music_library_dir`, `music_archive_dir`, `music_spooty_dir`, `music_review_dir`. All `str | None` except dirs (default to current `MUSIC_*` defaults).
     - `get_config() -> Config` — reads `$ARCHIVIST_CONFIG_PATH` (default `~/.config/cd-archivist/config.json`); merges with env vars per precedence **FILE > ENV > DEFAULT**. Cached; reset on `reload_config()`.
     - `save_config(updates: dict)` — atomic write (`config.json.tmp` → `os.replace`) with file mode 0600. Refuses unknown keys. Auto-calls `reload_config()` after a successful write.
@@ -115,6 +115,35 @@ _No ratifications yet._
      - what changed
      - why
      - links: PRs, audit entries -->
+
+### 2026-05-20 — lane-1 — setup-config-store closed
+
+- New `archivist/service/config.py`. Frozen `Config` dataclass with
+  the 10 sprint-11 knobs (5 URL/cred slots as `str | None`, 5 music
+  dirs with sensible defaults). `get_config()` resolves each field
+  via FILE > ENV > DEFAULT per D-config-precedence and caches the
+  result; `reload_config()` clears the cache; `save_config(updates)`
+  validates keys against `CONFIG_KEYS`, merges sparsely with the
+  existing file, writes through `os.open(... O_CREAT, 0o600)` +
+  `os.replace(tmp, real)` for atomicity, and auto-reloads. Exposes
+  `SECRET_FIELDS` (frozenset of fields the API layer must mask) and
+  `UnknownConfigKey` for the validation error path. File path is
+  `$ARCHIVIST_CONFIG_PATH` or `~/.config/cd-archivist/config.json`.
+- File-with-null falls through to env (so an operator who hand-edits
+  the JSON to `null` a key restores systemd-bootstrap behavior).
+  Empty env values treated as unset (matches `os.environ.get` +
+  truthiness pattern used by the sprint-10 clients).
+- `tests/service/test_config_store.py` (15 tests). Covers the
+  sprint-11 acceptance list (a-e) plus: file-null falls through to
+  env, empty env treated as unset, sparse updates preserve untouched
+  keys, save_config failure cleans up the .tmp file, save_config
+  auto-reloads (no manual reload needed), CONFIG_KEYS matches the
+  dataclass fields. Atomic-write test verifies `os.replace` is the
+  actual seam (not just an absence of `.tmp` after).
+- Full suite: 813/813 green (798 baseline + 15 new).
+- Next: settings-api-endpoints (lane-1) consumes this; lane-2's
+  config-runtime-wiring + settings-link-in-switcher both depend on
+  this commit.
 
 ### 2026-05-20 — orc — sprint-11 plan drafted (Settings page)
 
