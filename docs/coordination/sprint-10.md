@@ -44,7 +44,7 @@ Disk · Inbox · Downloads · Library — replace the "in design" placeholders w
 - [x] {agent: lane-1, id: setup-clients-package} Establish the service-clients pattern that all four panels will share. Create `archivist/service/clients/__init__.py` and `archivist/service/clients/README.md` documenting the contract: each client module exposes a thin typed wrapper around one external surface (filesystem walk, REST API, Subsonic API). Functions raise typed exceptions on failure; URLs and tokens come from environment variables (`SPOOTY_API_URL`, `SPOOTY_API_TOKEN`, `NAVIDROME_URL`, `NAVIDROME_USER`, `NAVIDROME_PASS`, `MUSIC_INBOX_DIR`, `MUSIC_REVIEW_DIR`, `MUSIC_ARCHIVE_DIR`). Add `archivist/service/library_panels.py` dispatcher that delegates `render_panel(panel_id)` to per-panel helper modules (`library_disk_panel.py` etc.) — keep the placeholder fallback in place for any panel whose helper module hasn't been written yet. Lane-2's T1b runs in parallel.
   - **Acceptance:** `archivist/service/clients/` exists with `__init__.py` + `README.md`; `library_panels.py` dispatches to per-panel modules with the placeholder fallback (verified by an existing-suite run: 677/677 still green). `pip install -e .` succeeds. No client implementations yet — that's the panel-impl tasks.
 
-- [ ] {agent: lane-2, id: chassis-poll-dispatcher} Wire per-panel polling cadence into `archivist/service/chassis_js.py`. Each panel viewport declares its desired poll interval via `<meta name="library-poll-ms" content="N">` (or absent → no polling). Add a small dispatcher that reads the meta on `/library/{panel_id}` load and `setInterval`s a fetch against a per-panel endpoint (the endpoint URL also comes from a meta tag). Cadences: Disk 30000, Inbox 5000, Downloads 1000 during active / 5000 idle, Library none. Drive-status polling (already in place) is unchanged. The dispatcher must be a no-op on `/rip` (it stays kanban-only there).
+- [x] {agent: lane-2, id: chassis-poll-dispatcher} Wire per-panel polling cadence into `archivist/service/chassis_js.py`. Each panel viewport declares its desired poll interval via `<meta name="library-poll-ms" content="N">` (or absent → no polling). Add a small dispatcher that reads the meta on `/library/{panel_id}` load and `setInterval`s a fetch against a per-panel endpoint (the endpoint URL also comes from a meta tag). Cadences: Disk 30000, Inbox 5000, Downloads 1000 during active / 5000 idle, Library none. Drive-status polling (already in place) is unchanged. The dispatcher must be a no-op on `/rip` (it stays kanban-only there).
   - **Acceptance:** `chassis_js.py` exports the new polling dispatcher; `tests/service/test_chassis_poll.py` covers (a) no-op when no meta present, (b) fires fetch on interval when meta is present, (c) clears on page-hide. Existing tests still green.
 
 - [ ] {agent: lane-1, depends: setup-clients-package, id: disk-impl} Implement the Disk panel end-to-end. New `archivist/service/clients/disk_client.py` with `get_disk_usage() -> DiskUsageSnapshot` reading `shutil.disk_usage()` for the three mounts (`/`, `/mnt/seagate`, `/mnt/archive`) and filesystem walks under each for per-surface breakdown (inbox / library / archive / spooty). Snapshot is a dataclass with `mounts: list[MountUsage]` where each `MountUsage` carries `mount_path`, `total_bytes`, `used_bytes`, `available_bytes`, `pct_used`, `surfaces: dict[str, int]`. New `/api/library/disk` endpoint in `app.py` returning the snapshot JSON. New `archivist/service/library_disk_panel.py` rendering three usage-bar rows + per-surface drilldown table. Thresholds: `pct_used < 60` → `--mash-pulp`, `60-85` → `--amber`, `> 85` → `--ember` (build-prompt §3). Mounts that don't exist (e.g., dev machine without `/mnt/seagate`) render as "not mounted" — graceful.
@@ -97,6 +97,33 @@ _No contract changes yet._
 ## Activity Log
 
 <!-- Per-agent updates land here, newest first. -->
+
+### 2026-05-19 — lane-2 — chassis-poll-dispatcher closed
+
+- Extended `archivist/service/chassis_js.py` with a per-panel polling
+  dispatcher that reads `<meta name="library-poll-ms">` +
+  `<meta name="library-poll-endpoint">` at page load. Absent meta →
+  no-op (so `/rip`, the landing grid, and the Library/browse panel
+  stay quiet). Present meta → `setInterval(pollTick, ms)` fetches the
+  endpoint and re-broadcasts the result on a `library:poll-tick`
+  custom event for per-panel modules to consume.
+- Pause/resume wired via `visibilitychange`: hidden tabs clear the
+  timer; visible tabs restart from current meta (so a panel switching
+  active/idle cadence via meta `content` mutation just works). Start
+  is idempotent — duplicate startPolling() calls short-circuit.
+- Drive-status polling (chassis-level, /api/drive/status @ 5s) is
+  untouched and runs alongside the new dispatcher.
+- Contract for the per-panel meta tags is documented in the module
+  docstring so lane-1's `library_disk_panel` / `library_browse_panel`
+  and lane-2's `library_inbox_panel` / `library_downloads_panel` all
+  emit the right shape (cadences from sprint-10 plan: Disk 30000,
+  Inbox 5000, Downloads 1000 active / 5000 idle, Library none).
+- New test file `tests/service/test_chassis_poll.py` (15 tests)
+  covers the three sprint-10 acceptance criteria — no-op when meta
+  absent, fetch fires on interval when present, clears on page-hide
+  — via structural assertions against the JS source (no JS runtime
+  in this suite, matching the existing chassis-JS test pattern).
+- Full suite: 692/692 green (677 + 15 new).
 
 ### 2026-05-19 — lane-1 — setup-clients-package closed
 

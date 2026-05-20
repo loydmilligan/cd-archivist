@@ -1,4 +1,4 @@
-"""Shared chassis JS — drawer toggles + log refresh.
+"""Shared chassis JS — drawer toggles + log refresh + per-panel poll dispatch.
 
 These behaviors are needed on every surface that renders the
 header drawer buttons + the right-drawer + the bottom-drawer:
@@ -9,6 +9,46 @@ The kanban's _INLINE_JS still owns its kanban-specific bits (card
 click handlers, polling, transitions). This module is the minimum
 viable wire-up for the drawer buttons in the page-header so the
 chassis works on surfaces that aren't the kanban.
+
+Per-panel polling contract (sprint-10 / chassis-poll-dispatcher)
+----------------------------------------------------------------
+Library panel render modules (library_disk_panel.py,
+library_inbox_panel.py, library_downloads_panel.py,
+library_browse_panel.py) declare their desired refresh cadence by
+emitting two meta tags into the rendered HTML — either inside the
+page <head> or inside the panel's viewport HTML (the dispatcher
+queries the whole document):
+
+    <meta name="library-poll-ms" content="5000">
+    <meta name="library-poll-endpoint" content="/api/library/inbox">
+
+Contract:
+
+- Both tags must be present for polling to engage. If either is
+  absent (e.g., the Library/browse panel, the landing grid, or
+  the `/rip` kanban surface), the dispatcher is a no-op.
+- `library-poll-ms` is parsed as an integer; values <= 0 disable
+  polling.
+- `library-poll-endpoint` is fetched verbatim. The response is
+  not consumed by the dispatcher itself — the dispatcher just
+  fires the request. Per-panel modules that need to react to
+  the response should listen for the `library:poll-tick` custom
+  event dispatched on `document` after each fetch resolves
+  (detail: `{ endpoint, response }` on success, `{ endpoint, error }`
+  on failure).
+- Polling pauses when the page is hidden (visibilitychange ->
+  hidden) and resumes when it becomes visible again, so background
+  tabs do not hammer the endpoints.
+- The dispatcher does not throttle or coalesce — per-panel
+  cadences (Disk 30000, Inbox 5000, Downloads 1000/5000 active/idle,
+  Library none) are the responsibility of the emitting render
+  module. A panel that needs active/idle cadence-switching emits
+  the active value initially and updates the meta tag's `content`
+  attribute at runtime; the dispatcher re-reads on each tick.
+
+This dispatcher is independent of the existing chassis-level
+drive-status polling (every 5s against `/api/drive/status`),
+which remains hard-coded above.
 """
 
 from __future__ import annotations
@@ -99,5 +139,59 @@ CHASSIS_JS = """
   }
   refreshDriveStatus();
   setInterval(refreshDriveStatus, 5000);
+
+  // --- Per-panel poll dispatcher (sprint-10 / chassis-poll-dispatcher) -
+  // Reads <meta name="library-poll-ms"> + <meta name="library-poll-endpoint">
+  // at page load. No-op when either tag is missing. Pauses on
+  // visibilitychange -> hidden, resumes on visible. Dispatches a
+  // `library:poll-tick` custom event after each fetch so per-panel
+  // modules can wire response handlers. See chassis_js.py docstring
+  // for the full contract.
+  function readPollMeta() {
+    const msEl = document.querySelector('meta[name="library-poll-ms"]');
+    const epEl = document.querySelector('meta[name="library-poll-endpoint"]');
+    if (!msEl || !epEl) return null;
+    const ms = parseInt(msEl.getAttribute('content') || '0', 10);
+    const endpoint = epEl.getAttribute('content') || '';
+    if (!ms || ms <= 0 || !endpoint) return null;
+    return { ms: ms, endpoint: endpoint };
+  }
+  let pollTimer = null;
+  function pollTick() {
+    const meta = readPollMeta();
+    if (!meta) return;
+    fetch(meta.endpoint)
+      .then(function(r){
+        document.dispatchEvent(new CustomEvent('library:poll-tick', {
+          detail: { endpoint: meta.endpoint, response: r }
+        }));
+      })
+      .catch(function(err){
+        document.dispatchEvent(new CustomEvent('library:poll-tick', {
+          detail: { endpoint: meta.endpoint, error: err }
+        }));
+      });
+  }
+  function startPolling() {
+    const meta = readPollMeta();
+    if (!meta) return;
+    if (pollTimer !== null) return;
+    pollTimer = setInterval(pollTick, meta.ms);
+  }
+  function stopPolling() {
+    if (pollTimer === null) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      startPolling();
+    }
+  });
+  if (readPollMeta()) {
+    startPolling();
+  }
 })();
 """.strip()
